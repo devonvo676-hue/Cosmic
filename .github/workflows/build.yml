@@ -1,10 +1,15 @@
 # Builds CosmicAbilities-x.y.z.jar on GitHub's servers every time you push.
-# Download it from the repo's "Actions" tab -> latest run -> "Artifacts" -> CosmicAbilities.
+# Get it from the repo's "Actions" tab -> latest run -> "Artifacts" -> CosmicAbilities,
+# or from the "builds" branch, which always holds the latest jar + resource pack.
 name: Build plugin
 
 on:
   push:
+    branches-ignore: [builds]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -34,3 +39,16 @@ jobs:
         with:
           name: CosmicAbilities
           path: out/
+
+      - name: Publish to the "builds" branch
+        run: |
+          cp -r out /tmp/out
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git checkout --orphan builds-new
+          git rm -rf -q .
+          git clean -fdxq
+          cp /tmp/out/* .
+          git add -A
+          git commit -q -m "Build ${GITHUB_SHA::7} from ${GITHUB_REF_NAME}"
+          git push -f origin HEAD:builds
