@@ -1,0 +1,38 @@
+name: CosmicAbilities
+version: '${version}'
+main: com.cosmicabilities.CosmicAbilitiesPlugin
+api-version: '1.21'
+description: Cosmic Awakening - every player is born with one of 10 cosmic abilities, upgraded by defeating cosmic bosses.
+authors: [Devon]
+
+commands:
+  cosmic:
+    description: Cosmic Abilities main command
+    usage: /cosmic help
+    aliases: [ca, cosmicabilities]
+  ability:
+    description: Cast the ability in slot 1 or 2
+    usage: /ability <1|2>
+    permission: cosmicabilities.use
+  adminpanel:
+    description: Open the Cosmic admin panel
+    usage: /adminpanel
+    aliases: [cpanel]
+    permission: cosmicabilities.admin
+  unban:
+    description: Unban a player (e.g. after the Ban Pistol)
+    usage: /unban <player>
+    aliases: [cunban]
+    permission: cosmicabilities.admin
+  tag:
+    description: Wear the ADMIN or OWNER name tag
+    usage: /tag <admin|owner|off>
+    aliases: [nametag]
+
+permissions:
+  cosmicabilities.use:
+    description: Use your cosmic abilities and player commands
+    default: true
+  cosmicabilities.admin:
+    description: Admin panel, ban pistol, ADMIN tag, and /cosmic admin commands
+    default: op

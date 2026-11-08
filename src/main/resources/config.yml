@@ -1,0 +1,130 @@
+# =========================================================
+#  Cosmic Abilities - configuration
+#  Target: Paper 1.21.11
+# =========================================================
+
+# Players can always cast with /ability 1 and /ability 2.
+activation:
+  # Sneak + swap-hands key (default F) casts slot 1.
+  sneak-swap-hand: true
+  # Sneak + left-click air with an empty main hand casts slot 2.
+  sneak-left-click-empty-hand: true
+
+# Infuse-style passive effect given while an ability is equipped (either slot).
+# Format: <effect>:<level-1>  (e.g. speed:0 = Speed I, speed:1 = Speed II). Use "none" to disable one.
+passives:
+  enabled: true
+  singularity: night_vision:0
+  supernova: strength:0
+  meteor: jump_boost:1
+  solar: fire_resistance:0
+  cryostasis: water_breathing:0
+  voidwalker: speed:0
+  pulsar: haste:1
+  nebula: luck:0
+  orbital: resistance:0
+  celestial: health_boost:1
+
+# Infuse-style ability icons shown above the hotbar.
+hud:
+  enabled: true
+  # true = custom icons from the resource pack. false = plain text names (no pack needed).
+  use-icons: true
+
+# The plugin sends this pack to players on join. It stacks on top of your server's own pack
+# (e.g. your Luminara pack), so both work at once. Upload CosmicAbilities-ResourcePack.zip somewhere
+# with a direct download link (e.g. mc-packs.net) and paste the link + SHA-1 here.
+resource-pack:
+  url: ""
+  sha1: ""
+  required: false
+  prompt: "Cosmic Abilities needs this pack for its ability icons."
+
+ban-pistol:
+  range: 64
+  reason: "Shot by the Ban Pistol"
+  # 0 = permanent ban. Otherwise the ban length in minutes. Admins can lift any ban with /unban <player>.
+  duration-minutes: 0
+  # Staff (OP / cosmicabilities.admin) can't be banned with the pistol.
+  exempt-staff: true
+  broadcast: true
+  cooldown-ms: 1000
+
+tags:
+  # false = "[OWNER] Name" / "[ADMIN] Name" as text right beside the username (default).
+  # true  = pixel-art badges from the resource pack instead.
+  use-icons: false
+
+abilities:
+  # Global multipliers - use these to tune the whole system at once.
+  damage-multiplier: 1.0
+  cooldown-multiplier: 1.0
+  # Minimum cooldown in seconds after all reductions.
+  minimum-cooldown: 4.0
+  # Can abilities damage/affect other players? (Other PvP plugins / region protection still apply.)
+  hit-players: true
+  # Can abilities damage passive mobs (cows, villagers, etc.)? Hostile mobs are always valid targets.
+  hit-passive-mobs: false
+
+upgrades:
+  # Materials needed to reach each level (uses the material tied to your ability).
+  material-cost:
+    2: 3
+    3: 5
+    4: 7
+    5: 10
+    6: 12
+    7: 15
+    8: 18
+    9: 22
+    10: 28
+  # Total Cosmic Mastery needed to reach each level (mastery is earned, never spent).
+  mastery-required:
+    2: 0
+    3: 100
+    4: 200
+    5: 350
+    6: 500
+    7: 700
+    8: 950
+    9: 1250
+    10: 1600
+  # Extra Astral Fragments needed for the level 10 Cosmic Evolution (every ability).
+  evolution-astral-cost: 5
+
+mastery:
+  # Mastery given to every player who did at least min-damage-share of a boss's health.
+  per-boss-kill: 100
+  # Extra mastery for the player who dealt the most damage.
+  top-damage-bonus: 50
+  min-damage-share: 0.05
+
+bosses:
+  # How far (blocks) players see a boss's health bar.
+  bossbar-range: 48
+  # Seconds between each boss's special attack.
+  special-attack-interval: 6
+  # Materials given to each contributing player.
+  drops:
+    min: 3
+    max: 6
+    # Chance for each contributor to also get 1-2 Astral Fragments from non-Destroyer bosses.
+    bonus-astral-chance: 0.25
+  void_emperor:
+    health: 350
+    damage: 10
+  solar_titan:
+    health: 350
+    damage: 8
+  frost_leviathan:
+    health: 350
+    damage: 8
+  nebula_serpent:
+    health: 300
+    damage: 7
+  cosmic_destroyer:
+    health: 600
+    damage: 14
+
+messages:
+  prefix: "<dark_gray>[<gradient:#9b5de5:#00bbf9>Cosmic</gradient><dark_gray>] "
