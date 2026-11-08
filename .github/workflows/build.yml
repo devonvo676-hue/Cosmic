@@ -1,0 +1,36 @@
+# Builds CosmicAbilities-x.y.z.jar on GitHub's servers every time you push.
+# Download it from the repo's "Actions" tab -> latest run -> "Artifacts" -> CosmicAbilities.
+name: Build plugin
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build jar
+        run: |
+          chmod +x gradlew
+          ./gradlew build --no-daemon
+
+      - name: Bundle resource pack
+        run: |
+          mkdir -p out
+          cp build/libs/*.jar out/
+          cp CosmicAbilities-ResourcePack.zip out/ || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CosmicAbilities
+          path: out/
