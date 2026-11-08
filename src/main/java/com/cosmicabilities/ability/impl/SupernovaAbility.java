@@ -12,40 +12,89 @@ import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.entity.BlockDisplay;
+import org.bukkit.entity.ItemDisplay;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
-/** Charge (sparks converge on you), then a layered star-shell explosion with a ground shockwave. */
+import java.util.List;
+
+/**
+ * A miniature sun ignites above your head and charges, drawing in light. When it's full it fires solar beams
+ * down into every enemy around you, then the shockwave hits.
+ */
 public class SupernovaAbility extends CosmicAbility {
+    private static final int CHARGE = 22;
+    private static final double RADIUS = 7;
+
     public SupernovaAbility(CosmicAbilitiesPlugin plugin) { super(plugin, AbilityType.SUPERNOVA); }
 
     @Override
     public boolean cast(Player player, AbilitySlot slot) {
         World w = player.getWorld();
-        w.playSound(player.getLocation(), Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 1.2f, 0.7f);
-        every(12, t -> {
-            if (!player.isOnline()) return false;
-            Location c = player.getLocation().add(0, 1, 0);
-            double r = 3.5 * (1 - t / 12.0) + 0.4;
-            for (int i = 0; i < 10; i++) {
-                double a = i * Math.PI / 5 + t * 0.25;
-                double y = Math.sin(a * 2 + t) * 0.8;
-                w.spawnParticle(Particle.DUST, c.getX() + Math.cos(a) * r, c.getY() + y, c.getZ() + Math.sin(a) * r,
-                        1, 0, 0, 0, 0, Fx.dust(t % 2 == 0 ? 0xffd166 : 0xff8c42, 1.2f));
+        ItemDisplay sun = Fx.model(player.getLocation().add(0, 3.4, 0), "planet_sun", 0.05f);
+        sun.setTeleportDuration(2);
+        sun.setGlowing(true);
+        sun.setGlowColorOverride(org.bukkit.Color.fromRGB(0xffb703));
+        w.playSound(player.getLocation(), Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 1.2f, 0.6f);
+        w.playSound(player.getLocation(), Sound.ITEM_FIRECHARGE_USE, 1f, 0.5f);
+
+        every(CHARGE + 30, t -> {
+            if (!player.isOnline() || player.isDead()) { sun.remove(); return false; }
+            Location c = player.getLocation().add(0, 3.4, 0);
+            sun.teleport(c);
+            float spin = t * 0.2f;
+            if (t <= CHARGE) {
+                // the sun swells while light and flame stream into it
+                float scale = 0.2f + 1.3f * t / CHARGE;
+                Fx.animate(sun, 2, Fx.spin(scale, new Quaternionf().rotateXYZ(spin * 0.6f, spin, 0.2f)), 1);
+                for (int i = 0; i < 6; i++) {
+                    double a = i * Math.PI / 3 + t * 0.3;
+                    double r = 3.5 * (1 - (t % 8) / 8.0) + 0.8;
+                    w.spawnParticle(Particle.DUST, c.getX() + Math.cos(a) * r, c.getY() + Math.sin(a * 2) * 0.8 - 0.6,
+                            c.getZ() + Math.sin(a) * r, 1, 0, 0, 0, 0, Fx.dust(i % 2 == 0 ? 0xffd166 : 0xff8c42, 1.3f));
+                }
+                Fx.ring(w, c, 0.9 + scale * 0.5, 14, -spin, Particle.FLAME);    // corona
+                w.spawnParticle(Particle.LAVA, c, 1, 0.3, 0.3, 0.3, 0);
+                if (t % 4 == 0) w.playSound(c, Sound.BLOCK_NOTE_BLOCK_PLING, 0.5f, 0.6f + t * 0.06f);
             }
-            if (t % 3 == 0) w.playSound(c, Sound.BLOCK_NOTE_BLOCK_PLING, 0.4f, 0.8f + t * 0.1f);
-            if (t == 12) {
-                blast(player, player.getLocation().add(0, 1, 0), 5.5, dmg(9, slot), 1.15, false);
-                if (bonus(slot)) {
-                    Location at = player.getLocation().add(0, 1, 0);
-                    later(22, () -> { if (player.isOnline()) blast(player, at, 8, dmg(6, slot), 0.9, true); });
+            if (t == CHARGE) fire(player, c, slot);
+            if (t > CHARGE) {
+                // the spent sun shrinks and fades
+                float scale = Math.max(0.01f, 1.8f * (1 - (t - CHARGE) / 10f));
+                Fx.animate(sun, 2, Fx.spin(scale, new Quaternionf().rotateXYZ(spin, spin * 1.5f, 0)), 1);
+                if (t >= CHARGE + 10) {
+                    sun.remove();
+                    if (bonus(slot) && t == CHARGE + 22) {
+                        blast(player, player.getLocation().add(0, 1, 0), RADIUS + 1.5, dmg(6, slot), 0.9, true);
+                        return false;
+                    }
+                    if (!bonus(slot)) return false;
                 }
             }
             return true;
         });
         return true;
+    }
+
+    /** The release: a flash, a beam of sunlight into every enemy in range, then the shockwave around you. */
+    private void fire(Player player, Location sunAt, AbilitySlot slot) {
+        World w = sunAt.getWorld();
+        Fx.burst(w, sunAt, Particle.END_ROD, 40, 0.5);
+        Fx.burst(w, sunAt, Particle.FLAME, 40, 0.35);
+        w.playSound(sunAt, Sound.ENTITY_BLAZE_SHOOT, 1.5f, 0.6f);
+        w.playSound(sunAt, Sound.ENTITY_LIGHTNING_BOLT_IMPACT, 1.2f, 1.2f);
+        List<LivingEntity> targets = Targets.enemies(player, player.getLocation(), RADIUS);
+        for (LivingEntity e : targets) {
+            Location hitAt = e.getLocation().add(0, e.getHeight() * 0.6, 0);
+            Fx.beam(sunAt, hitAt, Material.ORANGE_STAINED_GLASS, 0.45f, 8);
+            Fx.beam(sunAt, hitAt, Material.SHROOMLIGHT, 0.14f, 6);
+            hit(player, e, dmg(9, slot));
+            e.setFireTicks(Math.max(e.getFireTicks(), 80));
+            w.spawnParticle(Particle.FLAME, hitAt, 15, 0.3, 0.4, 0.3, 0.05);
+        }
+        blast(player, player.getLocation().add(0, 1, 0), 5, dmg(3, slot), 1.1, false);
     }
 
     private void blast(Player player, Location c, double radius, double damage, double kb, boolean after) {
@@ -63,11 +112,8 @@ public class SupernovaAbility extends CosmicAbility {
             Fx.removeLater(shell, 11);
         }
         w.playSound(c, Sound.ENTITY_GENERIC_EXPLODE, 1.6f, after ? 0.6f : 0.9f);
-        w.playSound(c, Sound.ENTITY_LIGHTNING_BOLT_IMPACT, 1.2f, 0.7f);
         w.spawnParticle(Particle.EXPLOSION_EMITTER, c, 1);
         Fx.burst(w, c, Particle.FLAME, 50, 0.45);
-        Fx.burst(w, c, Particle.END_ROD, 25, 0.35);
-        // ground shockwave rolling outward
         Location ground = c.clone().subtract(0, 0.9, 0);
         every(7, t -> {
             double r = radius * (t + 1) / 7.0;

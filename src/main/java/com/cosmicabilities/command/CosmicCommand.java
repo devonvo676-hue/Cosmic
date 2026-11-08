@@ -42,6 +42,15 @@ public class CosmicCommand implements CommandExecutor, TabCompleter {
                 if (sender instanceof Player p) plugin.abilitiesPanel().open(p);
             }
             case "help" -> help(sender);
+            case "config" -> {
+                if (!sender.hasPermission("cosmicabilities.admin")) { send(sender, "<red>You don't have permission."); return true; }
+                if (sender instanceof Player p) plugin.configPanel().open(p);
+            }
+            case "reload" -> {
+                if (!sender.hasPermission("cosmicabilities.admin")) { send(sender, "<red>You don't have permission."); return true; }
+                plugin.reloadAll();
+                send(sender, "<green>Config, AFK shop and recipes reloaded - changes are live.");
+            }
             case "admin" -> {
                 if (!sender.hasPermission("cosmicabilities.admin")) { send(sender, "<red>You don't have permission."); return true; }
                 admin(sender, Arrays.copyOfRange(args, 1, args.length));
@@ -61,7 +70,7 @@ public class CosmicCommand implements CommandExecutor, TabCompleter {
         s.sendMessage(plugin.mm("<gray>Slot 1 is the ability you joined with (never lost). Slot 2 is a gained ability:"));
         s.sendMessage(plugin.mm("<gray>bosses drop them, and you drop yours if someone kills you. A <light_purple>Cosmic Reroll <gray>gets it back."));
         if (s.hasPermission("cosmicabilities.admin")) {
-            s.sendMessage(plugin.mm("<red>/bossfight  /adminpanel  /announce <msg>  /tag <admin|owner|off>  /unban <player>"));
+            s.sendMessage(plugin.mm("<red>/bossfight  /adminpanel  /cconfig  /creload  /announce <msg>  /tag <admin|owner|off>  /unban <player>"));
             s.sendMessage(plugin.mm("<red>/cosmic admin <gray>set | reroll | settier | give | giveorb | givereroll | tokens | boss | resetcd | reload"));
         }
     }
@@ -153,9 +162,8 @@ public class CosmicCommand implements CommandExecutor, TabCompleter {
         String sub = a[0].toLowerCase(Locale.ROOT);
         switch (sub) {
             case "reload" -> {
-                plugin.reloadConfig();
-                plugin.afkShop().reload();
-                send(s, "<green>Config and AFK shop reloaded.");
+                plugin.reloadAll();
+                send(s, "<green>Config, AFK shop and recipes reloaded - changes are live.");
             }
             case "boss" -> {
                 if (!(s instanceof Player p)) { send(s, "<red>Run in-game (spawns at your location)."); return; }
@@ -251,7 +259,7 @@ public class CosmicCommand implements CommandExecutor, TabCompleter {
         boolean admin = sender.hasPermission("cosmicabilities.admin");
         if (args.length == 1) {
             options.addAll(List.of("info", "upgrade", "abilities", "help"));
-            if (admin) options.add("admin");
+            if (admin) options.addAll(List.of("admin", "config", "reload"));
         } else if (args.length == 2 && args[0].equalsIgnoreCase("upgrade")) {
             options.addAll(List.of("1", "2"));
         } else if (admin && args[0].equalsIgnoreCase("admin")) {

@@ -14,11 +14,16 @@ import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.BlockDisplay;
+import org.bukkit.util.Transformation;
 import org.bukkit.util.Vector;
+import org.joml.Quaternionf;
+import org.joml.Vector3f;
 
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 
 /** Comet dash: low and fast, damaging everything you pass through, with a burning tail and wind streaks. */
 public class MeteorAbility extends CosmicAbility {
@@ -47,6 +52,7 @@ public class MeteorAbility extends CosmicAbility {
                 return false;
             }
             player.setVelocity(dir.clone().multiply(1.75).setY(player.isOnGround() ? 0.05 : Math.min(player.getVelocity().getY(), 0.1)));
+            rupture(loc, dir, t);
             // comet head + burning tail
             Location body = loc.clone().add(0, 0.9, 0);
             w.spawnParticle(Particle.FLAME, body, 8, 0.25, 0.4, 0.25, 0.02);
@@ -70,6 +76,40 @@ public class MeteorAbility extends CosmicAbility {
         return true;
     }
 
+    /**
+     * The ground tearing open behind the comet - purely visual (display entities + particles), no blocks are changed:
+     * glowing magma scorch marks, upturned chunks of whatever you're running over, sparks and smoke.
+     */
+    private void rupture(Location loc, Vector dir, int t) {
+        World w = loc.getWorld();
+        Block ground = loc.clone().subtract(0, 0.2, 0).getBlock();
+        if (!ground.getType().isSolid()) return;
+        Material groundType = ground.getType();
+        Location surface = ground.getLocation().add(0.5, 1.01, 0.5);
+        ThreadLocalRandom r = ThreadLocalRandom.current();
+        // scorched trench: alternating magma / blackstone slabs that cool and fade
+        Fx.decal(surface.clone().add(r.nextDouble(-0.2, 0.2), 0, r.nextDouble(-0.2, 0.2)),
+                t % 2 == 0 ? Material.MAGMA_BLOCK : Material.BLACKSTONE, (float) r.nextDouble(0.9, 1.3), (float) r.nextDouble(6.28), 30);
+        // chunks of the real ground block kicked up and tumbling away to the sides
+        for (int i = 0; i < 3; i++) {
+            float sz = (float) r.nextDouble(0.25, 0.45);
+            BlockDisplay chunk = Fx.block(surface.clone().add(0, 0.1, 0), groundType, new Vector3f(sz, sz, sz),
+                    new Quaternionf().rotateXYZ((float) r.nextDouble(3), (float) r.nextDouble(3), 0), false);
+            double side = (i - 1) * 0.9 + r.nextDouble(-0.3, 0.3);
+            Vector out = new Vector(-dir.getZ(), 0, dir.getX()).multiply(side).subtract(dir.clone().multiply(0.6));
+            Vector3f up = new Vector3f((float) out.getX(), (float) r.nextDouble(0.7, 1.4), (float) out.getZ());
+            Fx.animate(chunk, 5, new Transformation(up, new Quaternionf().rotateXYZ(2f, 1f, 0.5f), new Vector3f(sz, sz, sz), new Quaternionf()), 1);
+            Fx.animate(chunk, 7, new Transformation(new Vector3f(up.x * 1.5f, -0.15f, up.z * 1.5f),
+                    new Quaternionf().rotateXYZ(3.5f, 2f, 1f), new Vector3f(sz * 0.7f, sz * 0.7f, sz * 0.7f), new Quaternionf()), 7);
+            Fx.removeLater(chunk, 16);
+        }
+        w.spawnParticle(Particle.BLOCK, surface, 18, 0.5, 0.15, 0.5, 0.2, ground.getBlockData());
+        w.spawnParticle(Particle.LAVA, surface, 1, 0.3, 0, 0.3, 0);
+        w.spawnParticle(Particle.CAMPFIRE_COSY_SMOKE, surface, 1, 0.2, 0, 0.2, 0.02);
+        w.spawnParticle(Particle.FLAME, surface, 4, 0.4, 0.05, 0.4, 0.01);
+        if (t % 3 == 0) w.playSound(surface, Sound.BLOCK_BASALT_BREAK, 0.8f, 0.6f);
+    }
+
     /** Comet Breaker: crater slam at the end of the dash. */
     private void slam(Player player, Location at, AbilitySlot slot) {
         World w = at.getWorld();
@@ -79,6 +119,19 @@ public class MeteorAbility extends CosmicAbility {
         w.spawnParticle(Particle.LAVA, at, 14, 1.4, 0.2, 1.4, 0);
         w.spawnParticle(Particle.EXPLOSION, at, 3, 1, 0.2, 1, 0);
         Fx.ring(w, at.clone().add(0, 0.2, 0), 4, 50, 0, Particle.FLAME);
+        // crater: a ring of upturned ground slabs leaning outward + radiating magma cracks
+        Location surface = ground.getLocation().add(0.5, 1.01, 0.5);
+        for (int i = 0; i < 10; i++) {
+            double a = i * Math.PI / 5;
+            Location p = surface.clone().add(Math.cos(a) * 2.2, 0, Math.sin(a) * 2.2);
+            Quaternionf lean = new Quaternionf().rotateY((float) -a).rotateZ(-0.7f);
+            BlockDisplay slab = Fx.block(p, groundType, new Vector3f(0.9f, 0.01f, 0.9f), lean, false);
+            Fx.animate(slab, 3, Fx.centred(0.9f, 0.35f, 0.9f, new Quaternionf(lean)), 1);
+            Fx.removeLater(slab, 60);
+            for (double d = 0.6; d < 3.6; d += 0.7) {
+                Fx.decal(surface.clone().add(Math.cos(a + 0.3) * d, 0, Math.sin(a + 0.3) * d), Material.MAGMA_BLOCK, 0.45f, (float) a, 40);
+            }
+        }
         Fx.ring(w, at.clone().add(0, 0.25, 0), 2.6, 36, 0.3, Fx.dust(0x06d6a0, 1.6f));
         w.playSound(at, Sound.BLOCK_ANVIL_LAND, 1f, 0.5f);
         w.playSound(at, Sound.ENTITY_GENERIC_EXPLODE, 1.2f, 0.8f);

@@ -13,14 +13,21 @@ import org.bukkit.block.data.BlockData;
 import org.bukkit.entity.BlockDisplay;
 import org.bukkit.entity.Display;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.ItemDisplay;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.TextDisplay;
+import org.bukkit.NamespacedKey;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.util.Transformation;
 import org.bukkit.util.Vector;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 /** Shared visual helpers: damage numbers, hitmarkers, particle shapes and animated display entities. */
@@ -146,5 +153,94 @@ public final class Fx {
         plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
             if (e.isValid()) e.remove();
         }, ticks);
+    }
+
+    // ------------------------------------------------------------------ v2.1 helpers
+
+    /** A straight beam of light between two points made of a stretched, glowing block. Thins out and vanishes. */
+    public static BlockDisplay beam(Location from, Location to, Material material, float width, int life) {
+        Vector d = to.toVector().subtract(from.toVector());
+        float len = (float) d.length();
+        if (len < 0.05f) return null;
+        Vector3f dir = new Vector3f((float) d.getX(), (float) d.getY(), (float) d.getZ()).normalize();
+        Quaternionf rot = new Quaternionf().rotationTo(0, 1, 0, dir.x, dir.y, dir.z);
+        Location at = from.clone();
+        at.setYaw(0);
+        at.setPitch(0);
+        BlockDisplay b = at.getWorld().spawn(at, BlockDisplay.class, e -> {
+            e.setBlock(material.createBlockData());
+            e.setPersistent(false);
+            e.setBrightness(new Display.Brightness(15, 15));
+            e.setTransformation(beamShape(rot, width, len));
+        });
+        animate(b, life, beamShape(rot, 0.01f, len), 2);
+        removeLater(b, life + 3);
+        return b;
+    }
+
+    private static Transformation beamShape(Quaternionf rot, float w, float len) {
+        Vector3f t = new Vector3f(-w / 2f, 0, -w / 2f);
+        new Quaternionf(rot).transform(t);
+        return new Transformation(t, new Quaternionf(rot), new Vector3f(w, len, w), new Quaternionf());
+    }
+
+    /** An item from the resource pack (planets, icons...) as a floating, full-bright display. */
+    public static ItemDisplay model(Location at, String model, float scale) {
+        ItemStack item = new ItemStack(Material.PAPER);
+        ItemMeta meta = item.getItemMeta();
+        meta.setItemModel(new NamespacedKey("cosmic", model));
+        item.setItemMeta(meta);
+        Location spot = at.clone();
+        spot.setYaw(0);
+        spot.setPitch(0);
+        return at.getWorld().spawn(spot, ItemDisplay.class, d -> {
+            d.setItemStack(item);
+            d.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.FIXED);
+            d.setBrightness(new Display.Brightness(15, 15));
+            d.setPersistent(false);
+            d.setTransformation(new Transformation(new Vector3f(), new Quaternionf(), new Vector3f(scale, scale, scale), new Quaternionf()));
+        });
+    }
+
+    public static Transformation spin(float scale, Quaternionf rot) {
+        return new Transformation(new Vector3f(), rot, new Vector3f(scale, scale, scale), new Quaternionf());
+    }
+
+    /** A flat slab lying on the ground (scorch marks, frost, cracks). Shrinks away after life ticks. */
+    public static BlockDisplay decal(Location ground, Material material, float size, float yaw, int life) {
+        Location at = ground.clone();
+        at.setYaw(0);
+        at.setPitch(0);
+        Quaternionf rot = new Quaternionf().rotateY(yaw);
+        BlockDisplay d = at.getWorld().spawn(at, BlockDisplay.class, e -> {
+            e.setBlock(material.createBlockData());
+            e.setPersistent(false);
+            Vector3f t = new Vector3f(-size / 2f, 0, -size / 2f);
+            new Quaternionf(rot).transform(t);
+            e.setTransformation(new Transformation(t, rot, new Vector3f(size, 0.04f, size), new Quaternionf()));
+        });
+        Vector3f t0 = new Vector3f(0, 0, 0);
+        animate(d, 12, new Transformation(t0, rot, new Vector3f(0.01f, 0.01f, 0.01f), new Quaternionf()), life);
+        removeLater(d, life + 14);
+        return d;
+    }
+
+    /** Players within range who should see an effect (optionally hiding it from one player, e.g. the caster). */
+    public static List<Player> viewers(Location at, double range, UUID hideFrom) {
+        List<Player> out = new ArrayList<>();
+        double r2 = range * range;
+        for (Player p : at.getWorld().getPlayers()) {
+            if (hideFrom != null && p.getUniqueId().equals(hideFrom)) continue;
+            if (p.getLocation().distanceSquared(at) <= r2) out.add(p);
+        }
+        return out;
+    }
+
+    public static void dustFor(List<Player> viewers, double x, double y, double z, Particle.DustOptions d) {
+        for (Player p : viewers) p.spawnParticle(Particle.DUST, x, y, z, 1, 0, 0, 0, 0, d);
+    }
+
+    public static void particleFor(List<Player> viewers, Particle particle, Location at, int count, double spread) {
+        for (Player p : viewers) p.spawnParticle(particle, at.getX(), at.getY(), at.getZ(), count, spread, spread, spread, 0);
     }
 }

@@ -7,6 +7,7 @@ import com.cosmicabilities.data.AbilitySlot;
 import com.cosmicabilities.fx.Fx;
 import com.cosmicabilities.util.Targets;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.World;
@@ -77,6 +78,8 @@ public class PulsarAbility extends CosmicAbility {
             if (pierced >= 2) break;
         }
         final Location end = pos;
+        Fx.beam(start, end, Material.LIGHT_BLUE_STAINED_GLASS, 0.42f, 7);
+        Fx.beam(start, end, Material.WHITE_CONCRETE, 0.12f, 5);
         // draw the beam over 3 ticks so it lingers and thins out
         every(3, t -> {
             float core = 1.4f - t * 0.35f;

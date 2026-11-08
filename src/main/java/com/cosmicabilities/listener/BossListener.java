@@ -25,7 +25,7 @@ public class BossListener implements Listener {
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onBossShield(org.bukkit.event.entity.EntityDamageEvent event) {
         if (!(event.getEntity() instanceof LivingEntity boss) || plugin.bosses().typeOf(boss) == null) return;
-        int min = plugin.getConfig().getInt("bosses.min-players-to-damage", 3);
+        int min = plugin.bosses().requiredPlayers(boss);
         if (min <= 1) return;
         double r = plugin.getConfig().getDouble("bosses.fight-radius", 32);
         int count = 0;

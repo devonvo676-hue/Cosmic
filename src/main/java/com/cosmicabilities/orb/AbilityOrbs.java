@@ -107,6 +107,7 @@ public class AbilityOrbs implements Listener {
 
     /** Diamonds in the corners, ender eyes on the sides, a totem in the middle (configurable on/off). */
     public void registerRecipe() {
+        Bukkit.removeRecipe(recipeKey);
         if (!plugin.getConfig().getBoolean("reroll.craftable", true)) return;
         ShapedRecipe r = new ShapedRecipe(recipeKey, reroll());
         r.shape("DED", "ETE", "DED");

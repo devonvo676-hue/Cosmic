@@ -59,7 +59,8 @@ public class AbilityEngine {
 
     /** The single upgrade cuts the cooldown by upgrades.cooldown-reduction (default 30%). */
     public double cooldownSeconds(AbilityType type, int tier) {
-        double cd = type.baseCooldown * plugin.getConfig().getDouble("abilities.cooldown-multiplier", 1.0);
+        double base = plugin.getConfig().getDouble("ability-settings." + type.id() + ".cooldown", type.baseCooldown);
+        double cd = base * plugin.getConfig().getDouble("abilities.cooldown-multiplier", 1.0);
         if (tier >= 2) cd *= 1 - Math.max(0, Math.min(0.9, plugin.getConfig().getDouble("upgrades.cooldown-reduction", 0.3)));
         return Math.max(plugin.getConfig().getDouble("abilities.minimum-cooldown", 4.0), cd);
     }

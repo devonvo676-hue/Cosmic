@@ -43,12 +43,18 @@ public class MagnetosphereAbility extends CosmicAbility {
 
         w.playSound(center, Sound.BLOCK_BEACON_ACTIVATE, 1.4f, 1.2f);
         w.playSound(center, Sound.BLOCK_CONDUIT_ACTIVATE, 1.2f, 1f);
-        // the dome assembles itself ring by ring from the ground up
+        // the dome assembles itself ring by ring from the ground up (hidden from the caster unless configured)
+        java.util.List<Player> viewers = Fx.viewers(center, 80,
+                plugin.getConfig().getBoolean("magnetosphere.caster-sees-dome", false) ? null : player.getUniqueId());
         every(10, t -> {
             double lat = t / 10.0 * Math.PI / 2;
             double rr = Math.cos(lat) * radius;
-            Location ring = center.clone().add(0, Math.sin(lat) * radius, 0);
-            Fx.ring(w, ring, Math.max(0.2, rr), (int) (rr * 9) + 4, t * 0.3, Fx.dust(0xcaf0f8, 1.2f));
+            double y = center.getY() + Math.sin(lat) * radius;
+            int pts = (int) (rr * 9) + 4;
+            for (int i = 0; i < pts; i++) {
+                double ang = t * 0.3 + i * Math.PI * 2 / pts;
+                Fx.dustFor(viewers, center.getX() + Math.cos(ang) * rr, y, center.getZ() + Math.sin(ang) * rr, Fx.dust(0xcaf0f8, 1.2f));
+            }
             if (t % 2 == 0) w.playSound(center, Sound.BLOCK_AMETHYST_BLOCK_HIT, 0.6f, 0.8f + t * 0.1f);
             return true;
         });

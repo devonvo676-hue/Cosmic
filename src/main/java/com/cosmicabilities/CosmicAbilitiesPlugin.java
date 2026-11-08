@@ -13,6 +13,7 @@ import com.cosmicabilities.data.DataManager;
 import com.cosmicabilities.fx.Fx;
 import com.cosmicabilities.gui.AbilitiesPanel;
 import com.cosmicabilities.gui.AdminPanel;
+import com.cosmicabilities.gui.ConfigPanel;
 import com.cosmicabilities.item.CosmicMaterial;
 import com.cosmicabilities.listener.BossListener;
 import com.cosmicabilities.listener.PlayerListener;
@@ -43,6 +44,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
     private HoldersPanel holdersPanel;
     private KeybindPanel keybindPanel;
     private AbilityOrbs orbs;
+    private ConfigPanel configPanel;
     private PlayerListener playerListener;
     private BanPistol banPistol;
     private AdminPanel adminPanel;
@@ -72,6 +74,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
         keybindPanel = new KeybindPanel(this);
         orbs = new AbilityOrbs(this);
         orbs.registerRecipe();
+        configPanel = new ConfigPanel(this);
         playerListener = new PlayerListener(this);
         banPistol = new BanPistol(this);
         adminPanel = new AdminPanel(this);
@@ -82,7 +85,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
         afkShop = new AfkShop(this);
 
         for (Listener l : new Listener[]{playerListener, new BossListener(this), new StatusListener(this), combat,
-                new KeybindListener(this), bossFightPanel, holdersPanel, keybindPanel, orbs,
+                new KeybindListener(this), bossFightPanel, holdersPanel, keybindPanel, orbs, configPanel,
                 banPistol, adminPanel, abilitiesPanel, cutscenes, afk, afkShop}) {
             getServer().getPluginManager().registerEvents(l, this);
         }
@@ -94,7 +97,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
             cosmic.setTabCompleter(cmd);
         }
         MiscCommands misc = new MiscCommands(this);
-        for (String name : new String[]{"ability", "abilities", "abilityholders", "keybinds", "bossfight", "adminpanel", "tag", "unban", "announce", "afk", "afkshop"}) {
+        for (String name : new String[]{"ability", "abilities", "abilityholders", "keybinds", "bossfight", "creload", "cconfig", "adminpanel", "tag", "unban", "announce", "afk", "afkshop"}) {
             PluginCommand c = getCommand(name);
             if (c != null) {
                 c.setExecutor(misc);
@@ -125,6 +128,21 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
         if (dataManager != null) dataManager.saveAll();
     }
 
+    /** /creload: re-read config.yml and afkshop.yml from disk and apply everything immediately. */
+    public void reloadAll() {
+        reloadConfig();
+        getConfig().options().copyDefaults(true);
+        saveConfig();
+        afkShop.reload();
+        applyConfig();
+    }
+
+    /** Re-applies settings that aren't read live (recipe on/off, name tag style). */
+    public void applyConfig() {
+        orbs.registerRecipe();
+        for (Player p : getServer().getOnlinePlayers()) rankTags.validate(p);
+    }
+
     public Component mm(String text) {
         return miniMessage.deserialize(text);
     }
@@ -142,6 +160,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
     public HoldersPanel holdersPanel() { return holdersPanel; }
     public KeybindPanel keybindPanel() { return keybindPanel; }
     public AbilityOrbs orbs() { return orbs; }
+    public ConfigPanel configPanel() { return configPanel; }
     public PlayerListener playerListener() { return playerListener; }
     public BanPistol banPistol() { return banPistol; }
     public AdminPanel adminPanel() { return adminPanel; }

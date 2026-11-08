@@ -47,6 +47,9 @@ public class UmbraAbility extends CosmicAbility {
         w.playSound(at, Sound.ENTITY_WARDEN_DIG, 1f, 1.3f);
         w.playSound(at, Sound.BLOCK_GRAVEL_BREAK, 1.2f, 0.6f);
 
+        Location hole = ground.getLocation().add(0.5, 1.005, 0.5);
+        Fx.decal(hole, Material.BLACK_CONCRETE, 1.1f, 0.3f, 50);
+        Fx.decal(hole, Material.COARSE_DIRT, 1.8f, 1.1f, 45);
         int ticks = bonus(slot) ? 120 : 80;
         status().burrow(player, ticks, () -> erupt(player, slot));
         return true;
@@ -63,6 +66,12 @@ public class UmbraAbility extends CosmicAbility {
         w.spawnParticle(Particle.DUST, at.clone().add(0, 0.3, 0), 30, 1.5, 0.2, 1.5, 0, Fx.dust(0xba68ff, 1.4f));
         w.playSound(at, Sound.ENTITY_WARDEN_EMERGE, 0.8f, 1.6f);
         w.playSound(at, Sound.ENTITY_GENERIC_EXPLODE, 1f, 0.7f);
+        Location crater = ground.getLocation().add(0.5, 1.005, 0.5);
+        Fx.decal(crater, Material.BLACK_CONCRETE, 1.2f, 0f, 60);
+        for (int i = 0; i < 8; i++) {
+            double a = i * Math.PI / 4;
+            Fx.decal(crater.clone().add(Math.cos(a) * 1.3, 0, Math.sin(a) * 1.3), groundType, 0.8f, (float) a, 55);
+        }
         // chunks of earth thrown into the air
         ThreadLocalRandom r = ThreadLocalRandom.current();
         for (int i = 0; i < 6; i++) {

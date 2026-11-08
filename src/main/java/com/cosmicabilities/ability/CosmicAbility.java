@@ -34,8 +34,10 @@ public abstract class CosmicAbility {
         return plugin.getConfig().getBoolean("abilities.bonus-mechanics", true);
     }
 
+    /** Deals this ability's damage, scaled by its own ability-settings.<id>.damage-multiplier. */
     protected double hit(Player caster, LivingEntity target, double amount) {
-        return Targets.damage(caster, target, amount, type.rgb());
+        double mult = plugin.getConfig().getDouble("ability-settings." + type.id() + ".damage-multiplier", 1.0);
+        return Targets.damage(caster, target, amount * mult, type.rgb());
     }
 
     protected StatusManager status() {

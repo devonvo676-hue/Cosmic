@@ -28,7 +28,7 @@ import java.time.Duration;
  */
 public class BossFightPanel implements Listener {
     private static final int[] BOSS_SLOTS = {11, 12, 13, 14, 15};
-    private static final int COUNTDOWN_TOGGLE = 29, DESPAWN = 33, CLOSE = 40;
+    private static final int COUNTDOWN_TOGGLE = 29, PLAYERS = 31, DESPAWN = 33, CLOSE = 40;
     private static final int[] COUNTDOWNS = {0, 10, 30, 60};
 
     public static final class Holder implements InventoryHolder {
@@ -39,11 +39,13 @@ public class BossFightPanel implements Listener {
 
     private final CosmicAbilitiesPlugin plugin;
     private int countdownIndex = 1;
+    private int requiredPlayers;
 
     public BossFightPanel(CosmicAbilitiesPlugin plugin) {
         this.plugin = plugin;
         int configured = plugin.getConfig().getInt("bossfight.countdown-seconds", 10);
         for (int i = 0; i < COUNTDOWNS.length; i++) if (COUNTDOWNS[i] == configured) countdownIndex = i;
+        requiredPlayers = Math.max(1, plugin.getConfig().getInt("bosses.min-players-to-damage", 3));
     }
 
     public void open(Player admin) {
@@ -57,20 +59,24 @@ public class BossFightPanel implements Listener {
     private void render(Inventory inv) {
         ItemStack pane = Icons.button(plugin, Material.BLACK_STAINED_GLASS_PANE, " ");
         for (int i = 0; i < inv.getSize(); i++) inv.setItem(i, pane);
-        int min = plugin.getConfig().getInt("bosses.min-players-to-damage", 3);
+        int min = requiredPlayers;
         BossType[] types = BossType.values();
         for (int i = 0; i < types.length; i++) {
             BossType b = types[i];
             inv.setItem(BOSS_SLOTS[i], Icons.button(plugin, Material.WITHER_SKELETON_SKULL, b.colored(),
                     "<gray>Health <white>" + (int) plugin.getConfig().getDouble("bosses." + b.id() + ".health", 500),
                     "<gray>Drops " + b.drop.colored() + " <gray>+ a random ability orb",
-                    "<gray>Needs <white>" + min + " players <gray>nearby to be damaged",
+                    "<gray>Starts when <white>" + min + " player" + (min == 1 ? "" : "s") + " <gray>are there",
                     "",
                     "<yellow>Click <gray>to start the fight at your location"));
         }
         int cd = COUNTDOWNS[countdownIndex];
         inv.setItem(COUNTDOWN_TOGGLE, Icons.button(plugin, Material.CLOCK, "<aqua>Countdown: <white>" + (cd == 0 ? "none" : cd + "s"),
                 "<gray>Click to change. Everyone sees the countdown."));
+        inv.setItem(PLAYERS, Icons.button(plugin, Material.PLAYER_HEAD, "<gold>Players needed: <white>" + requiredPlayers,
+                "<gray>The fight waits until this many players", "<gray>are near the spot, then starts.",
+                "<gray>The boss also can't be hurt with fewer.", "",
+                "<yellow>Left-click <gray>+1   <yellow>Right-click <gray>-1   <yellow>Shift <gray>x5"));
         inv.setItem(DESPAWN, Icons.button(plugin, Material.BARRIER, "<red>End all boss fights", "<gray>Removes every active boss (no drops)."));
         inv.setItem(CLOSE, Icons.button(plugin, Material.OAK_DOOR, "<gray>Close"));
     }
@@ -90,11 +96,16 @@ public class BossFightPanel implements Listener {
         for (int i = 0; i < BOSS_SLOTS.length; i++) {
             if (raw == BOSS_SLOTS[i]) {
                 admin.closeInventory();
-                start(BossType.values()[i], admin.getLocation(), COUNTDOWNS[countdownIndex], admin.getName());
+                start(BossType.values()[i], admin.getLocation(), COUNTDOWNS[countdownIndex], requiredPlayers, admin.getName());
                 return;
             }
         }
         switch (raw) {
+            case PLAYERS -> {
+                int step = event.getClick().isShiftClick() ? 5 : 1;
+                requiredPlayers = Math.max(1, Math.min(100, requiredPlayers + (event.getClick().isRightClick() ? -step : step)));
+                render(event.getInventory());
+            }
             case COUNTDOWN_TOGGLE -> {
                 countdownIndex = (countdownIndex + 1) % COUNTDOWNS.length;
                 render(event.getInventory());
@@ -109,12 +120,55 @@ public class BossFightPanel implements Listener {
         }
     }
 
-    /** Server-wide countdown, then the boss descends in a column of light. */
+    /** Kept for the admin panel: uses the config default player requirement. */
     public void start(BossType type, Location where, int seconds, String by) {
+        start(type, where, seconds, Math.max(1, plugin.getConfig().getInt("bosses.min-players-to-damage", 3)), by);
+    }
+
+    /**
+     * Announces the fight, waits until `required` players are near the spot (or times out), then runs the
+     * countdown and the boss descends.
+     */
+    public void start(BossType type, Location where, int seconds, int required, String by) {
         Location at = where.clone();
-        Bukkit.broadcast(plugin.mm(plugin.prefix() + "<red><bold>BOSS FIGHT!</bold> " + type.colored() + " <gray>is coming to <white>"
+        double radius = plugin.getConfig().getDouble("bossfight.gather-radius", 40);
+        int timeout = plugin.getConfig().getInt("bossfight.wait-timeout-seconds", 300);
+        Bukkit.broadcast(plugin.mm(plugin.prefix() + "<red><bold>BOSS FIGHT!</bold> " + type.colored() + " <gray>at <white>"
                 + at.getBlockX() + ", " + at.getBlockY() + ", " + at.getBlockZ() + " <gray>(" + at.getWorld().getName() + ")"
-                + (seconds > 0 ? " in <white>" + seconds + "s" : "") + "<gray>. Started by " + by + "."));
+                + "<gray>. Needs <white>" + required + " player" + (required == 1 ? "" : "s") + " <gray>there to begin. Started by " + by + "."));
+        new BukkitRunnable() {
+            int waited = 0;
+            @Override
+            public void run() {
+                int here = 0;
+                for (Player p : at.getWorld().getPlayers()) {
+                    if (!p.isDead() && p.getGameMode() != org.bukkit.GameMode.SPECTATOR
+                            && p.getLocation().distanceSquared(at) <= radius * radius) here++;
+                }
+                if (here >= required) {
+                    cancel();
+                    countdown(type, at, seconds, required);
+                    return;
+                }
+                if (waited >= timeout) {
+                    cancel();
+                    Bukkit.broadcast(plugin.mm(plugin.prefix() + "<gray>The " + type.colored()
+                            + " <gray>fight was cancelled - not enough players showed up."));
+                    return;
+                }
+                for (Player p : Bukkit.getOnlinePlayers()) {
+                    p.sendActionBar(plugin.mm("<red><bold>BOSS FIGHT</bold> " + type.colored() + " <gray>waiting for players: <white>"
+                            + here + "/" + required + " <gray>at " + at.getBlockX() + ", " + at.getBlockY() + ", " + at.getBlockZ()));
+                }
+                at.getWorld().spawnParticle(Particle.DUST, at.clone().add(0, 3, 0), 30, 0.2, 3, 0.2, 0,
+                        new Particle.DustOptions(org.bukkit.Color.fromRGB(Integer.parseInt(type.color.substring(1), 16)), 1.4f));
+                waited++;
+            }
+        }.runTaskTimer(plugin, 0L, 20L);
+    }
+
+    /** Server-wide countdown, then the boss descends in a column of light. */
+    private void countdown(BossType type, Location at, int seconds, int required) {
         new BukkitRunnable() {
             int left = seconds;
             @Override
@@ -126,7 +180,7 @@ public class BossFightPanel implements Listener {
                     }
                     at.getWorld().strikeLightningEffect(at);
                     at.getWorld().spawnParticle(Particle.END_ROD, at.clone().add(0, 2, 0), 80, 0.5, 3, 0.5, 0.05);
-                    plugin.bosses().spawn(type, at);
+                    plugin.bosses().spawn(type, at, required);
                     cancel();
                     return;
                 }

@@ -30,6 +30,16 @@ commands:
     usage: /bossfight
     aliases: [bossfights]
     permission: cosmicabilities.admin
+  creload:
+    description: Instantly reload the Cosmic config (and AFK shop) into the game
+    usage: /creload
+    aliases: [cosmicreload]
+    permission: cosmicabilities.admin
+  cconfig:
+    description: Edit the Cosmic config in game
+    usage: /cconfig
+    aliases: [cosmicconfig]
+    permission: cosmicabilities.admin
   adminpanel:
     description: Open the Cosmic admin panel
     usage: /adminpanel

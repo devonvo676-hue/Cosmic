@@ -29,12 +29,17 @@ public class SolarAbility extends CosmicAbility {
                 new StatusManager.Shield(0.3, reflect, System.currentTimeMillis() + duration * 50L, evolved));
         if (evolved) player.addPotionEffect(new PotionEffect(PotionEffectType.REGENERATION, duration, 0, false, true, true));
         World w = player.getWorld();
+        org.bukkit.entity.ItemDisplay halo = Fx.model(player.getLocation().add(0, 2.6, 0), "planet_sun", 0.05f);
+        halo.setTeleportDuration(1);
+        Fx.animate(halo, 5, Fx.spin(0.42f, new org.joml.Quaternionf()), 1);
         w.playSound(player.getLocation(), Sound.BLOCK_BEACON_ACTIVATE, 1f, 1.7f);
         w.playSound(player.getLocation(), Sound.ITEM_FIRECHARGE_USE, 0.8f, 0.8f);
 
         every(duration, t -> {
-            if (!player.isOnline() || player.isDead()) { status().clearShield(player.getUniqueId()); return false; }
+            if (!player.isOnline() || player.isDead()) { status().clearShield(player.getUniqueId()); halo.remove(); return false; }
             Location base = player.getLocation();
+            halo.teleport(base.clone().add(0, 2.6, 0));
+            if (t % 3 == 0) Fx.animate(halo, 3, Fx.spin(0.42f, new org.joml.Quaternionf().rotateY(t * 0.12f).rotateX(0.3f)), 1);
             // crown: a small ring of points above the head that slowly turns
             Location crown = base.clone().add(0, 2.35, 0);
             if (t % 2 == 0) {
@@ -55,6 +60,7 @@ public class SolarAbility extends CosmicAbility {
             }
             if (t >= duration) {
                 status().clearShield(player.getUniqueId());
+                halo.remove();
                 burst(player, slot);
                 return false;
             }

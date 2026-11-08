@@ -33,10 +33,33 @@ public class NebulaAbility extends CosmicAbility {
         int duration = 120;
         boolean veil = bonus(slot);
         w.playSound(center, Sound.BLOCK_AMETHYST_BLOCK_RESONATE, 1.2f, 0.6f);
+        org.bukkit.Material[] gasMats = {org.bukkit.Material.MAGENTA_STAINED_GLASS, org.bukkit.Material.PURPLE_STAINED_GLASS,
+                org.bukkit.Material.LIGHT_BLUE_STAINED_GLASS};
+        java.util.List<org.bukkit.entity.BlockDisplay> sheets = new java.util.ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            org.bukkit.entity.BlockDisplay sheet = Fx.block(center.clone().add(0, 0.8 + i * 0.7, 0), gasMats[i],
+                    new org.joml.Vector3f(0.1f, 0.02f, 0.1f), new org.joml.Quaternionf(), true);
+            Fx.animate(sheet, 10, Fx.centred((float) radius * (1.5f - i * 0.25f), 0.03f, (float) radius * (1.5f - i * 0.25f),
+                    new org.joml.Quaternionf().rotateY(i * 0.7f)), 1);
+            sheets.add(sheet);
+        }
         w.playSound(center, Sound.ENTITY_EVOKER_CAST_SPELL, 0.8f, 1.4f);
 
         every(duration, t -> {
             ThreadLocalRandom r = ThreadLocalRandom.current();
+            if (t % 10 == 0 && t > 10) {
+                for (int i = 0; i < sheets.size(); i++) {
+                    float s = (float) radius * (1.5f - i * 0.25f);
+                    Fx.animate(sheets.get(i), 10, Fx.centred(s, 0.03f, s,
+                            new org.joml.Quaternionf().rotateY(i * 0.7f + t * 0.02f * (i % 2 == 0 ? 1 : -1)).rotateX(0.08f * (i - 1))), 1);
+                }
+            }
+            if (t >= duration) {
+                for (org.bukkit.entity.BlockDisplay sheet : sheets) {
+                    Fx.animate(sheet, 8, Fx.centred(0.01f, 0.01f, 0.01f, new org.joml.Quaternionf()), 1);
+                    Fx.removeLater(sheet, 10);
+                }
+            }
             if (t % 2 == 0) {
                 // gas: slowly rotating spiral bands at different heights, big soft particles
                 for (int i = 0; i < 16; i++) {

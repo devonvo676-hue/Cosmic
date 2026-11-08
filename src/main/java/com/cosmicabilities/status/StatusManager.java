@@ -41,10 +41,10 @@ public class StatusManager {
     public static final class Frozen {
         final Location at;
         final long until;
-        final BlockDisplay shell;
+        final List<BlockDisplay> shell;
         final Player caster;
         final double shatterDamage;
-        Frozen(Location at, long until, BlockDisplay shell, Player caster, double shatterDamage) {
+        Frozen(Location at, long until, List<BlockDisplay> shell, Player caster, double shatterDamage) {
             this.at = at; this.until = until; this.shell = shell; this.caster = caster; this.shatterDamage = shatterDamage;
         }
     }
@@ -91,23 +91,57 @@ public class StatusManager {
 
     // ------------------------------------------------------------------ freeze
 
-    /** Encases the target in ice. Players are pinned by the move listener; mobs are pinned by tick(). */
+    /**
+     * Encases the target in a crystal prison: a clear ice core around the body, jagged blue-ice shards jutting out
+     * at angles, and a frost patch spreading on the ground. Players are pinned by the move listener; mobs by tick().
+     */
     public void freeze(LivingEntity target, int ticks, Player caster, double shatterDamage) {
         unfreeze(target.getUniqueId(), false);
         Location at = target.getLocation();
-        float w = (float) Math.max(0.8, target.getWidth() + 0.35);
-        float h = (float) target.getHeight() + 0.3f;
-        Location shellAt = at.clone().add(0, h / 2 - 0.1, 0);
-        shellAt.setYaw(0);
-        shellAt.setPitch(0);
-        BlockDisplay shell = Fx.block(shellAt, Material.ICE, new Vector3f(0.1f, 0.1f, 0.1f), new Quaternionf(), false);
-        Fx.animate(shell, 3, Fx.centred(w, h, w, new Quaternionf()), 1);
-        frozen.put(target.getUniqueId(), new Frozen(at, System.currentTimeMillis() + ticks * 50L, shell, caster, shatterDamage));
+        float w = (float) Math.max(0.8, target.getWidth() + 0.3);
+        float h = (float) target.getHeight() + 0.25f;
+        Location mid = at.clone().add(0, h / 2 - 0.1, 0);
+        mid.setYaw(0);
+        mid.setPitch(0);
+        List<BlockDisplay> parts = new ArrayList<>();
+        BlockDisplay core = Fx.block(mid, Material.ICE, new Vector3f(0.1f, 0.1f, 0.1f), new Quaternionf(), false);
+        Fx.animate(core, 3, Fx.centred(w, h, w, new Quaternionf().rotateY(0.3f)), 1);
+        parts.add(core);
+        java.util.concurrent.ThreadLocalRandom r = java.util.concurrent.ThreadLocalRandom.current();
+        for (int i = 0; i < 6; i++) {
+            double a = i * Math.PI / 3 + r.nextDouble(-0.3, 0.3);
+            float len = (float) r.nextDouble(0.7, 1.3) * h * 0.6f;
+            Location base = at.clone().add(Math.cos(a) * w * 0.45, r.nextDouble(0.1, h * 0.6), Math.sin(a) * w * 0.45);
+            base.setYaw(0);
+            base.setPitch(0);
+            Quaternionf tilt = new Quaternionf().rotateY((float) -a).rotateZ((float) -r.nextDouble(0.35, 0.9));
+            BlockDisplay shard = Fx.block(base, i % 2 == 0 ? Material.BLUE_ICE : Material.PACKED_ICE,
+                    new Vector3f(0.05f, 0.05f, 0.05f), tilt, false);
+            float sw = (float) r.nextDouble(0.16, 0.28);
+            Fx.animate(shard, 3 + i % 3, new Transformation(new Vector3f(-sw / 2, 0, -sw / 2), tilt,
+                    new Vector3f(sw, len, sw), new Quaternionf()), 1);
+            parts.add(shard);
+        }
+        Location ground = at.clone().add(0, 0.02, 0);
+        ground.setYaw(0);
+        ground.setPitch(0);
+        BlockDisplay frost = ground.getWorld().spawn(ground, BlockDisplay.class, d -> {
+            d.setBlock(Material.SNOW_BLOCK.createBlockData());
+            d.setPersistent(false);
+            d.setTransformation(new Transformation(new Vector3f(-0.05f, 0, -0.05f), new Quaternionf(), new Vector3f(0.1f, 0.03f, 0.1f), new Quaternionf()));
+        });
+        float fs = w * 2.2f;
+        Fx.animate(frost, 6, new Transformation(new Vector3f(-fs / 2, 0, -fs / 2), new Quaternionf().rotateY(0.4f),
+                new Vector3f(fs, 0.03f, fs), new Quaternionf()), 1);
+        parts.add(frost);
+        frozen.put(target.getUniqueId(), new Frozen(at, System.currentTimeMillis() + ticks * 50L, parts, caster, shatterDamage));
         target.setVelocity(new Vector());
         target.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS, ticks, 6, false, false, false));
         target.setFreezeTicks(Math.max(target.getFreezeTicks(), target.getMaxFreezeTicks()));
         if (target instanceof Mob mob) mob.setAware(false);
         target.getWorld().playSound(at, Sound.BLOCK_GLASS_PLACE, 1f, 0.7f);
+        target.getWorld().playSound(at, Sound.BLOCK_POWDER_SNOW_PLACE, 1f, 0.6f);
+        target.getWorld().spawnParticle(Particle.SNOWFLAKE, mid, 25, w * 0.5, h * 0.4, w * 0.5, 0.03);
     }
 
     public boolean isFrozen(UUID id) {
@@ -125,7 +159,15 @@ public class StatusManager {
         if (f == null) return;
         LivingEntity e = (LivingEntity) plugin.getServer().getEntity(id);
         World w = f.at.getWorld();
-        if (f.shell.isValid()) f.shell.remove();
+        // the prison cracks apart: shards fly outward and shrink
+        java.util.concurrent.ThreadLocalRandom r = java.util.concurrent.ThreadLocalRandom.current();
+        for (BlockDisplay part : f.shell) {
+            if (!part.isValid()) continue;
+            Vector3f out = new Vector3f((float) r.nextDouble(-1.2, 1.2), (float) r.nextDouble(0.3, 1.2), (float) r.nextDouble(-1.2, 1.2));
+            Fx.animate(part, 6, new Transformation(out, new Quaternionf().rotateXYZ((float) r.nextDouble(3), (float) r.nextDouble(3), 0),
+                    new Vector3f(0.05f, 0.05f, 0.05f), new Quaternionf()), 1);
+            Fx.removeLater(part, 8);
+        }
         Location c = f.at.clone().add(0, 1, 0);
         w.spawnParticle(Particle.BLOCK, c, 40, 0.35, 0.6, 0.35, 0, Material.ICE.createBlockData());
         w.spawnParticle(Particle.SNOWFLAKE, c, 15, 0.4, 0.6, 0.4, 0.05);
@@ -157,6 +199,26 @@ public class StatusManager {
         target.addPassenger(marker);
         inverted.put(target.getUniqueId(), new Inverted(System.currentTimeMillis() + ticks * 50L, marker));
         target.addPotionEffect(new PotionEffect(PotionEffectType.NAUSEA, ticks + 40, 0, false, false, true));
+    }
+
+    /**
+     * Inverted controls, using the keys the player is actually holding (Paper 1.21.3+ input API):
+     * W walks you backwards, S forwards, A right, D left. You can move freely - just mirrored.
+     */
+    private void steerInverted(Player p) {
+        org.bukkit.Input in = p.getCurrentInput();
+        int forward = (in.isForward() ? 1 : 0) - (in.isBackward() ? 1 : 0);
+        int left = (in.isLeft() ? 1 : 0) - (in.isRight() ? 1 : 0);
+        if (forward == 0 && left == 0) return;
+        forward = -forward;
+        left = -left;
+        double yaw = Math.toRadians(p.getLocation().getYaw());
+        double fx = -Math.sin(yaw), fz = Math.cos(yaw);   // facing direction
+        double lx = Math.cos(yaw), lz = Math.sin(yaw);    // your left-hand side
+        double vx = fx * forward + lx * left, vz = fz * forward + lz * left;
+        double len = Math.sqrt(vx * vx + vz * vz);
+        double speed = in.isSprint() ? 0.42 : 0.32;
+        p.setVelocity(new Vector(vx / len * speed, p.getVelocity().getY(), vz / len * speed));
     }
 
     public boolean isInverted(UUID id) {
@@ -288,6 +350,7 @@ public class StatusManager {
                 it.remove();
                 continue;
             }
+            steerInverted(p);
             if (tick % 4 == 0) {
                 Location head = p.getLocation().add(0, 2.1, 0);
                 double a = tick * 0.4;
@@ -329,11 +392,19 @@ public class StatusManager {
         }
     }
 
+    /** Dome particles are sent per-player: everyone nearby sees it except (by default) the caster. */
+    private List<Player> fieldViewers(Field f) {
+        boolean casterSees = plugin.getConfig().getBoolean("magnetosphere.caster-sees-dome", false);
+        return Fx.viewers(f.center, 80, casterSees ? null : f.owner);
+    }
+
     private void drawField(Field f) {
-        World w = f.center.getWorld();
+        List<Player> viewers = fieldViewers(f);
+        if (viewers.isEmpty()) return;
         double r = f.radius;
         Particle.DustOptions edge = Fx.dust(0x48cae4, 0.9f);
         Particle.DustOptions bright = Fx.dust(0xcaf0f8, 1.1f);
+        double cx = f.center.getX(), cy = f.center.getY(), cz = f.center.getZ();
         if (tick % 3 == 0) {
             // rotating meridians
             double spin = tick * 0.03;
@@ -341,26 +412,32 @@ public class StatusManager {
                 double a = spin + m * Math.PI / 3;
                 for (int k = 1; k <= 10; k++) {
                     double lat = k / 10.0 * Math.PI / 2;
-                    double y = Math.sin(lat) * r, rr = Math.cos(lat) * r;
-                    w.spawnParticle(Particle.DUST, f.center.getX() + Math.cos(a) * rr, f.center.getY() + y,
-                            f.center.getZ() + Math.sin(a) * rr, 1, 0, 0, 0, 0, edge);
+                    double rr = Math.cos(lat) * r;
+                    Fx.dustFor(viewers, cx + Math.cos(a) * rr, cy + Math.sin(lat) * r, cz + Math.sin(a) * rr, edge);
                 }
             }
         }
         if (tick % 6 == 0) {
-            // latitude rings + ground ring
-            for (double lat : new double[]{0, 0.35, 0.75}) {
+            // latitude rings + bright ground ring
+            for (double lat : new double[]{0, 0.35, 0.75, 1.15}) {
                 double rr = Math.cos(lat) * r;
-                Location ring = f.center.clone().add(0, Math.sin(lat) * r, 0);
-                Fx.ring(w, ring, rr, (int) (rr * 9), tick * 0.02, lat == 0 ? bright : edge);
+                int pts = (int) (rr * 9) + 4;
+                for (int i = 0; i < pts; i++) {
+                    double a = tick * 0.02 + i * Math.PI * 2 / pts;
+                    Fx.dustFor(viewers, cx + Math.cos(a) * rr, cy + Math.sin(lat) * r, cz + Math.sin(a) * rr, lat == 0 ? bright : edge);
+                }
             }
         }
-        if (tick % 5 == 0) {
+        if (tick % 4 == 0) {
             // a hex panel flickers somewhere on the dome
             java.util.concurrent.ThreadLocalRandom rnd = java.util.concurrent.ThreadLocalRandom.current();
             double a = rnd.nextDouble(Math.PI * 2), lat = rnd.nextDouble(0.1, 1.2);
-            Location p = f.center.clone().add(Math.cos(a) * Math.cos(lat) * r, Math.sin(lat) * r, Math.sin(a) * Math.cos(lat) * r);
-            w.spawnParticle(Particle.END_ROD, p, 3, 0.15, 0.15, 0.15, 0);
+            double px = cx + Math.cos(a) * Math.cos(lat) * r, py = cy + Math.sin(lat) * r, pz = cz + Math.sin(a) * Math.cos(lat) * r;
+            for (int i = 0; i < 6; i++) {
+                double h = i * Math.PI / 3;
+                Fx.dustFor(viewers, px + Math.cos(h) * 0.35, py + Math.sin(h) * 0.35, pz, bright);
+            }
+            Fx.particleFor(viewers, Particle.END_ROD, new Location(f.center.getWorld(), px, py, pz), 2, 0.1);
         }
     }
 
@@ -385,10 +462,16 @@ public class StatusManager {
     private void collapse(Field f) {
         World w = f.center.getWorld();
         w.playSound(f.center, Sound.BLOCK_BEACON_DEACTIVATE, 1.2f, 1.2f);
+        List<Player> viewers = fieldViewers(f);
         for (int i = 0; i < 4; i++) {
-            Location ring = f.center.clone().add(0, f.radius * (0.9 - i * 0.25), 0);
-            double rr = Math.sqrt(Math.max(0, f.radius * f.radius - Math.pow(ring.getY() - f.center.getY(), 2)));
-            Fx.ring(w, ring, rr, (int) (rr * 8) + 4, 0, Particle.END_ROD);
+            double y = f.radius * (0.9 - i * 0.25);
+            double rr = Math.sqrt(Math.max(0, f.radius * f.radius - y * y));
+            int pts = (int) (rr * 8) + 4;
+            for (int k = 0; k < pts; k++) {
+                double a = k * Math.PI * 2 / pts;
+                Fx.particleFor(viewers, Particle.END_ROD,
+                        f.center.clone().add(Math.cos(a) * rr, y, Math.sin(a) * rr), 1, 0);
+            }
         }
     }
 
@@ -407,6 +490,7 @@ public class StatusManager {
     }
 
     public void shutdown() {
+        for (Frozen f : frozen.values()) f.shell.forEach(d -> { if (d.isValid()) d.remove(); });
         for (UUID id : new ArrayList<>(frozen.keySet())) unfreeze(id, false);
         for (Inverted i : inverted.values()) if (i.marker.isValid()) i.marker.remove();
         inverted.clear();

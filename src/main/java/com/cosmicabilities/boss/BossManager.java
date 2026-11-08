@@ -53,16 +53,30 @@ public class BossManager {
 
     private final CosmicAbilitiesPlugin plugin;
     private final NamespacedKey bossKey;
+    private final NamespacedKey requiredKey;
     private final Map<UUID, ActiveBoss> active = new HashMap<>();
 
     public BossManager(CosmicAbilitiesPlugin plugin) {
         this.plugin = plugin;
         this.bossKey = new NamespacedKey(plugin, "cosmic_boss");
+        this.requiredKey = new NamespacedKey(plugin, "required_players");
     }
 
     public BossType typeOf(Entity entity) {
         String id = entity.getPersistentDataContainer().get(bossKey, PersistentDataType.STRING);
         return BossType.fromId(id);
+    }
+
+    /** Players that must be near this boss for it to take damage (set per fight, else the config default). */
+    public int requiredPlayers(Entity boss) {
+        Integer r = boss.getPersistentDataContainer().get(requiredKey, PersistentDataType.INTEGER);
+        return r != null ? r : plugin.getConfig().getInt("bosses.min-players-to-damage", 3);
+    }
+
+    public LivingEntity spawn(BossType type, Location loc, int requiredPlayers) {
+        LivingEntity boss = spawn(type, loc);
+        if (boss != null) boss.getPersistentDataContainer().set(requiredKey, PersistentDataType.INTEGER, Math.max(1, requiredPlayers));
+        return boss;
     }
 
     public LivingEntity spawn(BossType type, Location loc) {

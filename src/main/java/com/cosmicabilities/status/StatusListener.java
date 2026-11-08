@@ -50,17 +50,7 @@ public class StatusListener implements Listener {
             event.setTo(pin);
             return;
         }
-        if (s().isInverted(p.getUniqueId())) {
-            double dx = to.getX() - from.getX(), dz = to.getZ() - from.getZ();
-            if (dx * dx + dz * dz > 1.0E-4) {
-                Location back = from.clone();
-                back.setYaw(to.getYaw());
-                back.setPitch(to.getPitch());
-                back.setY(to.getY());
-                event.setTo(back);
-                p.setVelocity(new Vector(-dx * 1.15, p.getVelocity().getY(), -dz * 1.15));
-            }
-        }
+
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)

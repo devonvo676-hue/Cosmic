@@ -39,6 +39,12 @@ public class MiscCommands implements CommandExecutor, TabCompleter {
         switch (name) {
             case "unban" -> { return unban(sender, args); }
             case "announce" -> { return announce(sender, args); }
+            case "creload" -> {
+                if (sender instanceof Player p && !BanPistol.isStaff(p)) { send(sender, "<red>Only admins can reload."); return true; }
+                plugin.reloadAll();
+                send(sender, "<green>Cosmic config, AFK shop and recipes reloaded - changes are live.");
+                return true;
+            }
             default -> { }
         }
         if (!(sender instanceof Player player)) {
@@ -50,6 +56,10 @@ public class MiscCommands implements CommandExecutor, TabCompleter {
             case "abilities" -> plugin.abilitiesPanel().open(player);
             case "abilityholders" -> plugin.holdersPanel().open(player, 0);
             case "keybinds" -> plugin.keybindPanel().open(player);
+            case "cconfig" -> {
+                if (!BanPistol.isStaff(player)) send(player, "<red>Only admins can edit the config.");
+                else plugin.configPanel().open(player);
+            }
             case "bossfight" -> {
                 if (!BanPistol.isStaff(player)) send(player, "<red>Only admins can start boss fights.");
                 else plugin.bossFightPanel().open(player);
