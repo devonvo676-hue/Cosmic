@@ -49,10 +49,13 @@ cast-buffs:
   magnetosphere: ["resistance:1:8"]
   umbra: ["speed:2:5"]
 
+entropy:
+  scramble-seconds: 5      # how long a victim's hotbar stays scrambled before it reverts
+
 magnetosphere:
   radius: 6
   duration-seconds: 15
-  caster-sees-dome: false  # false = only OTHER players see the forcefield
+  hide-from-caster: false  # true = the caster can't see their own forcefield (everyone else still can)
 
 # Each ability can be upgraded ONCE. The upgrade shortens its cooldown.
 upgrades:

@@ -56,6 +56,8 @@ public class MiscCommands implements CommandExecutor, TabCompleter {
             case "abilities" -> plugin.abilitiesPanel().open(player);
             case "abilityholders" -> plugin.holdersPanel().open(player, 0);
             case "keybinds" -> plugin.keybindPanel().open(player);
+            case "trust" -> trust(player, args, true);
+            case "untrust" -> trust(player, args, false);
             case "cconfig" -> {
                 if (!BanPistol.isStaff(player)) send(player, "<red>Only admins can edit the config.");
                 else plugin.configPanel().open(player);
@@ -159,6 +161,39 @@ public class MiscCommands implements CommandExecutor, TabCompleter {
         }
     }
 
+    /** /trust <player> | /untrust <player> | /trust list - your abilities never affect players you trust. */
+    @SuppressWarnings("deprecation")
+    private void trust(Player player, String[] args, boolean add) {
+        PlayerData d = plugin.data().get(player.getUniqueId());
+        if (d == null) return;
+        if (args.length == 0 || args[0].equalsIgnoreCase("list")) {
+            if (d.trusted().isEmpty()) {
+                send(player, "<gray>You don't trust anyone yet. <yellow>/trust <player>");
+                return;
+            }
+            List<String> names = new ArrayList<>();
+            for (java.util.UUID id : d.trusted()) {
+                String n = Bukkit.getOfflinePlayer(id).getName();
+                names.add(n == null ? id.toString().substring(0, 8) : n);
+            }
+            send(player, "<gray>Trusted (your abilities won't affect them): <white>" + String.join(", ", names));
+            return;
+        }
+        org.bukkit.OfflinePlayer target = Bukkit.getOfflinePlayer(args[0]);
+        if (target.getUniqueId().equals(player.getUniqueId())) { send(player, "<red>You can't trust yourself."); return; }
+        if (!target.hasPlayedBefore() && target.getPlayer() == null) { send(player, "<red>Unknown player " + args[0] + "."); return; }
+        String name = target.getName() == null ? args[0] : target.getName();
+        if (add) {
+            if (d.trust(target.getUniqueId())) send(player, "<green>You now trust <white>" + name + "<green>. Your abilities won't affect them.");
+            else send(player, "<gray>You already trust " + name + ".");
+            if (target.getPlayer() != null) send(target.getPlayer(), "<white>" + player.getName() + " <gray>now trusts you - their abilities won't hit you.");
+        } else {
+            if (d.untrust(target.getUniqueId())) send(player, "<yellow>You no longer trust <white>" + name + "<yellow>.");
+            else send(player, "<gray>You weren't trusting " + name + ".");
+        }
+        plugin.data().save(d);
+    }
+
     private void afkshop(Player player, String[] args) {
         if (args.length == 0) { plugin.afkShop().open(player); return; }
         if (!BanPistol.isStaff(player)) { plugin.afkShop().open(player); return; }
@@ -191,6 +226,17 @@ public class MiscCommands implements CommandExecutor, TabCompleter {
         if (args.length != 1 || !(sender instanceof Player p)) return out;
         switch (command.getName().toLowerCase(Locale.ROOT)) {
             case "ability" -> out.addAll(List.of("1", "2"));
+            case "trust" -> {
+                out.add("list");
+                for (Player o : Bukkit.getOnlinePlayers()) if (!o.equals(p)) out.add(o.getName());
+            }
+            case "untrust" -> {
+                PlayerData d = plugin.data().get(p.getUniqueId());
+                if (d != null) for (java.util.UUID id : d.trusted()) {
+                    String n = Bukkit.getOfflinePlayer(id).getName();
+                    if (n != null) out.add(n);
+                }
+            }
             case "tag" -> {
                 if (RankTags.canUse(p, RankTags.Rank.ADMIN)) out.add("admin");
                 if (RankTags.canUse(p, RankTags.Rank.OWNER)) out.add("owner");
@@ -199,7 +245,7 @@ public class MiscCommands implements CommandExecutor, TabCompleter {
             case "afkshop" -> { if (BanPistol.isStaff(p)) out.addAll(List.of("add", "reload")); }
             default -> { }
         }
-        out.removeIf(o -> !o.startsWith(args[0].toLowerCase(Locale.ROOT)));
+        out.removeIf(o -> !o.toLowerCase(Locale.ROOT).startsWith(args[0].toLowerCase(Locale.ROOT)));
         return out;
     }
 }

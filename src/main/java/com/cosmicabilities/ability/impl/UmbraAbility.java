@@ -48,8 +48,10 @@ public class UmbraAbility extends CosmicAbility {
         w.playSound(at, Sound.BLOCK_GRAVEL_BREAK, 1.2f, 0.6f);
 
         Location hole = ground.getLocation().add(0.5, 1.005, 0.5);
-        Fx.decal(hole, Material.BLACK_CONCRETE, 1.1f, 0.3f, 50);
-        Fx.decal(hole, Material.COARSE_DIRT, 1.8f, 1.1f, 45);
+        org.bukkit.entity.ItemDisplay pit = Fx.flat(hole.clone().add(0, 0.02, 0), "blackhole", 2.2f, 0.3f);
+        Fx.animate(pit, 10, Fx.flatShape(0.01f, 2f), 40);
+        Fx.removeLater(pit, 52);
+        Fx.wave(hole, "ring_purple", 0.5f, 4f, 8);
         int ticks = bonus(slot) ? 120 : 80;
         status().burrow(player, ticks, () -> erupt(player, slot));
         return true;
@@ -67,11 +69,11 @@ public class UmbraAbility extends CosmicAbility {
         w.playSound(at, Sound.ENTITY_WARDEN_EMERGE, 0.8f, 1.6f);
         w.playSound(at, Sound.ENTITY_GENERIC_EXPLODE, 1f, 0.7f);
         Location crater = ground.getLocation().add(0.5, 1.005, 0.5);
-        Fx.decal(crater, Material.BLACK_CONCRETE, 1.2f, 0f, 60);
-        for (int i = 0; i < 8; i++) {
-            double a = i * Math.PI / 4;
-            Fx.decal(crater.clone().add(Math.cos(a) * 1.3, 0, Math.sin(a) * 1.3), groundType, 0.8f, (float) a, 55);
-        }
+        Fx.wave(crater, "ring_purple", 0.5f, 8f, 9);
+        Fx.flare(at.clone().add(0, 1, 0), "flare_purple", 3.5f, 10);
+        org.bukkit.entity.ItemDisplay scar = Fx.flat(crater.clone().add(0, 0.02, 0), "scorch", 3.5f, 0.7f);
+        Fx.animate(scar, 12, Fx.flatShape(0.01f, 0.7f), 50);
+        Fx.removeLater(scar, 64);
         // chunks of earth thrown into the air
         ThreadLocalRandom r = ThreadLocalRandom.current();
         for (int i = 0; i < 6; i++) {

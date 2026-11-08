@@ -36,28 +36,15 @@ public class ParadoxAbility extends CosmicAbility {
         int invertTicks = bonus(slot) ? 120 : 80;
         Set<UUID> hitSet = new HashSet<>();
         w.playSound(center, Sound.ENTITY_ILLUSIONER_MIRROR_MOVE, 1.4f, 0.7f);
-        java.util.List<org.bukkit.entity.BlockDisplay> mirrors = new java.util.ArrayList<>();
-        for (int i = 0; i < 6; i++) {
-            org.bukkit.entity.BlockDisplay m = Fx.block(center, i % 2 == 0 ? org.bukkit.Material.CYAN_STAINED_GLASS
-                    : org.bukkit.Material.MAGENTA_STAINED_GLASS, new org.joml.Vector3f(1.1f, 1.6f, 0.06f), new org.joml.Quaternionf(), true);
-            m.setTeleportDuration(1);
-            mirrors.add(m);
-        }
+        Location ground = player.getLocation().add(0, 0.05, 0);
+        Fx.wave(ground, "ring_cyan", 0.5f, (float) radius * 2.2f, 10);
+        Fx.wave(ground.clone().add(0, 0.6, 0), "ring_magenta", 0.5f, (float) radius * 2.2f, 12);
+        Fx.flare(center, "flare_cyan", 2.5f, 8);
         w.playSound(center, Sound.BLOCK_AMETHYST_BLOCK_RESONATE, 1f, 1.8f);
 
         every(10, t -> {
             double r = radius * (t + 1) / 10.0;
             double spin = t * 0.5;
-            for (int i = 0; i < mirrors.size(); i++) {
-                org.bukkit.entity.BlockDisplay m = mirrors.get(i);
-                double a = i * Math.PI / 3 + (i % 2 == 0 ? spin : -spin) * 0.4;
-                Location mp = center.clone().add(Math.cos(a) * r, 0, Math.sin(a) * r);
-                mp.setYaw(0);
-                mp.setPitch(0);
-                m.teleport(mp);
-                Fx.animate(m, 1, Fx.centred(1.1f, 1.6f, 0.06f, new org.joml.Quaternionf().rotateY((float) (-a + Math.PI / 2))), 1);
-                if (t == 10) { Fx.animate(m, 4, Fx.centred(0.01f, 0.01f, 0.01f, new org.joml.Quaternionf()), 2); Fx.removeLater(m, 7); }
-            }
             // the two rings travel at slightly different heights and spin opposite ways
             Fx.ring(w, center.clone().add(0, 0.25, 0), r, (int) (r * 7), spin, Fx.dust(0x00f5d4, 1.3f));
             Fx.ring(w, center.clone().add(0, -0.25, 0), r, (int) (r * 7), -spin, Fx.dust(0xf72585, 1.3f));
@@ -94,6 +81,7 @@ public class ParadoxAbility extends CosmicAbility {
                     e.teleport(turned);
                 }
                 w.spawnParticle(Particle.REVERSE_PORTAL, e.getLocation().add(0, 1, 0), 20, 0.3, 0.5, 0.3, 0.05);
+                Fx.flare(e.getLocation().add(0, 1.2, 0), "flare_cyan", 1.6f, 8);
             }
             return true;
         });

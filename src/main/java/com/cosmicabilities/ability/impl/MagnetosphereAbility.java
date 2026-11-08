@@ -43,9 +43,9 @@ public class MagnetosphereAbility extends CosmicAbility {
 
         w.playSound(center, Sound.BLOCK_BEACON_ACTIVATE, 1.4f, 1.2f);
         w.playSound(center, Sound.BLOCK_CONDUIT_ACTIVATE, 1.2f, 1f);
-        // the dome assembles itself ring by ring from the ground up (hidden from the caster unless configured)
-        java.util.List<Player> viewers = Fx.viewers(center, 80,
-                plugin.getConfig().getBoolean("magnetosphere.caster-sees-dome", false) ? null : player.getUniqueId());
+        // the dome assembles itself ring by ring from the ground up (everyone sees it, unless hide-from-caster is on)
+        java.util.List<Player> viewers = Fx.viewers(center, 96,
+                plugin.getConfig().getBoolean("magnetosphere.hide-from-caster", false) ? player.getUniqueId() : null);
         every(10, t -> {
             double lat = t / 10.0 * Math.PI / 2;
             double rr = Math.cos(lat) * radius;
@@ -59,6 +59,14 @@ public class MagnetosphereAbility extends CosmicAbility {
             return true;
         });
         status().addField(center.clone(), radius, seconds * 20, player.getUniqueId(), bonus(slot));
+        // glowing boundary ring on the ground for the whole duration
+        if (!plugin.getConfig().getBoolean("magnetosphere.hide-from-caster", false)) {
+            org.bukkit.entity.ItemDisplay edge = Fx.flat(center.clone().add(0, 0.06, 0), "ring_cyan", 0.5f, 0);
+            Fx.animate(edge, 10, Fx.flatShape((float) radius * 2.3f, 0), 1);
+            Fx.animate(edge, 10, Fx.flatShape(0.01f, 1f), seconds * 20L);
+            Fx.removeLater(edge, seconds * 20L + 12);
+            Fx.flare(center.clone().add(0, 1.2, 0), "flare_cyan", 4f, 12);
+        }
         return true;
     }
 }

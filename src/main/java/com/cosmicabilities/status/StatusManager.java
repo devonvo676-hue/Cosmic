@@ -41,10 +41,10 @@ public class StatusManager {
     public static final class Frozen {
         final Location at;
         final long until;
-        final List<BlockDisplay> shell;
+        final List<org.bukkit.entity.Display> shell;
         final Player caster;
         final double shatterDamage;
-        Frozen(Location at, long until, List<BlockDisplay> shell, Player caster, double shatterDamage) {
+        Frozen(Location at, long until, List<org.bukkit.entity.Display> shell, Player caster, double shatterDamage) {
             this.at = at; this.until = until; this.shell = shell; this.caster = caster; this.shatterDamage = shatterDamage;
         }
     }
@@ -58,8 +58,12 @@ public class StatusManager {
     public static final class Burrow {
         public final long until;
         public final Runnable onEnd;
+        Location lastWall;
         Burrow(long until, Runnable onEnd) { this.until = until; this.onEnd = onEnd; }
     }
+
+    /** A scrambled hotbar: perm[i] = original slot of the item now in slot i. */
+    private record Scramble(int[] perm, int heldSlot, long until) {}
 
     public static final class Field {
         public final Location center;
@@ -82,6 +86,7 @@ public class StatusManager {
     private final Map<UUID, Shield> shields = new ConcurrentHashMap<>();
     private final Set<UUID> fallImmune = ConcurrentHashMap.newKeySet();
     private final List<Field> fields = new ArrayList<>();
+    private final Map<UUID, Scramble> scrambled = new ConcurrentHashMap<>();
     /** Guards against two Solar shields reflecting damage back and forth forever. */
     private boolean reflecting = false;
 
@@ -103,36 +108,14 @@ public class StatusManager {
         Location mid = at.clone().add(0, h / 2 - 0.1, 0);
         mid.setYaw(0);
         mid.setPitch(0);
-        List<BlockDisplay> parts = new ArrayList<>();
-        BlockDisplay core = Fx.block(mid, Material.ICE, new Vector3f(0.1f, 0.1f, 0.1f), new Quaternionf(), false);
-        Fx.animate(core, 3, Fx.centred(w, h, w, new Quaternionf().rotateY(0.3f)), 1);
-        parts.add(core);
-        java.util.concurrent.ThreadLocalRandom r = java.util.concurrent.ThreadLocalRandom.current();
-        for (int i = 0; i < 6; i++) {
-            double a = i * Math.PI / 3 + r.nextDouble(-0.3, 0.3);
-            float len = (float) r.nextDouble(0.7, 1.3) * h * 0.6f;
-            Location base = at.clone().add(Math.cos(a) * w * 0.45, r.nextDouble(0.1, h * 0.6), Math.sin(a) * w * 0.45);
-            base.setYaw(0);
-            base.setPitch(0);
-            Quaternionf tilt = new Quaternionf().rotateY((float) -a).rotateZ((float) -r.nextDouble(0.35, 0.9));
-            BlockDisplay shard = Fx.block(base, i % 2 == 0 ? Material.BLUE_ICE : Material.PACKED_ICE,
-                    new Vector3f(0.05f, 0.05f, 0.05f), tilt, false);
-            float sw = (float) r.nextDouble(0.16, 0.28);
-            Fx.animate(shard, 3 + i % 3, new Transformation(new Vector3f(-sw / 2, 0, -sw / 2), tilt,
-                    new Vector3f(sw, len, sw), new Quaternionf()), 1);
-            parts.add(shard);
-        }
-        Location ground = at.clone().add(0, 0.02, 0);
-        ground.setYaw(0);
-        ground.setPitch(0);
-        BlockDisplay frost = ground.getWorld().spawn(ground, BlockDisplay.class, d -> {
-            d.setBlock(Material.SNOW_BLOCK.createBlockData());
-            d.setPersistent(false);
-            d.setTransformation(new Transformation(new Vector3f(-0.05f, 0, -0.05f), new Quaternionf(), new Vector3f(0.1f, 0.03f, 0.1f), new Quaternionf()));
-        });
-        float fs = w * 2.2f;
-        Fx.animate(frost, 6, new Transformation(new Vector3f(-fs / 2, 0, -fs / 2), new Quaternionf().rotateY(0.4f),
-                new Vector3f(fs, 0.03f, fs), new Quaternionf()), 1);
+        List<org.bukkit.entity.Display> parts = new ArrayList<>();
+        // a tall clear crystal around the body that always faces the viewer, plus frost on the ground
+        org.bukkit.entity.ItemDisplay crystal = Fx.sprite(mid, "ice_prison", 0.05f, org.bukkit.entity.Display.Billboard.VERTICAL);
+        Fx.animate(crystal, 3, Fx.sized(w * 2.0f, h * 1.25f, 0), 1);
+        parts.add(crystal);
+        Location ground = at.clone().add(0, 0.06, 0);
+        org.bukkit.entity.ItemDisplay frost = Fx.flat(ground, "ring_frost", 0.1f, 0);
+        Fx.animate(frost, 5, Fx.flatShape(w * 2.6f, 0.5f), 1);
         parts.add(frost);
         frozen.put(target.getUniqueId(), new Frozen(at, System.currentTimeMillis() + ticks * 50L, parts, caster, shatterDamage));
         target.setVelocity(new Vector());
@@ -159,15 +142,13 @@ public class StatusManager {
         if (f == null) return;
         LivingEntity e = (LivingEntity) plugin.getServer().getEntity(id);
         World w = f.at.getWorld();
-        // the prison cracks apart: shards fly outward and shrink
-        java.util.concurrent.ThreadLocalRandom r = java.util.concurrent.ThreadLocalRandom.current();
-        for (BlockDisplay part : f.shell) {
+        // the prison shatters: a burst of light and ice shards
+        for (org.bukkit.entity.Display part : f.shell) {
             if (!part.isValid()) continue;
-            Vector3f out = new Vector3f((float) r.nextDouble(-1.2, 1.2), (float) r.nextDouble(0.3, 1.2), (float) r.nextDouble(-1.2, 1.2));
-            Fx.animate(part, 6, new Transformation(out, new Quaternionf().rotateXYZ((float) r.nextDouble(3), (float) r.nextDouble(3), 0),
-                    new Vector3f(0.05f, 0.05f, 0.05f), new Quaternionf()), 1);
-            Fx.removeLater(part, 8);
+            Fx.animate(part, 4, Fx.sized(0.01f, 0.01f, 0.4f), 1);
+            Fx.removeLater(part, 6);
         }
+        Fx.flare(f.at.clone().add(0, 1, 0), "flare_white", 2.4f, 8);
         Location c = f.at.clone().add(0, 1, 0);
         w.spawnParticle(Particle.BLOCK, c, 40, 0.35, 0.6, 0.35, 0, Material.ICE.createBlockData());
         w.spawnParticle(Particle.SNOWFLAKE, c, 15, 0.4, 0.6, 0.4, 0.05);
@@ -194,6 +175,7 @@ public class StatusManager {
             d.setBackgroundColor(Color.fromARGB(0, 0, 0, 0));
             d.setShadowed(true);
             d.setPersistent(false);
+            d.addScoreboardTag(Fx.TAG);
             d.setTransformation(new Transformation(new Vector3f(0, 0.5f, 0), new Quaternionf(), new Vector3f(1.6f, 1.6f, 1.6f), new Quaternionf()));
         });
         target.addPassenger(marker);
@@ -226,6 +208,39 @@ public class StatusManager {
         return i != null && i.until > System.currentTimeMillis();
     }
 
+    // ------------------------------------------------------------------ hotbar scramble (Entropy)
+
+    /** Shuffles the hotbar for `ticks`, then puts every item back where it was (amounts that changed are kept). */
+    public void scrambleHotbar(Player p, int ticks) {
+        if (scrambled.containsKey(p.getUniqueId())) return;   // already scrambled: don't stack
+        org.bukkit.inventory.PlayerInventory inv = p.getInventory();
+        List<Integer> order = new ArrayList<>();
+        for (int i = 0; i < 9; i++) order.add(i);
+        java.util.Collections.shuffle(order);
+        org.bukkit.inventory.ItemStack[] bar = new org.bukkit.inventory.ItemStack[9];
+        for (int i = 0; i < 9; i++) bar[i] = inv.getItem(i);
+        int[] perm = new int[9];
+        for (int i = 0; i < 9; i++) {
+            perm[i] = order.get(i);
+            inv.setItem(i, bar[perm[i]]);
+        }
+        int held = inv.getHeldItemSlot();
+        inv.setHeldItemSlot(java.util.concurrent.ThreadLocalRandom.current().nextInt(9));
+        scrambled.put(p.getUniqueId(), new Scramble(perm, held, System.currentTimeMillis() + ticks * 50L));
+    }
+
+    public void unscramble(Player p) {
+        Scramble s = scrambled.remove(p.getUniqueId());
+        if (s == null) return;
+        org.bukkit.inventory.PlayerInventory inv = p.getInventory();
+        org.bukkit.inventory.ItemStack[] now = new org.bukkit.inventory.ItemStack[9];
+        for (int i = 0; i < 9; i++) now[i] = inv.getItem(i);
+        for (int i = 0; i < 9; i++) inv.setItem(s.perm()[i], now[i]);
+        inv.setHeldItemSlot(s.heldSlot());
+        p.sendActionBar(Component.text("Your hotbar is back to normal", TextColor.color(0x00f5d4)));
+        p.playSound(p.getLocation(), Sound.ITEM_ARMOR_EQUIP_GENERIC, 0.8f, 1.4f);
+    }
+
     // ------------------------------------------------------------------ burrow (Umbra)
 
     public void burrow(Player p, int ticks, Runnable onEnd) {
@@ -247,6 +262,44 @@ public class StatusManager {
         for (Player other : plugin.getServer().getOnlinePlayers()) other.showPlayer(plugin, p);
         p.removePotionEffect(PotionEffectType.INVISIBILITY);
         if (runCallback && p.isOnline()) b.onEnd.run();
+    }
+
+    /**
+     * Umbra's tunnel: as you move underground, the ground splits into two walls of earth on either side of your path
+     * (made of whatever you're burrowing through), leaving a trench down the middle. Visual only.
+     */
+    private void partEarth(Player p, Burrow b) {
+        Location feet = p.getLocation();
+        if (b.lastWall == null) { b.lastWall = feet.clone(); return; }
+        if (!b.lastWall.getWorld().equals(feet.getWorld())) { b.lastWall = feet.clone(); return; }
+        Vector move = feet.toVector().subtract(b.lastWall.toVector()).setY(0);
+        if (move.lengthSquared() < 0.8 * 0.8) return;
+        b.lastWall = feet.clone();
+        org.bukkit.block.Block ground = feet.clone().subtract(0, 0.2, 0).getBlock();
+        if (!ground.getType().isSolid()) return;
+        Material type = ground.getType();
+        Vector dir = move.normalize();
+        Vector side = new Vector(-dir.getZ(), 0, dir.getX());
+        float yaw = (float) Math.atan2(dir.getX(), dir.getZ());
+        Location surface = ground.getLocation().add(0.5, 1.0, 0.5);
+        surface.setX(feet.getX());
+        surface.setZ(feet.getZ());
+        for (int s = -1; s <= 1; s += 2) {
+            Location at = surface.clone().add(side.clone().multiply(0.75 * s));
+            at.setYaw(0);
+            at.setPitch(0);
+            // a slab of earth: long along the path, tilted away from the trench
+            Quaternionf rot = new Quaternionf().rotateY(yaw).rotateZ(0.45f * s);
+            BlockDisplay wall = Fx.block(at, type, new Vector3f(0.4f, 0.05f, 1.1f), rot, false);
+            Fx.animate(wall, 3, new Transformation(new Vector3f(-0.2f, -0.15f, -0.55f).rotate(rot), new Quaternionf(rot),
+                    new Vector3f(0.4f, 0.85f, 1.1f), new Quaternionf()), 1);
+            Fx.animate(wall, 8, new Transformation(new Vector3f(-0.2f, -0.9f, -0.55f).rotate(rot), new Quaternionf(rot),
+                    new Vector3f(0.4f, 0.85f, 1.1f), new Quaternionf()), 22);
+            Fx.removeLater(wall, 32);
+        }
+        // the trench between the walls: earth bursting up and settling
+        p.getWorld().spawnParticle(Particle.BLOCK, surface.clone().add(0, 0.1, 0), 14, 0.2, 0.15, 0.4, 0.15, ground.getBlockData());
+        p.getWorld().spawnParticle(Particle.DUST, surface.clone().add(0, 0.05, 0), 4, 0.15, 0, 0.3, 0, Fx.dust(0xba68ff, 0.9f));
     }
 
     /** Hide currently burrowed players from someone who just joined. */
@@ -282,8 +335,10 @@ public class StatusManager {
             reflecting = false;
         }
         if (burn) attacker.setFireTicks(Math.max(attacker.getFireTicks(), 80));
-        Fx.line(owner.getWorld(), owner.getLocation().add(0, 1.1, 0), attacker.getLocation().add(0, attacker.getHeight() * 0.6, 0),
-                0.25, Fx.dust(0xffb703, 1.1f));
+        Location from = owner.getLocation().add(0, 1.1, 0), to = attacker.getLocation().add(0, attacker.getHeight() * 0.6, 0);
+        Fx.ray(from, to, "beam_gold", 0.7f, 6);
+        Fx.ray(from, to, "beam_white", 0.22f, 4);
+        Fx.flare(to, "flare_gold", 1.8f, 7);
         owner.getWorld().playSound(owner.getLocation(), Sound.ITEM_SHIELD_BLOCK, 0.9f, 1.4f);
         owner.getWorld().playSound(owner.getLocation(), Sound.BLOCK_BEACON_POWER_SELECT, 0.5f, 2f);
     }
@@ -342,6 +397,12 @@ public class StatusManager {
             unfreeze(id, e != null && e.isValid() && !e.isDead());
         }
 
+        for (Map.Entry<UUID, Scramble> en : new ArrayList<>(scrambled.entrySet())) {
+            if (en.getValue().until() > now) continue;
+            Player p = plugin.getServer().getPlayer(en.getKey());
+            if (p != null) unscramble(p); else scrambled.remove(en.getKey());
+        }
+
         for (Iterator<Map.Entry<UUID, Inverted>> it = inverted.entrySet().iterator(); it.hasNext(); ) {
             Map.Entry<UUID, Inverted> en = it.next();
             Player p = plugin.getServer().getPlayer(en.getKey());
@@ -367,6 +428,7 @@ public class StatusManager {
                 surfacing.add(p);
                 continue;
             }
+            partEarth(p, en.getValue());
             // "tremor" trail: the only clue other players get
             Location feet = p.getLocation();
             org.bukkit.block.Block ground = feet.clone().subtract(0, 0.2, 0).getBlock();
@@ -392,26 +454,26 @@ public class StatusManager {
         }
     }
 
-    /** Dome particles are sent per-player: everyone nearby sees it except (by default) the caster. */
+    /** Dome particles are sent per-player so the caster can optionally be excluded (magnetosphere.hide-from-caster). */
     private List<Player> fieldViewers(Field f) {
-        boolean casterSees = plugin.getConfig().getBoolean("magnetosphere.caster-sees-dome", false);
-        return Fx.viewers(f.center, 80, casterSees ? null : f.owner);
+        boolean hide = plugin.getConfig().getBoolean("magnetosphere.hide-from-caster", false);
+        return Fx.viewers(f.center, 96, hide ? f.owner : null);
     }
 
     private void drawField(Field f) {
         List<Player> viewers = fieldViewers(f);
         if (viewers.isEmpty()) return;
         double r = f.radius;
-        Particle.DustOptions edge = Fx.dust(0x48cae4, 0.9f);
-        Particle.DustOptions bright = Fx.dust(0xcaf0f8, 1.1f);
+        Particle.DustOptions edge = Fx.dust(0x48cae4, 1.2f);
+        Particle.DustOptions bright = Fx.dust(0xcaf0f8, 1.4f);
         double cx = f.center.getX(), cy = f.center.getY(), cz = f.center.getZ();
-        if (tick % 3 == 0) {
-            // rotating meridians
+        if (tick % 2 == 0) {
+            // rotating meridians (dense enough to read as a solid shell)
             double spin = tick * 0.03;
-            for (int m = 0; m < 6; m++) {
-                double a = spin + m * Math.PI / 3;
-                for (int k = 1; k <= 10; k++) {
-                    double lat = k / 10.0 * Math.PI / 2;
+            for (int m = 0; m < 12; m++) {
+                double a = spin + m * Math.PI / 6;
+                for (int k = 1; k <= 12; k++) {
+                    double lat = k / 12.0 * Math.PI / 2;
                     double rr = Math.cos(lat) * r;
                     Fx.dustFor(viewers, cx + Math.cos(a) * rr, cy + Math.sin(lat) * r, cz + Math.sin(a) * rr, edge);
                 }
@@ -477,6 +539,8 @@ public class StatusManager {
 
     /** Clean up everything for a player who logs out. */
     public void clear(UUID uuid) {
+        Player online = plugin.getServer().getPlayer(uuid);
+        if (online != null) unscramble(online);
         shields.remove(uuid);
         fallImmune.remove(uuid);
         Inverted i = inverted.remove(uuid);
@@ -490,6 +554,10 @@ public class StatusManager {
     }
 
     public void shutdown() {
+        for (UUID id : new ArrayList<>(scrambled.keySet())) {
+            Player p = plugin.getServer().getPlayer(id);
+            if (p != null) unscramble(p);
+        }
         for (Frozen f : frozen.values()) f.shell.forEach(d -> { if (d.isValid()) d.remove(); });
         for (UUID id : new ArrayList<>(frozen.keySet())) unfreeze(id, false);
         for (Inverted i : inverted.values()) if (i.marker.isValid()) i.marker.remove();

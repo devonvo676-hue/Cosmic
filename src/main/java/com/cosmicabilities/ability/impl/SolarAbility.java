@@ -29,17 +29,20 @@ public class SolarAbility extends CosmicAbility {
                 new StatusManager.Shield(0.3, reflect, System.currentTimeMillis() + duration * 50L, evolved));
         if (evolved) player.addPotionEffect(new PotionEffect(PotionEffectType.REGENERATION, duration, 0, false, true, true));
         World w = player.getWorld();
-        org.bukkit.entity.ItemDisplay halo = Fx.model(player.getLocation().add(0, 2.6, 0), "planet_sun", 0.05f);
+        org.bukkit.entity.ItemDisplay halo = Fx.sprite(player.getLocation().add(0, 2.7, 0), "sun", 0.05f,
+                org.bukkit.entity.Display.Billboard.CENTER);
         halo.setTeleportDuration(1);
-        Fx.animate(halo, 5, Fx.spin(0.42f, new org.joml.Quaternionf()), 1);
+        Fx.animate(halo, 5, Fx.sized(0.75f, 0.75f, 0), 1);
+        Fx.removeLater(halo, duration + 10);
+        Fx.flare(player.getLocation().add(0, 1.2, 0), "flare_gold", 3f, 10);
         w.playSound(player.getLocation(), Sound.BLOCK_BEACON_ACTIVATE, 1f, 1.7f);
         w.playSound(player.getLocation(), Sound.ITEM_FIRECHARGE_USE, 0.8f, 0.8f);
 
         every(duration, t -> {
             if (!player.isOnline() || player.isDead()) { status().clearShield(player.getUniqueId()); halo.remove(); return false; }
             Location base = player.getLocation();
-            halo.teleport(base.clone().add(0, 2.6, 0));
-            if (t % 3 == 0) Fx.animate(halo, 3, Fx.spin(0.42f, new org.joml.Quaternionf().rotateY(t * 0.12f).rotateX(0.3f)), 1);
+            halo.teleport(base.clone().add(0, 2.7, 0));
+            if (t % 3 == 0) Fx.animate(halo, 3, Fx.sized(0.75f, 0.75f, t * 0.05f), 1);
             // crown: a small ring of points above the head that slowly turns
             Location crown = base.clone().add(0, 2.35, 0);
             if (t % 2 == 0) {
@@ -76,6 +79,8 @@ public class SolarAbility extends CosmicAbility {
         w.playSound(c, Sound.ENTITY_BLAZE_SHOOT, 1.2f, 0.9f);
         Fx.burst(w, c, Particle.FLAME, 40, 0.3);
         Fx.ring(w, c, r, 40, 0, Fx.dust(0xffd166, 1.4f));
+        Fx.flare(c, "flare_gold", 4f, 10);
+        Fx.wave(player.getLocation(), "ring_orange", 0.5f, (float) r * 2.2f, 8);
         Fx.ring(w, c.clone().subtract(0, 0.6, 0), r * 0.7, 30, 0.2, Particle.FLAME);
         for (LivingEntity e : Targets.enemies(player, c, r)) {
             hit(player, e, dmg(5, slot));

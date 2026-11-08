@@ -36,6 +36,7 @@ public class PulsarAbility extends CosmicAbility {
             if (!player.isOnline()) return false;
             Location hand = player.getEyeLocation().add(player.getEyeLocation().getDirection().multiply(0.9)).add(0, -0.25, 0);
             Fx.ring(w, hand, 0.55 - t * 0.12, 10, t, Fx.dust(0x4cc9f0, 0.8f));
+            if (t == 0) Fx.flare(hand, "flare_cyan", 1.2f, 6);
             if (t == 4) {
                 Vector dir = player.getEyeLocation().getDirection().normalize();
                 double damage = dmg(10, slot);
@@ -72,14 +73,17 @@ public class PulsarAbility extends CosmicAbility {
                 if (!Targets.isEnemy(player, e) || !hitSet.add(e.getUniqueId())) continue;
                 hit(player, (LivingEntity) e, pierced == 0 ? damage : damage * 0.6);
                 w.spawnParticle(Particle.ELECTRIC_SPARK, e.getLocation().add(0, 1, 0), 20, 0.3, 0.4, 0.3, 0.3);
+                Fx.flare(e.getLocation().add(0, e.getHeight() * 0.6, 0), "flare_white", 1.8f, 7);
                 w.spawnParticle(Particle.END_ROD, e.getLocation().add(0, 1, 0), 10, 0.1, 0.1, 0.1, 0.15);
                 pierced++;
             }
             if (pierced >= 2) break;
         }
         final Location end = pos;
-        Fx.beam(start, end, Material.LIGHT_BLUE_STAINED_GLASS, 0.42f, 7);
-        Fx.beam(start, end, Material.WHITE_CONCRETE, 0.12f, 5);
+        Fx.ray(start, end, "beam_cyan", 1.1f, 7);
+        Fx.ray(start, end, "beam_white", 0.35f, 5);
+        Fx.flare(start, "flare_cyan", 1.6f, 6);
+        Fx.flare(end, "flare_cyan", 2.2f, 8);
         // draw the beam over 3 ticks so it lingers and thins out
         every(3, t -> {
             float core = 1.4f - t * 0.35f;

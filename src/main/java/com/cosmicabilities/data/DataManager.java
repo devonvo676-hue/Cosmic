@@ -55,6 +55,9 @@ public class DataManager {
             }
             AbilityType lost = AbilityType.fromId(yml.getString("lost.ability"));
             if (lost != null) data.setLost(lost, yml.getInt("lost.tier", 1));
+            for (String id : yml.getStringList("trusted")) {
+                try { data.trust(java.util.UUID.fromString(id)); } catch (IllegalArgumentException ignored) { }
+            }
             data.setAfkTokens(yml.getInt("afk.tokens", 0));
             data.setAfkProgress(yml.getInt("afk.progress", 0));
             data.markClean();
@@ -92,6 +95,9 @@ public class DataManager {
         for (int i = 1; i <= PlayerData.SLOTS; i++) yml.set("binds." + i, data.bind(i).name());
         yml.set("lost.ability", data.lostAbility() == null ? null : data.lostAbility().id());
         yml.set("lost.tier", data.lostTier());
+        java.util.List<String> trusted = new java.util.ArrayList<>();
+        for (UUID id : data.trusted()) trusted.add(id.toString());
+        yml.set("trusted", trusted);
         yml.set("afk.tokens", data.afkTokens());
         yml.set("afk.progress", data.afkProgress());
         try {

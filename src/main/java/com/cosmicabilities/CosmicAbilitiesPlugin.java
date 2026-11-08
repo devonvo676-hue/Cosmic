@@ -97,7 +97,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
             cosmic.setTabCompleter(cmd);
         }
         MiscCommands misc = new MiscCommands(this);
-        for (String name : new String[]{"ability", "abilities", "abilityholders", "keybinds", "bossfight", "creload", "cconfig", "adminpanel", "tag", "unban", "announce", "afk", "afkshop"}) {
+        for (String name : new String[]{"ability", "abilities", "abilityholders", "keybinds", "bossfight", "creload", "cconfig", "trust", "untrust", "adminpanel", "tag", "unban", "announce", "afk", "afkshop"}) {
             PluginCommand c = getCommand(name);
             if (c != null) {
                 c.setExecutor(misc);
@@ -111,6 +111,9 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
             engine.stripOldPassives(p);
         }
 
+        // remove any effect entities left behind by a crash/restart, then keep sweeping strays
+        Fx.sweep(true);
+        getServer().getScheduler().runTaskTimer(this, () -> Fx.sweep(false), 200L, 200L);
         getServer().getScheduler().runTaskTimer(this, status::tick, 1L, 1L);
         getServer().getScheduler().runTaskTimer(this, engine::tickHud, 20L, 10L);
         getServer().getScheduler().runTaskTimer(this, bossManager::tick, 20L, 20L);
@@ -125,6 +128,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
         if (cutscenes != null) cutscenes.shutdown();
         if (status != null) status.shutdown();
         if (bossManager != null) bossManager.shutdown();
+        Fx.sweep(true);
         if (dataManager != null) dataManager.saveAll();
     }
 

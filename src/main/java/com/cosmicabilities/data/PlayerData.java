@@ -20,6 +20,7 @@ public final class PlayerData {
     /** The gained ability lost on the last death (restored by a Cosmic Reroll). */
     private AbilityType lostAbility;
     private int lostTier = 1;
+    private final java.util.Set<UUID> trusted = new java.util.HashSet<>();
     private boolean dirty = false;
 
     public PlayerData(UUID uuid) {
@@ -67,6 +68,11 @@ public final class PlayerData {
     public void setAfkTokens(int tokens) { afkTokens = Math.max(0, tokens); dirty = true; }
     public void addAfkTokens(int amount) { setAfkTokens(afkTokens + amount); }
     public void setAfkProgress(int seconds) { afkProgress = Math.max(0, seconds); dirty = true; }
+
+    public java.util.Set<UUID> trusted() { return java.util.Collections.unmodifiableSet(trusted); }
+    public boolean trusts(UUID other) { return trusted.contains(other); }
+    public boolean trust(UUID other) { boolean added = trusted.add(other); dirty = true; return added; }
+    public boolean untrust(UUID other) { boolean removed = trusted.remove(other); dirty = true; return removed; }
 
     void markDirty() { dirty = true; }
     public void markClean() { dirty = false; }

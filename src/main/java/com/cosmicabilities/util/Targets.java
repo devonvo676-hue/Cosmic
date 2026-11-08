@@ -35,6 +35,7 @@ public final class Targets {
     /** Same (non-rank) scoreboard team = ally. */
     public static boolean isAlly(Player caster, Player other) {
         if (caster.equals(other)) return true;
+        if (trusts(caster, other)) return true;
         Team team = caster.getScoreboard().getEntryTeam(caster.getName());
         return team != null && !RankTags.isTagTeam(team) && team.hasEntry(other.getName());
     }
@@ -45,11 +46,18 @@ public final class Targets {
         if (e instanceof Tameable tame && tame.isTamed() && caster.getUniqueId().equals(tame.getOwnerUniqueId())) return false;
         if (e instanceof Player p) {
             if (p.getGameMode() == GameMode.CREATIVE || p.getGameMode() == GameMode.SPECTATOR) return false;
+            if (trusts(caster, p)) return false;
             if (isAlly(caster, p)) return false;
             return plugin.getConfig().getBoolean("abilities.hit-players", true);
         }
         if (e instanceof Enemy) return true;
         return plugin.getConfig().getBoolean("abilities.hit-passive-mobs", false);
+    }
+
+    /** /trust: the caster's abilities never affect players they trust. */
+    public static boolean trusts(Player caster, Player other) {
+        com.cosmicabilities.data.PlayerData d = plugin.data().get(caster.getUniqueId());
+        return d != null && d.trusts(other.getUniqueId());
     }
 
     public static List<LivingEntity> enemies(Player caster, Location center, double radius) {

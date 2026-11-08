@@ -43,6 +43,8 @@ public class EntropyAbility extends CosmicAbility {
         double radius = 6;
         w.playSound(c, Sound.ENTITY_SHULKER_BULLET_HIT, 1.4f, 0.6f);
         w.playSound(c, Sound.BLOCK_GLASS_BREAK, 1f, 1.8f);
+        Fx.wave(player.getLocation(), "ring_red", 0.5f, (float) radius * 2.2f, 8);
+        Fx.flare(c, "flare_white", 2.5f, 8);
         // jittery static shell expanding out
         every(6, t -> {
             ThreadLocalRandom r = ThreadLocalRandom.current();
@@ -57,31 +59,24 @@ public class EntropyAbility extends CosmicAbility {
         });
         for (LivingEntity e : Targets.enemies(player, c, radius)) {
             hit(player, e, dmg(5, slot));
-            shatterCube(e.getLocation().add(0, 1, 0));
+            Fx.flare(e.getLocation().add(0, 1.1, 0), "flare_white", 1.8f, 8);
+            glitch(e.getLocation().add(0, 1, 0));
             if (e instanceof Player victim) {
                 ItemStack held = victim.getInventory().getItemInMainHand();
                 if (!held.getType().isAir()) {
                     w.spawnParticle(Particle.ITEM, victim.getLocation().add(0, 1.2, 0), 16, 0.2, 0.2, 0.2, 0.1, held);
                 }
-                scramble(victim.getInventory());
+                status().scrambleHotbar(victim, plugin.getConfig().getInt("entropy.scramble-seconds", 5) * 20);
                 if (bonus(slot)) stripOffhand(victim);
                 victim.addPotionEffect(new PotionEffect(PotionEffectType.NAUSEA, 120, 0, false, false, true));
-                victim.sendActionBar(Component.text("Your inventory has been scrambled!", TextColor.color(0xef233c)));
+                victim.sendActionBar(Component.text("Your hotbar is scrambled for "
+                        + plugin.getConfig().getInt("entropy.scramble-seconds", 5) + " seconds!", TextColor.color(0xef233c)));
                 victim.playSound(victim.getLocation(), Sound.ENTITY_ITEM_BREAK, 1f, 0.6f);
             } else {
                 e.addPotionEffect(new PotionEffect(PotionEffectType.WEAKNESS, 100, 0, false, true, true));
             }
         }
         return true;
-    }
-
-    /** Shuffles the 9 hotbar slots. */
-    private static void scramble(PlayerInventory inv) {
-        List<ItemStack> bar = new ArrayList<>();
-        for (int i = 0; i < 9; i++) bar.add(inv.getItem(i));
-        Collections.shuffle(bar);
-        for (int i = 0; i < 9; i++) inv.setItem(i, bar.get(i));
-        inv.setHeldItemSlot(ThreadLocalRandom.current().nextInt(9));
     }
 
     /** Total Collapse: the offhand item is moved into the main inventory (or swapped into the hotbar if full). */
@@ -105,18 +100,20 @@ public class EntropyAbility extends CosmicAbility {
         }
     }
 
-    /** Eight small coloured cubes appear packed together, then fly apart and shrink. */
-    private void shatterCube(Location c) {
+    /** A burst of RGB-split static around the victim. */
+    private void glitch(Location c) {
+        World w = c.getWorld();
         ThreadLocalRandom r = ThreadLocalRandom.current();
-        for (int x = 0; x < 2; x++) for (int y = 0; y < 2; y++) for (int z = 0; z < 2; z++) {
-            float ox = (x - 0.5f) * 0.3f, oy = (y - 0.5f) * 0.3f, oz = (z - 0.5f) * 0.3f;
-            BlockDisplay b = Fx.block(c, SHARDS[r.nextInt(SHARDS.length)], new Vector3f(0.28f, 0.28f, 0.28f), new Quaternionf(), true);
-            b.setTransformation(new Transformation(new Vector3f(ox - 0.14f, oy - 0.14f, oz - 0.14f), new Quaternionf(),
-                    new Vector3f(0.28f, 0.28f, 0.28f), new Quaternionf()));
-            Vector3f out = new Vector3f(ox, oy, oz).normalize().mul((float) r.nextDouble(1.2, 2.0));
-            Quaternionf spin = new Quaternionf().rotateXYZ((float) r.nextDouble(-3, 3), (float) r.nextDouble(-3, 3), 0);
-            Fx.animate(b, 8, new Transformation(out, spin, new Vector3f(0.05f, 0.05f, 0.05f), new Quaternionf()), 2);
-            Fx.removeLater(b, 12);
-        }
+        int[] cols = {0xef233c, 0x00f5d4, 0x3a86ff, 0xffffff};
+        every(6, t -> {
+            for (int i = 0; i < 14; i++) {
+                double x = r.nextDouble(-0.7, 0.7), y = r.nextDouble(-0.9, 0.9);
+                for (int k = 0; k < 3; k++) {   // short horizontal "scanline" streaks
+                    w.spawnParticle(Particle.DUST, c.getX() + x + k * 0.08, c.getY() + y, c.getZ() + r.nextDouble(-0.4, 0.4),
+                            1, 0, 0, 0, 0, Fx.dust(cols[(i + k) % cols.length], 0.7f));
+                }
+            }
+            return true;
+        });
     }
 }

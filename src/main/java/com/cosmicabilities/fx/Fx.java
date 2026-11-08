@@ -32,6 +32,8 @@ import java.util.concurrent.ThreadLocalRandom;
 
 /** Shared visual helpers: damage numbers, hitmarkers, particle shapes and animated display entities. */
 public final class Fx {
+    /** Every effect entity carries this tag so strays can always be found and removed. */
+    public static final String TAG = "cosmic_fx";
     private static CosmicAbilitiesPlugin plugin;
 
     private Fx() {}
@@ -57,6 +59,7 @@ public final class Fx {
             d.setDefaultBackground(false);
             d.setBackgroundColor(Color.fromARGB(0, 0, 0, 0));
             d.setPersistent(false);
+            d.addScoreboardTag(TAG);
             d.setTransformation(new Transformation(new Vector3f(), new Quaternionf(), new Vector3f(0.6f, 0.6f, 0.6f), new Quaternionf()));
         });
         // pop up, then drift and shrink
@@ -125,6 +128,7 @@ public final class Fx {
         return at.getWorld().spawn(at, BlockDisplay.class, d -> {
             d.setBlock(data);
             d.setPersistent(false);
+            d.addScoreboardTag(TAG);
             // centre the block on its location
             d.setTransformation(centred(scale.x, scale.y, scale.z, new Quaternionf(rotation)));
             if (bright) d.setBrightness(new Display.Brightness(15, 15));
@@ -170,6 +174,7 @@ public final class Fx {
         BlockDisplay b = at.getWorld().spawn(at, BlockDisplay.class, e -> {
             e.setBlock(material.createBlockData());
             e.setPersistent(false);
+            e.addScoreboardTag(TAG);
             e.setBrightness(new Display.Brightness(15, 15));
             e.setTransformation(beamShape(rot, width, len));
         });
@@ -198,6 +203,7 @@ public final class Fx {
             d.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.FIXED);
             d.setBrightness(new Display.Brightness(15, 15));
             d.setPersistent(false);
+            d.addScoreboardTag(TAG);
             d.setTransformation(new Transformation(new Vector3f(), new Quaternionf(), new Vector3f(scale, scale, scale), new Quaternionf()));
         });
     }
@@ -215,6 +221,7 @@ public final class Fx {
         BlockDisplay d = at.getWorld().spawn(at, BlockDisplay.class, e -> {
             e.setBlock(material.createBlockData());
             e.setPersistent(false);
+            e.addScoreboardTag(TAG);
             Vector3f t = new Vector3f(-size / 2f, 0, -size / 2f);
             new Quaternionf(rot).transform(t);
             e.setTransformation(new Transformation(t, rot, new Vector3f(size, 0.04f, size), new Quaternionf()));
@@ -242,5 +249,115 @@ public final class Fx {
 
     public static void particleFor(List<Player> viewers, Particle particle, Location at, int count, double spread) {
         for (Player p : viewers) p.spawnParticle(particle, at.getX(), at.getY(), at.getZ(), count, spread, spread, spread, 0);
+    }
+
+    // ------------------------------------------------------------------ v2.2: smooth sprites (no blocky shapes)
+
+    private static ItemStack fxItem(String model) {
+        ItemStack item = new ItemStack(Material.PAPER);
+        ItemMeta meta = item.getItemMeta();
+        meta.setItemModel(new NamespacedKey("cosmic", model));
+        item.setItemMeta(meta);
+        return item;
+    }
+
+    /**
+     * A smooth, high-res sprite from the resource pack (sun, planets, black hole, flares, clouds...).
+     * CENTER billboard = always faces the camera, so round things look like spheres from every angle.
+     */
+    public static ItemDisplay sprite(Location at, String name, float size, Display.Billboard billboard) {
+        ItemStack item = fxItem("fx_" + name);
+        Location spot = at.clone();
+        spot.setYaw(0);
+        spot.setPitch(0);
+        return at.getWorld().spawn(spot, ItemDisplay.class, d -> {
+            d.setItemStack(item);
+            d.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.FIXED);
+            d.setBillboard(billboard);
+            d.setBrightness(new Display.Brightness(15, 15));
+            d.setPersistent(false);
+            d.addScoreboardTag(TAG);
+            d.setDisplayWidth(Math.max(2, size * 2));
+            d.setDisplayHeight(Math.max(2, size * 2));
+            d.setTransformation(spin(size, new Quaternionf()));
+        });
+    }
+
+    /** Scale (and optional spin in the screen plane) for a camera-facing sprite. */
+    public static Transformation sized(float w, float h, float roll) {
+        return new Transformation(new Vector3f(), new Quaternionf().rotateZ(roll), new Vector3f(w, h, 1), new Quaternionf());
+    }
+
+    /** A sprite lying flat on the ground (shockwave rings, scorch marks, sigils). */
+    public static ItemDisplay flat(Location ground, String name, float size, float yaw) {
+        ItemDisplay d = sprite(ground, name, size, Display.Billboard.FIXED);
+        d.setTransformation(flatShape(size, yaw));
+        return d;
+    }
+
+    public static Transformation flatShape(float size, float yaw) {
+        return new Transformation(new Vector3f(), new Quaternionf().rotateY(yaw).rotateX((float) (-Math.PI / 2)),
+                new Vector3f(size, size, size), new Quaternionf());
+    }
+
+    /** An expanding shockwave ring on the ground: grows from `from` to `to` blocks across, then vanishes. */
+    public static void wave(Location ground, String ring, float from, float to, int ticks) {
+        Location at = ground.clone().add(0, 0.06, 0);
+        ItemDisplay d = flat(at, ring, from, 0);
+        animate(d, ticks, flatShape(to, 0.6f), 1);
+        removeLater(d, ticks + 2);
+    }
+
+    /** A star-burst flare that pops open and fades out. */
+    public static ItemDisplay flare(Location at, String name, float size, int life) {
+        ItemDisplay d = sprite(at, name, 0.05f, Display.Billboard.CENTER);
+        animate(d, 2, sized(size, size, 0.3f), 1);
+        animate(d, Math.max(2, life - 3), sized(0.01f, 0.01f, 0.8f), 3);
+        removeLater(d, life + 2);
+        return d;
+    }
+
+    /**
+     * A soft glowing beam between two points: two crossed glowing quads (looks round from any side).
+     * Narrows to nothing over `life` ticks and is removed.
+     */
+    public static ItemDisplay ray(Location from, Location to, String beam, float width, int life) {
+        Vector d = to.toVector().subtract(from.toVector());
+        float len = (float) d.length();
+        if (len < 0.05f) return null;
+        Vector3f dir = new Vector3f((float) d.getX(), (float) d.getY(), (float) d.getZ()).normalize();
+        Quaternionf rot = new Quaternionf().rotationTo(0, 1, 0, dir.x, dir.y, dir.z);
+        Location mid = from.clone().add(d.clone().multiply(0.5));
+        mid.setYaw(0);
+        mid.setPitch(0);
+        ItemStack item = fxItem("fxbeam_" + beam);
+        ItemDisplay b = from.getWorld().spawn(mid, ItemDisplay.class, e -> {
+            e.setItemStack(item);
+            e.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.FIXED);
+            e.setBrightness(new Display.Brightness(15, 15));
+            e.setPersistent(false);
+            e.addScoreboardTag(TAG);
+            e.setDisplayWidth(len + 2);
+            e.setDisplayHeight(len + 2);
+            e.setTransformation(new Transformation(new Vector3f(), rot, new Vector3f(width, len, width), new Quaternionf()));
+        });
+        animate(b, Math.max(1, life), new Transformation(new Vector3f(), new Quaternionf(rot), new Vector3f(0.01f, len, 0.01f), new Quaternionf()), 2);
+        removeLater(b, life + 3);
+        return b;
+    }
+
+    /** Removes effect entities that outlived their animation (safety net), or all of them when force is true. */
+    public static int sweep(boolean force) {
+        int n = 0;
+        for (org.bukkit.World w : org.bukkit.Bukkit.getWorlds()) {
+            for (Display d : w.getEntitiesByClass(Display.class)) {
+                if (!d.getScoreboardTags().contains(TAG)) continue;
+                if (force || d.getTicksLived() > 20 * 45) {
+                    d.remove();
+                    n++;
+                }
+            }
+        }
+        return n;
     }
 }

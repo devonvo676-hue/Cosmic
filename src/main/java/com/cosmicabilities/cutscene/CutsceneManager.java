@@ -89,6 +89,7 @@ public class CutsceneManager implements Listener {
             d.setBillboard(Display.Billboard.FIXED);
             d.setBrightness(new Display.Brightness(15, 15));
             d.setPersistent(false);
+            d.addScoreboardTag(Fx.TAG);
             d.setTransformation(new Transformation(new Vector3f(), new Quaternionf(), new Vector3f(0.01f, 0.01f, 0.01f), new Quaternionf()));
         });
         Session session = new Session(cam, emblem, originalMode, origin);

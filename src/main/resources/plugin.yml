@@ -40,6 +40,12 @@ commands:
     usage: /cconfig
     aliases: [cosmicconfig]
     permission: cosmicabilities.admin
+  trust:
+    description: Your abilities won't affect players you trust
+    usage: /trust <player|list>
+  untrust:
+    description: Stop trusting a player
+    usage: /untrust <player>
   adminpanel:
     description: Open the Cosmic admin panel
     usage: /adminpanel

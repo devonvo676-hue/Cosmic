@@ -10,11 +10,11 @@ import org.bukkit.Location;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.World;
+import org.bukkit.entity.Display;
 import org.bukkit.entity.ItemDisplay;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.util.Vector;
-import org.joml.Quaternionf;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -23,71 +23,87 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * A tiny solar system orbits you: the Sun, Earth, Mars and Saturn, each spinning on its axis with its own trail,
- * smashing into anything that gets close. Planetary Orbit (bonus): they break orbit and hunt down enemies.
+ * A solar system around you. The Sun, Earth, Mars and Saturn share one circular orbit (evenly spaced, same speed),
+ * marked by a glowing ring on the ground. That ring is the ability's area: anything inside it takes pulses of damage,
+ * and anything a planet sweeps through is smashed aside. Planetary Orbit (bonus): they break orbit and hunt enemies.
  */
 public class OrbitalAbility extends CosmicAbility {
-    private record Planet(String model, int trail, float size, double radius, double speed, double tilt) {}
+    private record Planet(String sprite, int trail, float size) {}
 
     private static final Planet[] PLANETS = {
-            new Planet("planet_sun", 0xffb703, 0.75f, 2.6, 0.14, 0.25),
-            new Planet("planet_earth", 0x4cc9f0, 0.55f, 2.0, 0.22, 0.45),
-            new Planet("planet_mars", 0xe76f51, 0.48f, 2.9, 0.18, -0.35),
-            new Planet("planet_saturn", 0xe9c46a, 0.62f, 2.3, 0.16, 0.6)};
+            new Planet("sun", 0xffb703, 1.15f),
+            new Planet("earth", 0x4cc9f0, 0.85f),
+            new Planet("mars", 0xe76f51, 0.75f),
+            new Planet("saturn", 0xe9c46a, 1.35f)};
+    private static final double ORBIT = 3.2;      // orbit radius = AoE radius
+    private static final double SPEED = 0.11;     // radians per tick (~2.9 s per lap)
+    private static final int DURATION = 120;
 
     public OrbitalAbility(CosmicAbilitiesPlugin plugin) { super(plugin, AbilityType.ORBITAL); }
 
     @Override
     public boolean cast(Player player, AbilitySlot slot) {
         World w = player.getWorld();
-        int duration = 120;
         double damage = dmg(4, slot);
         List<ItemDisplay> bodies = new ArrayList<>();
-        for (Planet p : PLANETS) {
-            ItemDisplay d = Fx.model(player.getLocation().add(0, 1, 0), p.model(), 0.05f);
-            d.setTeleportDuration(2);
-            Fx.animate(d, 6, Fx.spin(p.size(), new Quaternionf()), 1);
+        for (int i = 0; i < PLANETS.length; i++) {
+            ItemDisplay d = Fx.sprite(position(player.getLocation(), i, 0), PLANETS[i].sprite(), 0.05f, Display.Billboard.CENTER);
+            d.setTeleportDuration(1);
+            Fx.animate(d, 6, Fx.sized(PLANETS[i].size(), PLANETS[i].size(), 0), 1);
+            Fx.removeLater(d, DURATION + 40);
             bodies.add(d);
         }
+        // the orbit path, drawn on the ground and following you
+        ItemDisplay path = Fx.flat(player.getLocation().add(0, 0.06, 0), "ring_white", 0.1f, 0);
+        path.setTeleportDuration(1);
+        Fx.animate(path, 6, Fx.flatShape((float) (ORBIT * 2.25), 0), 1);
+        Fx.removeLater(path, DURATION + 10);
         w.playSound(player.getLocation(), Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 1f, 1.6f);
         w.playSound(player.getLocation(), Sound.BLOCK_BEACON_ACTIVATE, 0.8f, 1.8f);
         Map<UUID, Integer> lastHit = new HashMap<>();
 
-        every(duration, t -> {
-            if (!player.isOnline() || player.isDead()) { bodies.forEach(b -> { if (b.isValid()) b.remove(); }); return false; }
-            Location c = player.getLocation().add(0, 1.1, 0);
+        every(DURATION, t -> {
+            if (!player.isOnline() || player.isDead()) {
+                bodies.forEach(b -> { if (b.isValid()) b.remove(); });
+                path.remove();
+                return false;
+            }
+            Location feet = player.getLocation();
+            path.teleport(feet.clone().add(0, 0.06, 0));
+            Location center = feet.clone().add(0, 1.1, 0);
             for (int i = 0; i < PLANETS.length; i++) {
-                Planet pl = PLANETS[i];
-                ItemDisplay body = bodies.get(i);
-                double a = t * pl.speed() + i * Math.PI / 2;
-                Location p = c.clone().add(Math.cos(a) * pl.radius(), Math.sin(a) * pl.tilt(), Math.sin(a) * pl.radius());
-                body.teleport(p);
-                if (t % 2 == 0 && t > 6) {
-                    // each planet spins on its own axis (Saturn keeps its ring tilt)
-                    Fx.animate(body, 2, Fx.spin(pl.size(), new Quaternionf().rotateY(t * 0.25f + i)), 1);
+                Location p = position(feet, i, t);
+                bodies.get(i).teleport(p);
+                // comet-like tail behind each planet along the orbit
+                for (int k = 1; k <= 3; k++) {
+                    Location tail = position(feet, i, t - k * 1.5);
+                    w.spawnParticle(Particle.DUST, tail, 1, 0, 0, 0, 0, Fx.dust(PLANETS[i].trail(), 1.1f - k * 0.25f));
                 }
-                // fading orbit trail in the planet's colour
-                double back = a - 0.3;
-                w.spawnParticle(Particle.DUST, c.getX() + Math.cos(back) * pl.radius(), c.getY() + Math.sin(back) * pl.tilt(),
-                        c.getZ() + Math.sin(back) * pl.radius(), 1, 0, 0, 0, 0, Fx.dust(pl.trail(), 0.7f));
-                if (i == 0 && t % 3 == 0) w.spawnParticle(Particle.FLAME, p, 1, 0.1, 0.1, 0.1, 0.01);
-                for (LivingEntity e : Targets.enemies(player, p, 1.1)) {
+                if (i == 0 && t % 2 == 0) w.spawnParticle(Particle.FLAME, p, 1, 0.15, 0.15, 0.15, 0.01);
+                // direct hits from a planet sweeping through
+                for (LivingEntity e : Targets.enemies(player, p, 1.2)) {
                     Integer last = lastHit.get(e.getUniqueId());
                     if (last != null && t - last < 10) continue;
                     lastHit.put(e.getUniqueId(), t);
                     hit(player, e, damage);
-                    if (i == 0) e.setFireTicks(Math.max(e.getFireTicks(), 40));   // the Sun burns
-                    Vector out = e.getLocation().toVector().subtract(c.toVector()).setY(0);
-                    if (out.lengthSquared() > 0.01) e.setVelocity(out.normalize().multiply(0.5).setY(0.25));
-                    w.spawnParticle(Particle.ELECTRIC_SPARK, p, 12, 0.15, 0.15, 0.15, 0.2);
+                    if (i == 0) e.setFireTicks(Math.max(e.getFireTicks(), 40));
+                    Vector out = e.getLocation().toVector().subtract(center.toVector()).setY(0);
+                    if (out.lengthSquared() > 0.01) e.setVelocity(out.normalize().multiply(0.55).setY(0.25));
+                    Fx.flare(p, "flare_white", 1.4f, 6);
                     w.playSound(p, Sound.BLOCK_AMETHYST_BLOCK_HIT, 1f, 1.3f);
                 }
             }
-            if (t % 20 == 0) w.playSound(c, Sound.BLOCK_BEACON_AMBIENT, 0.5f, 1.8f);
-            if (t >= duration) {
+            // area pulse: everything inside the orbit takes damage every second
+            if (t % 20 == 10) {
+                Fx.wave(feet, "ring_white", 0.5f, (float) (ORBIT * 2), 8);
+                for (LivingEntity e : Targets.enemies(player, center, ORBIT)) hit(player, e, damage * 0.5);
+            }
+            if (t % 20 == 0) w.playSound(center, Sound.BLOCK_BEACON_AMBIENT, 0.5f, 1.8f);
+            if (t >= DURATION) {
+                path.remove();
                 if (bonus(slot)) launch(player, bodies, dmg(6, slot));
                 else bodies.forEach(b -> {
-                    Fx.animate(b, 5, Fx.spin(0.01f, new Quaternionf()), 1);
+                    Fx.animate(b, 5, Fx.sized(0.01f, 0.01f, 0), 1);
                     Fx.removeLater(b, 7);
                 });
                 return false;
@@ -95,6 +111,12 @@ public class OrbitalAbility extends CosmicAbility {
             return true;
         });
         return true;
+    }
+
+    /** Where planet i is at tick t: same circle, evenly spaced, gently bobbing. */
+    private static Location position(Location feet, int i, double t) {
+        double a = t * SPEED + i * Math.PI / 2;
+        return feet.clone().add(Math.cos(a) * ORBIT, 1.2 + Math.sin(t * 0.08 + i) * 0.15, Math.sin(a) * ORBIT);
     }
 
     /** Planetary Orbit: each planet locks onto an enemy and slams into it. */
@@ -115,7 +137,7 @@ public class OrbitalAbility extends CosmicAbility {
                 Vector step = aim.toVector().subtract(pos.toVector());
                 if (target != null && target.isValid() && step.length() < 1.0) {
                     hit(player, target, damage);
-                    w.spawnParticle(Particle.EXPLOSION, aim, 1);
+                    Fx.flare(aim, "flare_gold", 3f, 10);
                     w.spawnParticle(Particle.DUST, aim, 25, 0.4, 0.4, 0.4, 0, Fx.dust(trail, 1.6f));
                     w.playSound(aim, Sound.ENTITY_GENERIC_EXPLODE, 0.7f, 1.4f);
                     body.remove();

@@ -6,23 +6,18 @@ import com.cosmicabilities.ability.CosmicAbility;
 import com.cosmicabilities.data.AbilitySlot;
 import com.cosmicabilities.fx.Fx;
 import com.cosmicabilities.util.Targets;
-import org.bukkit.Color;
 import org.bukkit.FluidCollisionMode;
 import org.bukkit.Location;
-import org.bukkit.Material;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.block.Block;
-import org.bukkit.entity.BlockDisplay;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.util.RayTraceResult;
 import org.bukkit.util.Vector;
-import org.joml.Quaternionf;
-import org.joml.Vector3f;
 
 /** Blink: leaves a shimmering after-image and a void rift that collapses and detonates. */
 public class VoidwalkerAbility extends CosmicAbility {
@@ -43,6 +38,8 @@ public class VoidwalkerAbility extends CosmicAbility {
             w.spawnParticle(Particle.DUST, from.clone().add(0, y, 0), 3, width, 0.03, width, 0, Fx.dust(0x7b2cbf, 1.1f));
         }
         Fx.line(w, from.clone().add(0, 1, 0), dest.clone().add(0, 1, 0), 0.35, Fx.dust(0xe0aaff, 0.8f));
+        Fx.ray(from.clone().add(0, 1, 0), dest.clone().add(0, 1, 0), "beam_purple", 0.7f, 6);
+        Fx.flare(dest.clone().add(0, 1, 0), "flare_purple", 2.5f, 8);
         w.playSound(from, Sound.ENTITY_ENDERMAN_TELEPORT, 1f, 0.6f);
         player.teleport(dest);
         player.setFallDistance(0);
@@ -60,10 +57,9 @@ public class VoidwalkerAbility extends CosmicAbility {
     /** A tear in space: a dark pane spinning open, sucking in, then detonating. */
     private void rift(Player player, Location c, double damage, int fuse) {
         World w = c.getWorld();
-        BlockDisplay tear = Fx.block(c, Material.BLACK_STAINED_GLASS, new Vector3f(0.05f, 0.05f, 0.05f), new Quaternionf(), false);
-        tear.setGlowing(true);
-        tear.setGlowColorOverride(Color.fromRGB(0x9d4edd));
-        Fx.animate(tear, fuse, Fx.centred(0.15f, 2.2f, 1.2f, new Quaternionf().rotateY(3.5f)), 1);
+        org.bukkit.entity.ItemDisplay tear = Fx.sprite(c, "rift", 0.05f, org.bukkit.entity.Display.Billboard.VERTICAL);
+        Fx.animate(tear, fuse, Fx.sized(1.3f, 2.6f, 0), 1);
+        Fx.removeLater(tear, fuse + 4);
         every(fuse, t -> {
             if (t % 2 == 0) {
                 for (int i = 0; i < 6; i++) {
@@ -76,6 +72,8 @@ public class VoidwalkerAbility extends CosmicAbility {
             }
             if (t == fuse) {
                 tear.remove();
+                Fx.flare(c, "flare_purple", 4f, 10);
+                Fx.wave(c.clone().subtract(0, 0.95, 0), "ring_purple", 0.5f, 6.5f, 8);
                 w.spawnParticle(Particle.PORTAL, c, 100, 0.5, 0.8, 0.5, 1.5);
                 w.spawnParticle(Particle.SQUID_INK, c, 20, 0.4, 0.5, 0.4, 0.08);
                 Fx.ring(w, c, 2.8, 30, 0, Fx.dust(0xc77dff, 1.5f));

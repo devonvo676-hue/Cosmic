@@ -42,7 +42,7 @@ public class ConfigPanel implements Listener {
             new Setting("abilities.hit-players", "Abilities hit players", Kind.BOOL, 0, 0, 0, Material.PLAYER_HEAD, 1),
             new Setting("abilities.hit-passive-mobs", "Abilities hit passive mobs", Kind.BOOL, 0, 0, 0, Material.LEAD, 0),
             new Setting("effects.damage-numbers", "Floating damage numbers", Kind.BOOL, 0, 0, 0, Material.NAME_TAG, 1),
-            new Setting("magnetosphere.caster-sees-dome", "Caster sees own forcefield", Kind.BOOL, 0, 0, 0, Material.GLASS, 0),
+            new Setting("magnetosphere.hide-from-caster", "Hide forcefield from its caster", Kind.BOOL, 0, 0, 0, Material.GLASS, 0),
             new Setting("magnetosphere.duration-seconds", "Forcefield duration (s)", Kind.INT, 1, 3, 60, Material.BEACON, 15),
             new Setting("death.lose-upgrade", "Lose upgrade on death", Kind.BOOL, 0, 0, 0, Material.SKELETON_SKULL, 1),
             new Setting("ability-drops.from-bosses", "Bosses drop ability orbs", Kind.BOOL, 0, 0, 0, Material.HEART_OF_THE_SEA, 1),
