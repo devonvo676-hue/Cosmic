@@ -1,130 +1,133 @@
 # =========================================================
-#  Cosmic Abilities - configuration
-#  Target: Paper 1.21.11
+#  Cosmic Abilities 2.0 - configuration (Paper 1.21.11)
 # =========================================================
 
-# Players can always cast with /ability 1 and /ability 2.
-activation:
-  # Sneak + swap-hands key (default F) casts slot 1.
-  sneak-swap-hand: true
-  # Sneak + left-click air with an empty main hand casts slot 2.
-  sneak-left-click-empty-hand: true
+# Players can always cast with /ability 1 and /ability 2, and pick their own keys in /keybinds
+# (defaults: slot 1 = Sneak + F, slot 2 = Sneak + left-click with an empty hand).
 
-# Infuse-style passive effect given while an ability is equipped (either slot).
-# Format: <effect>:<level-1>  (e.g. speed:0 = Speed I, speed:1 = Speed II). Use "none" to disable one.
-passives:
-  enabled: true
-  singularity: night_vision:0
-  supernova: strength:0
-  meteor: jump_boost:1
-  solar: fire_resistance:0
-  cryostasis: water_breathing:0
-  voidwalker: speed:0
-  pulsar: haste:1
-  nebula: luck:0
-  orbital: resistance:0
-  celestial: health_boost:1
+abilities:
+  damage-multiplier: 1.0     # scales ALL ability damage
+  cooldown-multiplier: 1.0   # scales ALL cooldowns
+  minimum-cooldown: 4.0
+  hit-players: true          # PvP / region plugins still apply on top of this
+  hit-passive-mobs: false
+  bonus-mechanics: true      # each ability's signature extra (Event Horizon, Quasar, ...). false = simpler abilities
 
-# Infuse-style ability icons shown above the hotbar.
+# Short combat buff given every time an ability is cast.
+# Format: effect:level:seconds  (strength:1:6 = Strength I for 6 seconds). Use [] for none.
+cast-buffs:
+  singularity: ["strength:1:6"]
+  supernova: ["strength:1:5", "resistance:1:3"]
+  meteor: ["speed:2:5"]
+  solar: ["resistance:1:6", "fire_resistance:1:8"]
+  cryostasis: ["resistance:1:5"]
+  voidwalker: ["speed:2:4"]
+  pulsar: ["strength:1:5"]
+  nebula: ["speed:1:6", "regeneration:1:6"]
+  orbital: ["resistance:1:6"]
+  celestial: ["regeneration:2:5", "absorption:1:10"]
+  paradox: ["speed:1:6"]
+  entropy: ["strength:1:5"]
+  magnetosphere: ["resistance:1:8"]
+  umbra: ["speed:2:5"]
+
+magnetosphere:
+  radius: 6
+  duration-seconds: 15
+
+# Each ability can be upgraded ONCE. The upgrade shortens its cooldown.
+upgrades:
+  cooldown-reduction: 0.3  # 0.3 = 30% shorter cooldown
+  cost:
+    fragments: 16          # of the fragment that matches the ability
+    astral-fragments: 2
+  cutscene: true           # play the upgrade cutscene
+  cutscene-camera: true    # move the player's camera around them during it
+
+# Slot 1 = the ability a player joined with: never lost.
+# Slot 2 = a gained ability (boss orbs, kills): dropped when the player is killed.
+ability-drops:
+  from-bosses: true        # every boss drops a random ability orb
+  killer-only-seconds: 60  # only the killer can pick up a dropped ability for this long
+  lose-on-any-death: false # true = also drop it when dying to mobs/falling/etc.
+
+reroll:
+  craftable: true          # Diamond corners, Eye of Ender sides, Totem of Undying centre
+
+death:
+  lose-upgrade: true       # dying also removes the upgrade from your abilities
+  pvp-only: false          # true = only when killed by a player
+
+effects:
+  damage-numbers: true     # floating damage numbers on hit
+
 hud:
   enabled: true
-  # true = custom icons from the resource pack. false = plain text names (no pack needed).
-  use-icons: true
+  use-icons: true          # false = plain text names (no resource pack needed)
 
-# The plugin sends this pack to players on join. It stacks on top of your server's own pack
-# (e.g. your Luminara pack), so both work at once. Upload CosmicAbilities-ResourcePack.zip somewhere
-# with a direct download link (e.g. mc-packs.net) and paste the link + SHA-1 here.
+# The plugin sends this pack on join, stacked on top of your server's own pack.
 resource-pack:
   url: ""
   sha1: ""
   required: false
-  prompt: "Cosmic Abilities needs this pack for its ability icons."
+  prompt: "Cosmic Abilities needs this pack for its icons, models and sounds."
 
-ban-pistol:
-  range: 64
-  reason: "Shot by the Ban Pistol"
-  # 0 = permanent ban. Otherwise the ban length in minutes. Admins can lift any ban with /unban <player>.
-  duration-minutes: 0
-  # Staff (OP / cosmicabilities.admin) can't be banned with the pistol.
-  exempt-staff: true
-  broadcast: true
-  cooldown-ms: 1000
-
-tags:
-  # false = "[OWNER] Name" / "[ADMIN] Name" as text right beside the username (default).
-  # true  = pixel-art badges from the resource pack instead.
-  use-icons: false
-
-abilities:
-  # Global multipliers - use these to tune the whole system at once.
-  damage-multiplier: 1.0
-  cooldown-multiplier: 1.0
-  # Minimum cooldown in seconds after all reductions.
-  minimum-cooldown: 4.0
-  # Can abilities damage/affect other players? (Other PvP plugins / region protection still apply.)
-  hit-players: true
-  # Can abilities damage passive mobs (cows, villagers, etc.)? Hostile mobs are always valid targets.
-  hit-passive-mobs: false
-
-upgrades:
-  # Materials needed to reach each level (uses the material tied to your ability).
-  material-cost:
-    2: 3
-    3: 5
-    4: 7
-    5: 10
-    6: 12
-    7: 15
-    8: 18
-    9: 22
-    10: 28
-  # Total Cosmic Mastery needed to reach each level (mastery is earned, never spent).
-  mastery-required:
-    2: 0
-    3: 100
-    4: 200
-    5: 350
-    6: 500
-    7: 700
-    8: 950
-    9: 1250
-    10: 1600
-  # Extra Astral Fragments needed for the level 10 Cosmic Evolution (every ability).
-  evolution-astral-cost: 5
-
-mastery:
-  # Mastery given to every player who did at least min-damage-share of a boss's health.
-  per-boss-kill: 100
-  # Extra mastery for the player who dealt the most damage.
-  top-damage-bonus: 50
-  min-damage-share: 0.05
+# ---------------------------------------------------------------- bosses
+# Admins start boss fights with /bossfight (or the admin panel).
+bossfight:
+  countdown-seconds: 10    # default countdown shown to the whole server (0, 10, 30 or 60)
 
 bosses:
-  # How far (blocks) players see a boss's health bar.
+  min-players-to-damage: 3 # boss is shielded unless this many players are within fight-radius (1 = off)
+  fight-radius: 32
   bossbar-range: 48
-  # Seconds between each boss's special attack.
   special-attack-interval: 6
-  # Materials given to each contributing player.
   drops:
-    min: 3
-    max: 6
-    # Chance for each contributor to also get 1-2 Astral Fragments from non-Destroyer bosses.
-    bonus-astral-chance: 0.25
+    min: 4
+    max: 7
+    top-damage-bonus: 2
+    min-damage-share: 0.05
+    bonus-astral-chance: 0.3
   void_emperor:
-    health: 350
-    damage: 10
+    health: 500
+    damage: 11
   solar_titan:
-    health: 350
-    damage: 8
+    health: 500
+    damage: 9
   frost_leviathan:
-    health: 350
-    damage: 8
+    health: 500
+    damage: 9
   nebula_serpent:
-    health: 300
-    damage: 7
+    health: 450
+    damage: 8
   cosmic_destroyer:
-    health: 600
-    damage: 14
+    health: 900
+    damage: 15
+
+# ---------------------------------------------------------------- staff tools
+ban-pistol:
+  range: 64
+  bullet-speed: 3.5        # blocks per tick
+  volume: 4.0              # >1 makes it audible further away
+  vanilla-sound-layer: true
+  reason: "Shot by the Ban Pistol"
+  duration-minutes: 0      # 0 = permanent. /unban <player> lifts it.
+  exempt-staff: true
+  broadcast: true
+  cooldown-ms: 800
+
+tags:
+  use-icons: false         # false = "[OWNER] Name" text beside the username
+
+announce:
+  header: "ANNOUNCEMENT"
+  seconds: 5
+
+afk:
+  minutes-per-token: 30
+  invulnerable: true
+  combat-cooldown-seconds: 15
+  broadcast: true
 
 messages:
   prefix: "<dark_gray>[<gradient:#9b5de5:#00bbf9>Cosmic</gradient><dark_gray>] "

@@ -21,6 +21,32 @@ public class BossListener implements Listener {
         this.plugin = plugin;
     }
 
+    /** Bosses can only be hurt while enough players are nearby to fight them. */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onBossShield(org.bukkit.event.entity.EntityDamageEvent event) {
+        if (!(event.getEntity() instanceof LivingEntity boss) || plugin.bosses().typeOf(boss) == null) return;
+        int min = plugin.getConfig().getInt("bosses.min-players-to-damage", 3);
+        if (min <= 1) return;
+        double r = plugin.getConfig().getDouble("bosses.fight-radius", 32);
+        int count = 0;
+        for (Player p : boss.getWorld().getPlayers()) {
+            if (p.getGameMode() == org.bukkit.GameMode.SPECTATOR || p.isDead()) continue;
+            if (p.getLocation().distanceSquared(boss.getLocation()) <= r * r) count++;
+        }
+        if (count >= min) return;
+        event.setCancelled(true);
+        boss.getWorld().spawnParticle(org.bukkit.Particle.ENCHANT, boss.getLocation().add(0, 1.5, 0), 20, 0.8, 1, 0.8, 0.5);
+        if (event instanceof EntityDamageByEntityEvent by) {
+            Entity d = by.getDamager();
+            if (d instanceof Projectile proj && proj.getShooter() instanceof Player shooter) d = shooter;
+            if (d instanceof Player attacker) {
+                attacker.sendActionBar(plugin.mm("<red>The boss is shielded! <gray>It takes <white>" + min
+                        + " players <gray>nearby to fight it (" + count + " here)."));
+                attacker.playSound(attacker.getLocation(), org.bukkit.Sound.ITEM_SHIELD_BLOCK, 1f, 0.6f);
+            }
+        }
+    }
+
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onBossDamaged(EntityDamageByEntityEvent event) {
         if (!(event.getEntity() instanceof LivingEntity boss)) return;

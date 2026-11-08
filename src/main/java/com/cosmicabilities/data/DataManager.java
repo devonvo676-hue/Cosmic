@@ -2,6 +2,7 @@ package com.cosmicabilities.data;
 
 import com.cosmicabilities.CosmicAbilitiesPlugin;
 import com.cosmicabilities.ability.AbilityType;
+import com.cosmicabilities.keybind.Keybind;
 import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.io.File;
@@ -13,6 +14,8 @@ import java.util.logging.Level;
 
 /** Stores each player in plugins/CosmicAbilities/players/&lt;uuid&gt;.yml */
 public class DataManager {
+    private static final int FORMAT = 2;
+
     private final CosmicAbilitiesPlugin plugin;
     private final File folder;
     private final Map<UUID, PlayerData> cache = new ConcurrentHashMap<>();
@@ -29,7 +32,6 @@ public class DataManager {
         return cache.get(uuid);
     }
 
-    /** Loads (or creates) a player's data and caches it. */
     public PlayerData load(UUID uuid) {
         PlayerData cached = cache.get(uuid);
         if (cached != null) return cached;
@@ -37,23 +39,35 @@ public class DataManager {
         File file = file(uuid);
         if (file.exists()) {
             YamlConfiguration yml = YamlConfiguration.loadConfiguration(file);
-            if (yml.getString("slots.1.ability") == null && yml.getString("ability") != null) {
-                // Migrate the old single-ability format into slot 1.
-                readSlot(data.primary(), yml.getString("ability"), yml.getInt("level", 1), yml.getString("path", ""));
+            int format = yml.getInt("format", 1);
+            if (format < 2 && yml.getString("slots.1.ability") == null && yml.getString("ability") != null) {
+                // v1.0 single-ability file
+                readSlot(data.slot(1), yml.getString("ability"), oldLevelToTier(yml.getInt("level", 1)));
             } else {
                 for (int i = 1; i <= PlayerData.SLOTS; i++) {
-                    readSlot(data.slot(i), yml.getString("slots." + i + ".ability"),
-                            yml.getInt("slots." + i + ".level", 1), yml.getString("slots." + i + ".path", ""));
+                    int raw = yml.getInt("slots." + i + ".level", yml.getInt("slots." + i + ".tier", 1));
+                    int tier = format < 2 ? oldLevelToTier(raw) : raw;
+                    readSlot(data.slot(i), yml.getString("slots." + i + ".ability"), tier);
                 }
             }
-            data.setMastery(yml.getInt("mastery", 0));
+            for (int i = 1; i <= PlayerData.SLOTS; i++) {
+                data.setBind(i, Keybind.parse(yml.getString("binds." + i), data.bind(i)));
+            }
+            AbilityType lost = AbilityType.fromId(yml.getString("lost.ability"));
+            if (lost != null) data.setLost(lost, yml.getInt("lost.tier", 1));
+            data.setAfkTokens(yml.getInt("afk.tokens", 0));
+            data.setAfkProgress(yml.getInt("afk.progress", 0));
             data.markClean();
         }
         cache.put(uuid, data);
         return data;
     }
 
-    /** Loads data for an offline player without caching it permanently. */
+    /** v1 used levels 1-10: level 5+ counts as upgraded. */
+    private static int oldLevelToTier(int level) {
+        return level >= 5 ? 2 : 1;
+    }
+
     public PlayerData loadOffline(UUID uuid) {
         PlayerData cached = cache.get(uuid);
         if (cached != null) return cached;
@@ -62,23 +76,24 @@ public class DataManager {
         return data;
     }
 
-    private static void readSlot(AbilitySlot slot, String ability, int level, String path) {
+    private static void readSlot(AbilitySlot slot, String ability, int tier) {
         AbilityType type = AbilityType.fromId(ability);
-        if (type == null) return;
-        slot.equip(type, level);
-        if (path != null && !path.isEmpty()) slot.setPath(Character.toUpperCase(path.charAt(0)));
+        if (type != null) slot.equip(type, tier);
     }
 
     public void save(PlayerData data) {
         YamlConfiguration yml = new YamlConfiguration();
+        yml.set("format", FORMAT);
         for (int i = 1; i <= PlayerData.SLOTS; i++) {
             AbilitySlot s = data.slot(i);
-            String base = "slots." + i + ".";
-            yml.set(base + "ability", s.isEmpty() ? null : s.ability().id());
-            yml.set(base + "level", s.level());
-            yml.set(base + "path", s.path() == 0 ? "" : String.valueOf(s.path()));
+            yml.set("slots." + i + ".ability", s.isEmpty() ? null : s.ability().id());
+            yml.set("slots." + i + ".tier", s.tier());
         }
-        yml.set("mastery", data.mastery());
+        for (int i = 1; i <= PlayerData.SLOTS; i++) yml.set("binds." + i, data.bind(i).name());
+        yml.set("lost.ability", data.lostAbility() == null ? null : data.lostAbility().id());
+        yml.set("lost.tier", data.lostTier());
+        yml.set("afk.tokens", data.afkTokens());
+        yml.set("afk.progress", data.afkProgress());
         try {
             yml.save(file(data.uuid()));
             data.markClean();

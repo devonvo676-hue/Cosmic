@@ -3,49 +3,89 @@ package com.cosmicabilities;
 import com.cosmicabilities.ability.AbilityEngine;
 import com.cosmicabilities.admin.BanPistol;
 import com.cosmicabilities.admin.RankTags;
+import com.cosmicabilities.afk.AfkManager;
+import com.cosmicabilities.afk.AfkShop;
 import com.cosmicabilities.boss.BossManager;
 import com.cosmicabilities.command.CosmicCommand;
 import com.cosmicabilities.command.MiscCommands;
+import com.cosmicabilities.cutscene.CutsceneManager;
 import com.cosmicabilities.data.DataManager;
+import com.cosmicabilities.fx.Fx;
+import com.cosmicabilities.gui.AbilitiesPanel;
 import com.cosmicabilities.gui.AdminPanel;
 import com.cosmicabilities.item.CosmicMaterial;
 import com.cosmicabilities.listener.BossListener;
 import com.cosmicabilities.listener.PlayerListener;
+import com.cosmicabilities.boss.BossFightPanel;
+import com.cosmicabilities.gui.HoldersPanel;
+import com.cosmicabilities.keybind.KeybindListener;
+import com.cosmicabilities.keybind.KeybindPanel;
+import com.cosmicabilities.orb.AbilityOrbs;
+import com.cosmicabilities.status.CombatTracker;
+import com.cosmicabilities.status.StatusListener;
+import com.cosmicabilities.status.StatusManager;
 import com.cosmicabilities.util.Targets;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.entity.Player;
+import org.bukkit.event.Listener;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class CosmicAbilitiesPlugin extends JavaPlugin {
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
     private DataManager dataManager;
     private AbilityEngine engine;
+    private StatusManager status;
+    private CombatTracker combat;
     private BossManager bossManager;
+    private BossFightPanel bossFightPanel;
+    private HoldersPanel holdersPanel;
+    private KeybindPanel keybindPanel;
+    private AbilityOrbs orbs;
     private PlayerListener playerListener;
     private BanPistol banPistol;
     private AdminPanel adminPanel;
+    private AbilitiesPanel abilitiesPanel;
     private RankTags rankTags;
+    private CutsceneManager cutscenes;
+    private AfkManager afk;
+    private AfkShop afkShop;
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
+        // add any settings that are new in this version to an existing config.yml (keeps the server's own values)
+        getConfig().options().copyDefaults(true);
+        saveConfig();
         CosmicMaterial.init(this);
         Targets.init(this);
+        Fx.init(this);
 
         dataManager = new DataManager(this);
+        status = new StatusManager(this);
+        combat = new CombatTracker();
         engine = new AbilityEngine(this);
         bossManager = new BossManager(this);
+        bossFightPanel = new BossFightPanel(this);
+        holdersPanel = new HoldersPanel(this);
+        keybindPanel = new KeybindPanel(this);
+        orbs = new AbilityOrbs(this);
+        orbs.registerRecipe();
         playerListener = new PlayerListener(this);
         banPistol = new BanPistol(this);
         adminPanel = new AdminPanel(this);
+        abilitiesPanel = new AbilitiesPanel(this);
         rankTags = new RankTags(this);
+        cutscenes = new CutsceneManager(this);
+        afk = new AfkManager(this);
+        afkShop = new AfkShop(this);
 
-        getServer().getPluginManager().registerEvents(playerListener, this);
-        getServer().getPluginManager().registerEvents(new BossListener(this), this);
-        getServer().getPluginManager().registerEvents(banPistol, this);
-        getServer().getPluginManager().registerEvents(adminPanel, this);
+        for (Listener l : new Listener[]{playerListener, new BossListener(this), new StatusListener(this), combat,
+                new KeybindListener(this), bossFightPanel, holdersPanel, keybindPanel, orbs,
+                banPistol, adminPanel, abilitiesPanel, cutscenes, afk, afkShop}) {
+            getServer().getPluginManager().registerEvents(l, this);
+        }
 
         CosmicCommand cmd = new CosmicCommand(this);
         PluginCommand cosmic = getCommand("cosmic");
@@ -54,7 +94,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
             cosmic.setTabCompleter(cmd);
         }
         MiscCommands misc = new MiscCommands(this);
-        for (String name : new String[]{"ability", "adminpanel", "tag", "unban"}) {
+        for (String name : new String[]{"ability", "abilities", "abilityholders", "keybinds", "bossfight", "adminpanel", "tag", "unban", "announce", "afk", "afkshop"}) {
             PluginCommand c = getCommand(name);
             if (c != null) {
                 c.setExecutor(misc);
@@ -62,22 +102,25 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
             }
         }
 
-        // Players already online (e.g. after /reload or a plugin manager reload).
         for (Player p : getServer().getOnlinePlayers()) {
             dataManager.load(p.getUniqueId());
             rankTags.validate(p);
+            engine.stripOldPassives(p);
         }
 
+        getServer().getScheduler().runTaskTimer(this, status::tick, 1L, 1L);
         getServer().getScheduler().runTaskTimer(this, engine::tickHud, 20L, 10L);
         getServer().getScheduler().runTaskTimer(this, bossManager::tick, 20L, 20L);
-        getServer().getScheduler().runTaskTimer(this, engine::tickPassives, 20L, 20L);
+        getServer().getScheduler().runTaskTimer(this, afk::tick, 20L, 20L);
         getServer().getScheduler().runTaskTimer(this, dataManager::saveDirty, 6000L, 6000L);
 
-        getLogger().info("Cosmic Abilities enabled - 10 abilities, 5 bosses ready.");
+        getLogger().info("Cosmic Abilities 2.0 enabled - 14 abilities, 5 bosses, ability orbs, AFK shop.");
     }
 
     @Override
     public void onDisable() {
+        if (cutscenes != null) cutscenes.shutdown();
+        if (status != null) status.shutdown();
         if (bossManager != null) bossManager.shutdown();
         if (dataManager != null) dataManager.saveAll();
     }
@@ -92,9 +135,19 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
 
     public DataManager data() { return dataManager; }
     public AbilityEngine engine() { return engine; }
+    public StatusManager status() { return status; }
+    public CombatTracker combat() { return combat; }
     public BossManager bosses() { return bossManager; }
+    public BossFightPanel bossFightPanel() { return bossFightPanel; }
+    public HoldersPanel holdersPanel() { return holdersPanel; }
+    public KeybindPanel keybindPanel() { return keybindPanel; }
+    public AbilityOrbs orbs() { return orbs; }
     public PlayerListener playerListener() { return playerListener; }
     public BanPistol banPistol() { return banPistol; }
     public AdminPanel adminPanel() { return adminPanel; }
+    public AbilitiesPanel abilitiesPanel() { return abilitiesPanel; }
     public RankTags tags() { return rankTags; }
+    public CutsceneManager cutscenes() { return cutscenes; }
+    public AfkManager afk() { return afk; }
+    public AfkShop afkShop() { return afkShop; }
 }

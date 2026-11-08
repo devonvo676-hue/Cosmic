@@ -57,9 +57,11 @@ public enum CosmicMaterial {
                 MM.deserialize("<!italic><gray>Cosmic upgrade material"),
                 MM.deserialize("<!italic><dark_gray>" + source),
                 Component.empty(),
-                MM.deserialize("<!italic><yellow>Use <white>/cosmic upgrade</white> to empower your ability"));
+                MM.deserialize("<!italic><yellow>Use <white>/cosmic upgrade</white> to raise your ability's tier"));
         meta.lore(lore);
         meta.setEnchantmentGlintOverride(true);
+        // custom texture from the resource pack (falls back to the vanilla look without it)
+        meta.setItemModel(new NamespacedKey("cosmic", id()));
         meta.getPersistentDataContainer().set(key, PersistentDataType.STRING, id());
         item.setItemMeta(meta);
         return item;

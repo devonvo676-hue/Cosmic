@@ -1,13 +1,25 @@
 package com.cosmicabilities.data;
 
+import com.cosmicabilities.ability.AbilityType;
+import com.cosmicabilities.keybind.Keybind;
+
 import java.util.UUID;
 
+/**
+ * Slot 1 = the ability the player joined with (permanent).
+ * Slot 2 = a gained ability (from a boss orb or a kill). It drops when the player is killed.
+ */
 public final class PlayerData {
     public static final int SLOTS = 2;
 
     private final UUID uuid;
     private final AbilitySlot[] slots = new AbilitySlot[SLOTS];
-    private int mastery = 0;
+    private final Keybind[] binds = {Keybind.SNEAK_SWAP, Keybind.SNEAK_LEFT_CLICK};
+    private int afkTokens = 0;
+    private int afkProgress = 0;
+    /** The gained ability lost on the last death (restored by a Cosmic Reroll). */
+    private AbilityType lostAbility;
+    private int lostTier = 1;
     private boolean dirty = false;
 
     public PlayerData(UUID uuid) {
@@ -16,25 +28,46 @@ public final class PlayerData {
     }
 
     public UUID uuid() { return uuid; }
-    public int mastery() { return mastery; }
+    public int afkTokens() { return afkTokens; }
+    public int afkProgress() { return afkProgress; }
     public boolean dirty() { return dirty; }
 
-    /** Slot by 1-based number (1 or 2). Returns null if out of range. */
     public AbilitySlot slot(int number) {
         if (number < 1 || number > SLOTS) return null;
         return slots[number - 1];
     }
 
-    /** The awakened (slot 1) ability. */
     public AbilitySlot primary() { return slots[0]; }
+    public AbilitySlot gained() { return slots[1]; }
 
     public boolean hasAnyAbility() {
         for (AbilitySlot s : slots) if (!s.isEmpty()) return true;
         return false;
     }
 
-    public void setMastery(int mastery) { this.mastery = Math.max(0, mastery); dirty = true; }
-    public void addMastery(int amount) { setMastery(mastery + amount); }
+    public boolean has(AbilityType type) {
+        for (AbilitySlot s : slots) if (s.ability() == type) return true;
+        return false;
+    }
+
+    public Keybind bind(int slot) { return binds[slot - 1]; }
+
+    /** Sets a slot's keybind; if the other slot used it, the two swap. */
+    public void setBind(int slot, Keybind bind) {
+        int other = slot == 1 ? 2 : 1;
+        if (bind != Keybind.COMMAND_ONLY && binds[other - 1] == bind) binds[other - 1] = binds[slot - 1];
+        binds[slot - 1] = bind;
+        dirty = true;
+    }
+
+    public AbilityType lostAbility() { return lostAbility; }
+    public int lostTier() { return lostTier; }
+    public void setLost(AbilityType type, int tier) { lostAbility = type; lostTier = tier; dirty = true; }
+
+    public void setAfkTokens(int tokens) { afkTokens = Math.max(0, tokens); dirty = true; }
+    public void addAfkTokens(int amount) { setAfkTokens(afkTokens + amount); }
+    public void setAfkProgress(int seconds) { afkProgress = Math.max(0, seconds); dirty = true; }
+
     void markDirty() { dirty = true; }
     public void markClean() { dirty = false; }
 }

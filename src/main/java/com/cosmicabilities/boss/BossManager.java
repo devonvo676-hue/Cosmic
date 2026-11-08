@@ -1,7 +1,6 @@
 package com.cosmicabilities.boss;
 
 import com.cosmicabilities.CosmicAbilitiesPlugin;
-import com.cosmicabilities.data.PlayerData;
 import com.cosmicabilities.item.CosmicMaterial;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
@@ -273,7 +272,7 @@ public class BossManager {
 
         Player killer = boss.getKiller();
         double total = damage.values().stream().mapToDouble(Double::doubleValue).sum();
-        double minShare = plugin.getConfig().getDouble("mastery.min-damage-share", 0.05);
+        double minShare = plugin.getConfig().getDouble("bosses.drops.min-damage-share", 0.05);
         UUID top = damage.entrySet().stream().max(Map.Entry.comparingByValue()).map(Map.Entry::getKey).orElse(null);
 
         List<Player> rewarded = new ArrayList<>();
@@ -288,12 +287,11 @@ public class BossManager {
         int min = plugin.getConfig().getInt("bosses.drops.min", 3);
         int max = Math.max(min, plugin.getConfig().getInt("bosses.drops.max", 6));
         double astralChance = plugin.getConfig().getDouble("bosses.drops.bonus-astral-chance", 0.25);
-        int masteryGain = plugin.getConfig().getInt("mastery.per-boss-kill", 100);
-        int topBonus = plugin.getConfig().getInt("mastery.top-damage-bonus", 50);
+        int topBonus = plugin.getConfig().getInt("bosses.drops.top-damage-bonus", 2);
         ThreadLocalRandom rnd = ThreadLocalRandom.current();
 
         for (Player p : rewarded) {
-            int amount = rnd.nextInt(min, max + 1);
+            int amount = rnd.nextInt(min, max + 1) + (p.getUniqueId().equals(top) ? topBonus : 0);
             type.drop.give(p, amount);
             StringBuilder msg = new StringBuilder(plugin.prefix() + "<gray>You received <white>" + amount + "x "
                     + type.drop.colored());
@@ -302,16 +300,25 @@ public class BossManager {
                 CosmicMaterial.ASTRAL_FRAGMENT.give(p, bonus);
                 msg.append(" <gray>and <white>").append(bonus).append("x ").append(CosmicMaterial.ASTRAL_FRAGMENT.colored());
             }
-            int gain = masteryGain + (p.getUniqueId().equals(top) ? topBonus : 0);
-            PlayerData data = plugin.data().get(p.getUniqueId());
-            if (data != null) data.addMastery(gain);
-            msg.append(" <gray>(+<aqua>").append(gain).append(" Mastery<gray>)");
+            if (p.getUniqueId().equals(top)) msg.append(" <gold>(top damage bonus)");
             p.sendMessage(plugin.mm(msg.toString()));
             p.playSound(p.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 1f, 1f);
         }
         Bukkit.broadcast(plugin.mm(plugin.prefix() + type.colored() + " <gray>has been defeated"
                 + (killer != null ? " by <white>" + killer.getName() : "") + "<gray>!"));
+        plugin.orbs().bossDrop(boss.getLocation(), type.colored());
         return true;
+    }
+
+    /** Removes every tracked boss without drops. Returns how many were removed. */
+    public int despawnAll() {
+        int n = 0;
+        for (ActiveBoss ab : new ArrayList<>(active.values())) {
+            ab.bar.removeAll();
+            if (ab.entity.isValid()) { ab.entity.remove(); n++; }
+        }
+        active.clear();
+        return n;
     }
 
     public void shutdown() {

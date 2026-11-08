@@ -1,118 +1,67 @@
-# Cosmic Abilities (Paper 1.21.11)
-
-Every player spawns with one of 10 random cosmic abilities. Defeat cosmic bosses for materials and Mastery, upgrade to level 10, pick a specialization at level 5, and evolve at level 10.
+# Cosmic Abilities 2.0 (Paper 1.21.11)
 
 ## Build the jar
+Upload this whole folder (including `.github`) to your GitHub repo. GitHub builds it automatically:
+**Actions** tab -> latest run -> **Artifacts** -> **CosmicAbilities** (jar + resource pack).
+Or on a PC with Java 21: `gradlew.bat build` -> `build/libs/CosmicAbilities-2.0.0.jar`.
 
-**Easiest: GitHub (no setup on your PC).** Create a free GitHub repo, upload this whole folder (including the
-`.github` folder), and GitHub builds the jar automatically. Open the repo's **Actions** tab -> latest run ->
-**Artifacts** -> download **CosmicAbilities** (contains the jar and the resource pack).
+## Install
+1. Delete the old CosmicAbilities jar from `plugins/`, add `CosmicAbilities-2.0.0.jar`, restart.
+   Your existing config is kept and the new settings are added to it automatically. Player data carries over.
+2. Upload `CosmicAbilities-ResourcePack.zip` (direct download link, e.g. mc-packs.net), put the link and
+   its SHA-1 in `config.yml` under `resource-pack`, then `/cosmic admin reload` and rejoin.
 
-**Or on your PC** with **Java 21** installed:
+## How it works
+- **Slot 1** = the random ability you join with. **You keep it forever.**
+- **Slot 2** = a gained ability. Bosses drop a random **ability orb** (right-click to absorb).
+  If another player kills you, your slot 2 ability drops as an orb that only your killer can pick up for 60 seconds.
+- **Cosmic Reroll** (craftable: diamond corners, eye of ender sides, totem of undying centre):
+  right-click to get back the ability you lost. Announced to the whole server. Also sold in the AFK shop.
+- **One upgrade per ability**: 30% shorter cooldown (`/cosmic upgrade 1|2`), with a camera cutscene.
+  Dying removes the upgrade (`death.lose-upgrade`).
+- Every cast gives a short PvP buff (Strength / Speed / Resistance / Regeneration / Absorption).
+- Ability hits show floating damage numbers and a hitmarker sound.
 
-```
-./gradlew build          # macOS / Linux
-gradlew.bat build        # Windows
-```
+## Abilities
+| Ability | What it does | Signature bonus |
+|---|---|---|
+| Singularity | Black hole that drags enemies into its core | Event Horizon: collapses and detonates |
+| Supernova | Charge, then explode around you (burns) | Stellar Cataclysm: second, wider blast |
+| Meteor | Comet dash through enemies | Comet Breaker: crater slam at the end |
+| Solar | Shield: -30% damage, reflects damage back | Solar Ascension: reflects 100%, burns attackers |
+| Cryostasis | Frost nova that freezes enemies in ice | Absolute Zero: longer freeze, ice shatters for damage |
+| Voidwalker | Blink; a void rift explodes behind you | Dimensional Rift: rift at your landing too |
+| Pulsar | Instant beam, pierces 2 | Quasar: 3 beams |
+| Nebula | Cloud: allies Speed + Regen, enemies weakened | Cosmic Veil: allies resist, mobs lose them |
+| Orbital | Orbs circle and smash enemies | Planetary Orbit: orbs home in at the end |
+| Celestial | Starlight heal | Astral Blessing: heals allies, cleanses |
+| Paradox | Inverts enemy players' movement controls | Time Fracture: longer, spins them around |
+| Entropy | Scrambles enemy hotbars | Total Collapse: knocks out their offhand (totem) |
+| Magnetosphere | 15s forcefield: nobody else can place blocks/webs/liquids inside | Repulsor: pushes enemies out, deflects projectiles |
+| Umbra | Burrow underground, hidden from all players, then erupt | Shadow Eruption: longer, harder hit + blind |
 
-The jar appears at `build/libs/CosmicAbilities-1.0.0.jar`.
-Or open the folder in IntelliJ IDEA → Gradle panel → `build` → `build`.
+Turn the signature bonuses off with `abilities.bonus-mechanics: false`.
 
-## Install on Folium
+## Commands
+| Command | Who | |
+|---|---|---|
+| `/ability 1`, `/ability 2` | all | cast |
+| `/keybinds` | all | choose how each slot casts (Sneak+F, F, Sneak+left-click, double-tap sneak, Sneak+Q, command only) |
+| `/abilities` | all | what every ability does |
+| `/abilityholders` | all | player heads; hover to see their abilities |
+| `/cosmic`, `/cosmic upgrade [1\|2]` | all | your abilities / upgrade |
+| `/afk`, `/afkshop` | all | earn 1 token per 30 min AFK, spend them |
+| `/bossfight` | admin | panel to start a boss fight (server countdown) or end all fights |
+| `/adminpanel` | admin | every ability, bosses, materials, Ban Pistol, tags |
+| `/announce <msg>` or `/announce <title> \| <subtitle>` | admin | message on every screen |
+| `/tag admin\|owner\|off` | admin / OP | `[ADMIN] Name` or `[OWNER] Name` |
+| `/unban <player>` | admin | undo a Ban Pistol ban |
+| `/afkshop add <price> [slot]` | admin | sell the item in your hand (shift-right-click in shop to remove) |
+| `/cosmic admin set\|reroll\|settier\|give\|giveorb\|givereroll\|tokens\|boss\|resetcd\|reload` | admin | |
 
-1. Upload `CosmicAbilities-1.0.0.jar` to your server's `plugins/` folder.
-2. Restart the server (avoid `/reload`).
-3. Edit `plugins/CosmicAbilities/config.yml` to tune damage, cooldowns, costs, and boss health, then `/cosmic admin reload`.
+Bosses can only be damaged when `bosses.min-players-to-damage` players (default 3) are nearby.
+To test alone, set it to 1.
 
-## Resource pack (ability icons, ban pistol model, ADMIN/OWNER badges)
-
-1. Upload `CosmicAbilities-ResourcePack.zip` to a host that gives a direct download link (e.g. mc-packs.net).
-2. In `plugins/CosmicAbilities/config.yml` set `resource-pack.url` to that link and `resource-pack.sha1` to the zip's SHA-1 (mc-packs.net shows it).
-3. `/cosmic admin reload` and rejoin. The plugin sends the pack on join, layered on top of your server's own pack, so your Luminara pack keeps working.
-
-Without the pack, set `hud.use-icons: false` to show ability names as text instead of icons.
-
-## Playing
-
-| Action | How |
-|---|---|
-| Cast slot 1 | `/ability 1` or **Sneak + F** |
-| Cast slot 2 | `/ability 2` or **Sneak + left-click air** (empty hand) |
-| See your ability, level, next cost | `/cosmic` |
-| Level up | `/cosmic upgrade [1\|2]` |
-| Choose specialization (level 5, permanent) | `/cosmic path <a\|b> [1\|2]` |
-| List all abilities | `/cosmic abilities` |
-
-## Abilities, materials, paths, evolutions
-
-| Ability | Role | Material | Path A | Path B | Level 10 |
-|---|---|---|---|---|---|
-| Singularity | Control / Damage | Void Shard | Crushing Core | Gravity Well | Event Horizon |
-| Supernova | Burst Damage | Solar Core | Flare | Shockwave | Stellar Cataclysm |
-| Meteor | Offense / Mobility | Astral Fragment | Impact | Trailblazer | Comet Breaker |
-| Solar | Defence / Support | Solar Core | Radiance | Aegis | Solar Ascension |
-| Cryostasis | Control | Frozen Stardust | Glacier | Frostbite | Absolute Zero |
-| Voidwalker | Mobility / Escape | Void Shard | Phase | Rupture | Dimensional Rift |
-| Pulsar | Ranged Damage | Astral Fragment | Lance | Burst | Quasar |
-| Nebula | Support / Utility | Nebula Essence | Drift | Shroud | Cosmic Veil |
-| Orbital | Area Damage | Astral Fragment | Bastion | Ring | Planetary Orbit |
-| Celestial | Recovery | Nebula Essence | Mender | Stride | Astral Blessing |
-
-Upgrading uses your ability's material plus a Mastery threshold (Mastery is earned from boss kills, never spent). Level 10 also costs Astral Fragments. Cooldowns drop 1.5 s at levels 4 and 8.
-
-## Bosses
-
-Spawn with `/cosmic admin boss <type>` at your location (e.g. from an arena command block or an event).
-
-| Boss | Mob | Drops | Special attack |
-|---|---|---|---|
-| `void_emperor` | Giant Wither Skeleton | Void Shards | Pulls players in, Darkness, teleports behind a target |
-| `solar_titan` | Giant Blaze | Solar Cores | Fire rings that burn nearby players |
-| `frost_leviathan` | Giant Stray | Frozen Stardust | Freezing nova with heavy Slowness |
-| `nebula_serpent` | Giant Witch | Nebula Essence | Heals itself, Nausea / Weakness / Poison |
-| `cosmic_destroyer` | Giant Ravager | Astral Fragments | Shockwave that launches players |
-
-Every player who dealt at least 5% of the damage gets their own materials and Mastery; the top damage dealer gets bonus Mastery. Non-Destroyer bosses have a 25% chance to also give Astral Fragments.
-
-Every player awakens one ability in slot 1. Slot 2 is filled by admins (admin panel or `/cosmic admin set <player> <ability> 2`).
-Ability icons sit above the hotbar; they dim and show a countdown while recharging.
-Each equipped ability also gives a permanent passive effect (Infuse-style), set in the `passives` section of config:
-
-| Ability | Passive |
-|---|---|
-| Singularity | Night Vision |
-| Supernova | Strength I |
-| Meteor | Jump Boost II |
-| Solar | Fire Resistance |
-| Cryostasis | Water Breathing |
-| Voidwalker | Speed I |
-| Pulsar | Haste II |
-| Nebula | Luck |
-| Orbital | Resistance I |
-| Celestial | Health Boost II (+4 hearts) |
-
-## Staff tools
-
-- **`/adminpanel`** (admins only): all 10 abilities (left-click = slot 1, right-click = slot 2, shift-click = test cast), summon any boss, grab materials, Ban Pistol, name tags, reset cooldowns, max levels.
-- **Ban Pistol** (3D model): right-click to fire. Any player hit is banned (permanent by default; see `ban-pistol` in config). Staff can't be banned by it. Non-admins can't fire it, and it deletes itself if they try or if they try to pick it up.
-- **`/unban <player>`** (admins, or console): lifts the ban.
-- **`/tag admin`** (admin or OP), **`/tag owner`** (OP only), **`/tag off`**: shows `[OWNER] YourName` / `[ADMIN] YourName` above your head, in tab and in chat. Players can only tag themselves.
-
-The pistol model is `assets/cosmic/models/item/ban_pistol.json` in the resource pack. It opens in Blockbench
-(Java Item Model) if you want to tweak its shape or the in-hand angles (Display tab).
-
-## Admin commands (`cosmicabilities.admin`, op by default)
-
-```
-/cosmic admin set <player> <ability> [slot]   change ability (keeps level, resets path)
-/cosmic admin reroll <player>             random new ability, back to level 1
-/cosmic admin setlevel <player> <1-10>
-/cosmic admin setpath <player> <a|b|none>
-/cosmic admin mastery <player> <amount>
-/cosmic admin give <player> <material> [amount]
-/cosmic admin boss <type>
-/cosmic admin resetcd <player>
-/cosmic admin reload
-```
-
-Player data is saved in `plugins/CosmicAbilities/players/<uuid>.yml`.
+## Ban Pistol
+3D pistol, loud gunshot, fires a visible bullet with a red tracer. Anyone it hits is banned
+(staff can't be). `/unban <player>` lifts it. Settings under `ban-pistol` in config.

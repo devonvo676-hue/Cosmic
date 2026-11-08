@@ -1,0 +1,89 @@
+# =========================================================
+#  AFK Shop - players earn 1 AFK token every 30 minutes of /afk
+# =========================================================
+# Every entry under "items" is something players can buy. Options:
+#   price:     cost in AFK tokens (required)
+#   slot:      0-44 position in the menu (optional, auto-placed if missing)
+#   material:  any Minecraft item (DIAMOND, NETHERITE_SWORD, ...)
+#   amount:    how many
+#   name:      display name (MiniMessage colours, e.g. "<gold>Lucky Pick")
+#   rename-given-item: true to also give the item that name
+#   lore:      list of lore lines
+#   enchantments: {sharpness: 5, unbreaking: 3}
+#   cosmic:    a Cosmic fragment instead of a material: void_shard, solar_core, frozen_stardust, nebula_essence, astral_fragment
+#   commands:  console commands to run on purchase, {player} = buyer (e.g. ranks, crates, money)
+#   give-item: false to only run the commands
+#   icon:      menu icon when the entry is commands-only
+#   special:   reroll  -> sells a Cosmic Reroll
+#
+# In game, admins can also hold an item and type  /afkshop add <price> [slot]
+# (saves the exact item with its name/enchants) and shift-right-click an entry to remove it.
+# After editing this file: /afkshop reload
+
+title: "<dark_aqua><bold>AFK Shop"
+
+items:
+  golden_apples:
+    slot: 10
+    price: 2
+    material: GOLDEN_APPLE
+    amount: 8
+  ender_pearls:
+    slot: 11
+    price: 2
+    material: ENDER_PEARL
+    amount: 16
+  diamonds:
+    slot: 12
+    price: 4
+    material: DIAMOND
+    amount: 16
+  xp_bottles:
+    slot: 13
+    price: 2
+    material: EXPERIENCE_BOTTLE
+    amount: 32
+  totem:
+    slot: 14
+    price: 8
+    material: TOTEM_OF_UNDYING
+  netherite_ingot:
+    slot: 15
+    price: 10
+    material: NETHERITE_INGOT
+  afk_blade:
+    slot: 16
+    price: 12
+    material: DIAMOND_SWORD
+    name: "<aqua><bold>AFK Blade"
+    rename-given-item: true
+    enchantments: {sharpness: 5, unbreaking: 3, looting: 3}
+  void_shards:
+    slot: 20
+    price: 4
+    cosmic: void_shard
+    amount: 4
+  solar_cores:
+    slot: 21
+    price: 4
+    cosmic: solar_core
+    amount: 4
+  frozen_stardust:
+    slot: 22
+    price: 4
+    cosmic: frozen_stardust
+    amount: 4
+  nebula_essence:
+    slot: 23
+    price: 4
+    cosmic: nebula_essence
+    amount: 4
+  cosmic_reroll:
+    slot: 31
+    price: 30
+    special: reroll
+  astral_fragments:
+    slot: 24
+    price: 6
+    cosmic: astral_fragment
+    amount: 2

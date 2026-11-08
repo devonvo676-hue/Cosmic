@@ -2,7 +2,7 @@ name: CosmicAbilities
 version: '${version}'
 main: com.cosmicabilities.CosmicAbilitiesPlugin
 api-version: '1.21'
-description: Cosmic Awakening - every player is born with one of 10 cosmic abilities, upgraded by defeating cosmic bosses.
+description: Cosmic Awakening - 14 cosmic abilities, boss fights, ability orbs, AFK tokens and staff tools.
 authors: [Devon]
 
 commands:
@@ -14,6 +14,22 @@ commands:
     description: Cast the ability in slot 1 or 2
     usage: /ability <1|2>
     permission: cosmicabilities.use
+  abilities:
+    description: See what every ability does
+    usage: /abilities
+  abilityholders:
+    description: See which player has which ability
+    usage: /abilityholders
+    aliases: [holders]
+  keybinds:
+    description: Choose how you cast your abilities
+    usage: /keybinds
+    aliases: [binds, keybind]
+  bossfight:
+    description: Start a boss fight (admin panel)
+    usage: /bossfight
+    aliases: [bossfights]
+    permission: cosmicabilities.admin
   adminpanel:
     description: Open the Cosmic admin panel
     usage: /adminpanel
@@ -24,15 +40,26 @@ commands:
     usage: /unban <player>
     aliases: [cunban]
     permission: cosmicabilities.admin
+  announce:
+    description: Show a message on every player's screen
+    usage: /announce <message>  or  /announce <title> | <subtitle>
+    aliases: [broadcastscreen]
+    permission: cosmicabilities.admin
   tag:
-    description: Wear the ADMIN or OWNER name tag
+    description: Wear the [ADMIN] or [OWNER] tag beside your name
     usage: /tag <admin|owner|off>
     aliases: [nametag]
+  afk:
+    description: Go AFK and earn AFK tokens
+    usage: /afk
+  afkshop:
+    description: Spend AFK tokens
+    usage: /afkshop
 
 permissions:
   cosmicabilities.use:
     description: Use your cosmic abilities and player commands
     default: true
   cosmicabilities.admin:
-    description: Admin panel, ban pistol, ADMIN tag, and /cosmic admin commands
+    description: Admin panel, ban pistol, ADMIN tag, /announce, /unban, AFK shop editing and /cosmic admin
     default: op

@@ -1,10 +1,11 @@
 package com.cosmicabilities.ability.impl;
 
 import com.cosmicabilities.CosmicAbilitiesPlugin;
+import com.cosmicabilities.ability.AbilityType;
 import com.cosmicabilities.ability.CosmicAbility;
 import com.cosmicabilities.data.AbilitySlot;
+import com.cosmicabilities.fx.Fx;
 import com.cosmicabilities.util.Targets;
-import org.bukkit.Color;
 import org.bukkit.Location;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
@@ -12,96 +13,95 @@ import org.bukkit.World;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.Vector;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+/** Instant beam: charge rings at your hand, a white-hot core wrapped in a cyan helix, sparks on impact. */
 public class PulsarAbility extends CosmicAbility {
     private static final double RANGE = 40;
 
-    public PulsarAbility(CosmicAbilitiesPlugin plugin) { super(plugin); }
+    public PulsarAbility(CosmicAbilitiesPlugin plugin) { super(plugin, AbilityType.PULSAR); }
 
     @Override
-    public void cast(Player player, AbilitySlot data) {
-        int lvl = data.level();
-        double speed = scale(1.2, 0.1, lvl);
-        double damage = scale(7, 0.7, lvl);
-        int pierce = data.isPathA() ? 3 : 1;
-        boolean burst = data.isPathB();
-
-        player.getWorld().playSound(player.getLocation(), Sound.ENTITY_ILLUSIONER_CAST_SPELL, 1f, 1.8f);
-        player.getWorld().playSound(player.getLocation(), Sound.BLOCK_BEACON_POWER_SELECT, 0.7f, 2f);
-
-        Vector dir = player.getEyeLocation().getDirection().normalize();
-        if (data.evolved()) {
-            // Quasar: three beams in a spread.
-            for (double yaw : new double[]{-9, 0, 9}) {
-                fire(player, rotateY(dir.clone(), Math.toRadians(yaw)), speed, damage * 0.75, pierce, burst);
+    public boolean cast(Player player, AbilitySlot slot) {
+        World w = player.getWorld();
+        w.playSound(player.getLocation(), Sound.BLOCK_BEACON_POWER_SELECT, 0.9f, 2f);
+        every(4, t -> {
+            if (!player.isOnline()) return false;
+            Location hand = player.getEyeLocation().add(player.getEyeLocation().getDirection().multiply(0.9)).add(0, -0.25, 0);
+            Fx.ring(w, hand, 0.55 - t * 0.12, 10, t, Fx.dust(0x4cc9f0, 0.8f));
+            if (t == 4) {
+                Vector dir = player.getEyeLocation().getDirection().normalize();
+                double damage = dmg(10, slot);
+                if (bonus(slot)) {
+                    for (double yaw : new double[]{-10, 0, 10}) fire(player, rotateY(dir.clone(), Math.toRadians(yaw)), damage * 0.8);
+                } else {
+                    fire(player, dir, damage);
+                }
+                w.playSound(player.getLocation(), Sound.ENTITY_FIREWORK_ROCKET_BLAST, 1.2f, 0.7f);
+                w.playSound(player.getLocation(), Sound.ENTITY_ILLUSIONER_CAST_SPELL, 1f, 1.8f);
             }
-        } else {
-            fire(player, dir, speed, damage, pierce, burst);
-        }
+            return true;
+        });
+        return true;
     }
 
     private static Vector rotateY(Vector v, double angle) {
         double cos = Math.cos(angle), sin = Math.sin(angle);
-        double x = v.getX() * cos - v.getZ() * sin;
-        double z = v.getX() * sin + v.getZ() * cos;
-        return new Vector(x, v.getY(), z).normalize();
+        return new Vector(v.getX() * cos - v.getZ() * sin, v.getY(), v.getX() * sin + v.getZ() * cos).normalize();
     }
 
-    private void fire(Player player, Vector dir, double speed, double damage, int pierce, boolean burst) {
-        World world = player.getWorld();
-        Location pos = player.getEyeLocation().clone().add(dir.clone().multiply(0.6));
-        Set<UUID> hit = new HashSet<>();
-        Particle.DustOptions dust = new Particle.DustOptions(Color.fromRGB(76, 201, 240), 1.3f);
-
-        new BukkitRunnable() {
-            double travelled = 0;
-            int hits = 0;
-            @Override
-            public void run() {
-                if (!player.isOnline()) { cancel(); return; }
-                double moved = 0;
-                while (moved < speed) {
-                    double inc = Math.min(0.4, speed - moved);
-                    pos.add(dir.clone().multiply(inc));
-                    moved += inc;
-                    travelled += inc;
-                    world.spawnParticle(Particle.DUST, pos, 1, 0, 0, 0, 0, dust);
-                    if (pos.getBlock().getType().isSolid() || travelled >= RANGE) {
-                        end(pos);
-                        cancel();
-                        return;
-                    }
-                    for (Entity e : world.getNearbyEntities(pos, 0.7, 0.9, 0.7)) {
-                        if (!Targets.isEnemy(player, e) || !hit.add(e.getUniqueId())) continue;
-                        LivingEntity target = (LivingEntity) e;
-                        Targets.damage(player, target, damage);
-                        world.spawnParticle(Particle.CRIT, target.getLocation().add(0, 1, 0), 10, 0.3, 0.4, 0.3, 0.2);
-                        if (burst) {
-                            world.spawnParticle(Particle.EXPLOSION, pos, 1);
-                            world.playSound(pos, Sound.ENTITY_GENERIC_EXPLODE, 0.5f, 1.8f);
-                            for (LivingEntity near : Targets.enemies(player, pos, 2.5)) {
-                                if (!near.equals(target)) Targets.damage(player, near, damage * 0.5);
-                            }
-                        }
-                        hits++;
-                        if (hits >= pierce) {
-                            cancel();
-                            return;
-                        }
-                    }
+    private void fire(Player player, Vector dir, double damage) {
+        World w = player.getWorld();
+        Location start = player.getEyeLocation().add(dir.clone().multiply(0.6)).add(0, -0.2, 0);
+        List<Location> path = new ArrayList<>();
+        Set<UUID> hitSet = new HashSet<>();
+        int pierced = 0;
+        Location pos = start.clone();
+        for (double d = 0; d < RANGE; d += 0.3) {
+            pos = start.clone().add(dir.clone().multiply(d));
+            if (pos.getBlock().getType().isSolid()) break;
+            path.add(pos);
+            for (Entity e : w.getNearbyEntities(pos, 0.6, 0.9, 0.6)) {
+                if (!Targets.isEnemy(player, e) || !hitSet.add(e.getUniqueId())) continue;
+                hit(player, (LivingEntity) e, pierced == 0 ? damage : damage * 0.6);
+                w.spawnParticle(Particle.ELECTRIC_SPARK, e.getLocation().add(0, 1, 0), 20, 0.3, 0.4, 0.3, 0.3);
+                w.spawnParticle(Particle.END_ROD, e.getLocation().add(0, 1, 0), 10, 0.1, 0.1, 0.1, 0.15);
+                pierced++;
+            }
+            if (pierced >= 2) break;
+        }
+        final Location end = pos;
+        // draw the beam over 3 ticks so it lingers and thins out
+        every(3, t -> {
+            float core = 1.4f - t * 0.35f;
+            for (int i = 0; i < path.size(); i++) {
+                Location p = path.get(i);
+                w.spawnParticle(Particle.DUST, p, 1, 0, 0, 0, 0, Fx.dust(t == 0 ? 0xffffff : 0x90e0ef, core));
+                if (t == 0) {
+                    double a = i * 0.9;
+                    Vector perp = perpendicular(dir, a).multiply(0.28);
+                    w.spawnParticle(Particle.DUST, p.clone().add(perp), 1, 0, 0, 0, 0, Fx.dust(0x4cc9f0, 0.9f));
                 }
-                world.spawnParticle(Particle.END_ROD, pos, 1, 0, 0, 0, 0);
             }
+            if (t == 0) {
+                Fx.burst(w, end, Particle.ELECTRIC_SPARK, 18, 0.4);
+                w.spawnParticle(Particle.END_ROD, end, 6, 0.1, 0.1, 0.1, 0.05);
+            }
+            return true;
+        });
+    }
 
-            private void end(Location at) {
-                world.spawnParticle(Particle.END_ROD, at, 8, 0.1, 0.1, 0.1, 0.05);
-            }
-        }.runTaskTimer(plugin, 0L, 1L);
+    /** A unit vector perpendicular to dir, rotated by angle around it (for the helix). */
+    private static Vector perpendicular(Vector dir, double angle) {
+        Vector up = Math.abs(dir.getY()) > 0.95 ? new Vector(1, 0, 0) : new Vector(0, 1, 0);
+        Vector a = dir.clone().crossProduct(up).normalize();
+        Vector b = dir.clone().crossProduct(a).normalize();
+        return a.multiply(Math.cos(angle)).add(b.multiply(Math.sin(angle)));
     }
 }

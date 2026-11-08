@@ -4,50 +4,40 @@ import com.cosmicabilities.CosmicAbilitiesPlugin;
 import com.cosmicabilities.ability.impl.*;
 import com.cosmicabilities.data.AbilitySlot;
 import com.cosmicabilities.data.PlayerData;
+import com.cosmicabilities.fx.Fx;
 import net.kyori.adventure.text.Component;
-import org.bukkit.Color;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
-import org.bukkit.Particle;
 import org.bukkit.Registry;
 import org.bukkit.Sound;
-import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
-import org.bukkit.scheduler.BukkitRunnable;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Locale;
-import java.util.Set;
-
+import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-/** Handles casting, per-slot cooldowns, the icon HUD, and short-lived ability state (shields, fall immunity). */
+/** Casting, per-slot cooldowns, timed combat buffs and the icon HUD. */
 public class AbilityEngine {
-    public record Shield(double reduction, long expiresAt, boolean evolved) {}
-
-    /** Resource-pack glyphs (see the resource pack's assets/cosmic/font/hud.json). */
     private static final char GLYPH_READY = '';
     private static final char GLYPH_COOLDOWN = '';
 
+    /** Old v1 passive effects (infinite) that must be stripped from players. */
+    private static final PotionEffectType[] OLD_PASSIVES = {
+            PotionEffectType.NIGHT_VISION, PotionEffectType.STRENGTH, PotionEffectType.JUMP_BOOST,
+            PotionEffectType.FIRE_RESISTANCE, PotionEffectType.WATER_BREATHING, PotionEffectType.SPEED,
+            PotionEffectType.HASTE, PotionEffectType.LUCK, PotionEffectType.RESISTANCE, PotionEffectType.HEALTH_BOOST};
+
     private final CosmicAbilitiesPlugin plugin;
     private final Map<AbilityType, CosmicAbility> abilities = new EnumMap<>(AbilityType.class);
-    /** uuid -> [slot1 end millis, slot2 end millis] */
     private final Map<UUID, long[]> cooldownEnd = new ConcurrentHashMap<>();
     private final Map<UUID, boolean[]> readyPinged = new ConcurrentHashMap<>();
     private final Map<UUID, Long> hudPausedUntil = new ConcurrentHashMap<>();
-    private final Map<UUID, Shield> shields = new ConcurrentHashMap<>();
-    private final java.util.Set<UUID> fallImmune = ConcurrentHashMap.newKeySet();
-    /** Passive effect types this plugin applied last tick, per player, so they can be removed when unequipped. */
-    private final Map<UUID, Set<PotionEffectType>> appliedPassives = new ConcurrentHashMap<>();
-
-    /** Slot number currently being cast (abilities run synchronously), so refundCooldown knows which slot. */
-    private int castingSlot = 1;
 
     public AbilityEngine(CosmicAbilitiesPlugin plugin) {
         this.plugin = plugin;
@@ -61,14 +51,16 @@ public class AbilityEngine {
         abilities.put(AbilityType.NEBULA, new NebulaAbility(plugin));
         abilities.put(AbilityType.ORBITAL, new OrbitalAbility(plugin));
         abilities.put(AbilityType.CELESTIAL, new CelestialAbility(plugin));
+        abilities.put(AbilityType.PARADOX, new ParadoxAbility(plugin));
+        abilities.put(AbilityType.ENTROPY, new EntropyAbility(plugin));
+        abilities.put(AbilityType.MAGNETOSPHERE, new MagnetosphereAbility(plugin));
+        abilities.put(AbilityType.UMBRA, new UmbraAbility(plugin));
     }
 
-    /** Cooldown in seconds: base, minus 1.5s at levels 4 and 8, Voidwalker gets extra reduction per level. */
-    public double cooldownSeconds(AbilityType type, int level) {
+    /** The single upgrade cuts the cooldown by upgrades.cooldown-reduction (default 30%). */
+    public double cooldownSeconds(AbilityType type, int tier) {
         double cd = type.baseCooldown * plugin.getConfig().getDouble("abilities.cooldown-multiplier", 1.0);
-        if (level >= 4) cd -= 1.5;
-        if (level >= 8) cd -= 1.5;
-        if (type == AbilityType.VOIDWALKER) cd -= 0.25 * (level - 1);
+        if (tier >= 2) cd *= 1 - Math.max(0, Math.min(0.9, plugin.getConfig().getDouble("upgrades.cooldown-reduction", 0.3)));
         return Math.max(plugin.getConfig().getDouble("abilities.minimum-cooldown", 4.0), cd);
     }
 
@@ -82,60 +74,120 @@ public class AbilityEngine {
         return Math.max(0, (e[slot - 1] - System.currentTimeMillis()) / 1000.0);
     }
 
-    /** Casts the ability equipped in slot (1 or 2). */
     public void tryCast(Player player, int slot) {
         if (!player.hasPermission("cosmicabilities.use")) return;
+        if (plugin.cutscenes().isPlaying(player.getUniqueId())) return;
         PlayerData data = plugin.data().get(player.getUniqueId());
         AbilitySlot s = data == null ? null : data.slot(slot);
         if (s == null || s.isEmpty()) {
             notify(player, plugin.mm("<red>You have no ability in slot " + slot + "."));
             return;
         }
+        if (plugin.status().isFrozen(player.getUniqueId())) {
+            notify(player, plugin.mm("<aqua>You are frozen solid!"));
+            return;
+        }
         double remaining = remainingCooldown(player.getUniqueId(), slot);
         if (remaining > 0) {
-            notify(player, plugin.mm(s.ability().colored(s.level()) + " <gray>recharging: <white>"
-                    + String.format("%.1f", remaining) + "s"));
+            notify(player, plugin.mm(s.ability().colored() + " <gray>recharging: <white>" + String.format("%.1f", remaining) + "s"));
             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 0.5f, 0.6f);
             return;
         }
-        long cdMillis = (long) (cooldownSeconds(s.ability(), s.level()) * 1000);
-        ends(player.getUniqueId())[slot - 1] = System.currentTimeMillis() + cdMillis;
-        readyPinged.computeIfAbsent(player.getUniqueId(), k -> new boolean[PlayerData.SLOTS])[slot - 1] = false;
-        castingSlot = slot;
+        plugin.afk().exit(player, false);
+        if (s.ability() != AbilityType.UMBRA && plugin.status().isBurrowed(player.getUniqueId())) {
+            plugin.status().endBurrow(player, true);
+        }
+        boolean fired;
         try {
-            abilities.get(s.ability()).cast(player, s);
-            castFx(player, s);
+            fired = abilities.get(s.ability()).cast(player, s);
         } catch (Exception e) {
             plugin.getLogger().warning("Error casting " + s.ability() + " for " + player.getName() + ": " + e);
-            refundCooldown(player.getUniqueId());
-        } finally {
-            castingSlot = 1;
+            fired = false;
+        }
+        if (!fired) return;
+        ends(player.getUniqueId())[slot - 1] = System.currentTimeMillis() + (long) (cooldownSeconds(s.ability(), s.tier()) * 1000);
+        readyPinged.computeIfAbsent(player.getUniqueId(), k -> new boolean[PlayerData.SLOTS])[slot - 1] = false;
+        applyBuffs(player, s.ability());
+        castRing(player, s);
+    }
+
+    /** Small ground ring in the ability colour every cast (each ability adds its own bigger effects). */
+    private void castRing(Player player, AbilitySlot s) {
+        Location feet = player.getLocation().add(0, 0.1, 0);
+        Fx.ring(player.getWorld(), feet, 0.9, 18, 0, Fx.dust(s.ability().rgb(), 1.0f));
+        if (s.upgraded()) Fx.ring(player.getWorld(), feet, 1.25, 14, 0.2, org.bukkit.Particle.END_ROD);
+    }
+
+    // ------------------------------------------------------------------ timed combat buffs
+
+    /** Parses "effect:level:seconds" entries, e.g. "strength:1:6" = Strength I for 6 seconds. */
+    public List<PotionEffect> buffsFor(AbilityType type) {
+        List<PotionEffect> out = new ArrayList<>();
+        for (String raw : plugin.getConfig().getStringList("cast-buffs." + type.id())) {
+            String[] parts = raw.trim().toLowerCase(Locale.ROOT).split(":");
+            PotionEffectType effect = Registry.EFFECT.get(NamespacedKey.minecraft(parts[0]));
+            if (effect == null) continue;
+            int level = parts.length > 1 ? parseInt(parts[1], 1) : 1;
+            int seconds = parts.length > 2 ? parseInt(parts[2], 5) : 5;
+            out.add(new PotionEffect(effect, seconds * 20, Math.max(0, level - 1), false, true, true));
+        }
+        return out;
+    }
+
+    public String buffText(AbilityType type) {
+        StringBuilder sb = new StringBuilder();
+        for (String raw : plugin.getConfig().getStringList("cast-buffs." + type.id())) {
+            String[] parts = raw.trim().split(":");
+            if (sb.length() > 0) sb.append(", ");
+            StringBuilder name = new StringBuilder();
+            for (String w : parts[0].split("_")) {
+                if (!w.isEmpty()) name.append(Character.toUpperCase(w.charAt(0))).append(w.substring(1).toLowerCase(Locale.ROOT)).append(' ');
+            }
+            int level = parts.length > 1 ? parseInt(parts[1], 1) : 1;
+            sb.append(name.toString().trim()).append(' ').append(roman(level));
+            if (parts.length > 2) sb.append(" (").append(parts[2]).append("s)");
+        }
+        return sb.length() == 0 ? "None" : sb.toString();
+    }
+
+    private void applyBuffs(Player player, AbilityType type) {
+        for (PotionEffect e : buffsFor(type)) player.addPotionEffect(e);
+    }
+
+    private static int parseInt(String s, int def) {
+        try { return Integer.parseInt(s.trim()); } catch (NumberFormatException e) { return def; }
+    }
+
+    private static String roman(int n) {
+        return switch (n) { case 1 -> "I"; case 2 -> "II"; case 3 -> "III"; case 4 -> "IV"; case 5 -> "V"; default -> String.valueOf(n); };
+    }
+
+    /** Removes the infinite passive effects that v1.0 gave out. */
+    public void stripOldPassives(Player p) {
+        for (PotionEffectType t : OLD_PASSIVES) {
+            PotionEffect e = p.getPotionEffect(t);
+            if (e != null && e.isInfinite() && e.isAmbient()) p.removePotionEffect(t);
         }
     }
 
-    /** Lets an ability give back the cooldown when it failed to do anything. */
-    public void refundCooldown(UUID uuid) {
-        long[] e = cooldownEnd.get(uuid);
-        if (e != null) e[castingSlot - 1] = 0;
-    }
+    // ------------------------------------------------------------------ HUD
 
     public void resetCooldown(UUID uuid) {
         cooldownEnd.remove(uuid);
     }
 
-    /** Shows a short action-bar message, pausing the icon HUD so it isn't overwritten immediately. */
     public void notify(Player player, Component message) {
         hudPausedUntil.put(player.getUniqueId(), System.currentTimeMillis() + 1500);
         player.sendActionBar(message);
     }
 
-    /** Called every few ticks: draws the Infuse-style ability icons above the hotbar. */
     public void tickHud() {
         if (!plugin.getConfig().getBoolean("hud.enabled", true)) return;
         boolean icons = plugin.getConfig().getBoolean("hud.use-icons", true);
         long now = System.currentTimeMillis();
         for (Player player : plugin.getServer().getOnlinePlayers()) {
             UUID id = player.getUniqueId();
+            if (plugin.afk().isAfk(id) || plugin.status().isBurrowed(id) || plugin.cutscenes().isPlaying(id)) continue;
             PlayerData data = plugin.data().get(id);
             if (data == null || !data.hasAnyAbility()) continue;
 
@@ -146,21 +198,19 @@ public class AbilityEngine {
                 if (s.isEmpty()) continue;
                 double remaining = remainingCooldown(id, slot);
                 boolean ready = remaining <= 0;
-                if (hud.length() > 0) hud.append("<reset>  ");
+                if (hud.length() > 0) hud.append("<reset>   ");
                 if (icons) {
                     char glyph = (char) ((ready ? GLYPH_READY : GLYPH_COOLDOWN) + s.ability().ordinal());
                     hud.append("<white><font:cosmic:hud>").append(glyph).append("</font>");
                 } else {
-                    hud.append(ready ? s.ability().colored(s.level()) : "<dark_gray>" + s.ability().displayName);
+                    hud.append(ready ? s.ability().colored() : "<dark_gray>" + s.ability().displayName);
                 }
                 if (!ready) {
                     hud.append(" <gray>").append((int) Math.ceil(remaining)).append("s");
                 } else if (!pinged[slot - 1]) {
                     pinged[slot - 1] = true;
                     long[] e = cooldownEnd.get(id);
-                    if (e != null && e[slot - 1] != 0) {
-                        player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_CHIME, 0.6f, 1.8f);
-                    }
+                    if (e != null && e[slot - 1] != 0) player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_CHIME, 0.6f, 1.8f);
                 }
             }
             Long paused = hudPausedUntil.get(id);
@@ -169,122 +219,8 @@ public class AbilityEngine {
         }
     }
 
-    /** Shared activation effect: a helix of the ability's color spirals up around the caster. */
-    private void castFx(Player player, AbilitySlot s) {
-        Color color = Color.fromRGB(Integer.parseInt(s.ability().color.substring(1), 16));
-        Particle.DustOptions dust = new Particle.DustOptions(color, 1.3f);
-        boolean evolved = s.evolved();
-        World world = player.getWorld();
-        world.playSound(player.getLocation(), Sound.BLOCK_BEACON_POWER_SELECT, 0.5f, 1.9f);
-        if (evolved) world.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_CHIME, 1f, 0.6f);
-        new BukkitRunnable() {
-            int t = 0;
-            @Override
-            public void run() {
-                if (t > 10 || !player.isOnline()) { cancel(); return; }
-                Location base = player.getLocation();
-                for (int strand = 0; strand < 2; strand++) {
-                    double a = t * 0.7 + strand * Math.PI;
-                    Location p = base.clone().add(Math.cos(a) * 0.8, t * 0.2, Math.sin(a) * 0.8);
-                    world.spawnParticle(Particle.DUST, p, 2, 0.02, 0.02, 0.02, 0, dust);
-                    if (evolved) world.spawnParticle(Particle.END_ROD, p, 1, 0, 0, 0, 0);
-                }
-                t++;
-            }
-        }.runTaskTimer(plugin, 0L, 1L);
-    }
-
-    // ---------------------------------------------------------------- passives
-
-    /** Parses "effect:amplifier" from config (e.g. "night_vision:0"). */
-    public PotionEffect passiveFor(AbilityType type) {
-        String raw = plugin.getConfig().getString("passives." + type.id(), "");
-        if (raw == null || raw.isBlank() || raw.equalsIgnoreCase("none")) return null;
-        String[] parts = raw.trim().toLowerCase(Locale.ROOT).split(":");
-        PotionEffectType effect = Registry.EFFECT.get(NamespacedKey.minecraft(parts[0]));
-        if (effect == null) return null;
-        int amp = 0;
-        if (parts.length > 1) {
-            try { amp = Math.max(0, Integer.parseInt(parts[1])); } catch (NumberFormatException ignored) { }
-        }
-        return new PotionEffect(effect, PotionEffect.INFINITE_DURATION, amp, true, false, true);
-    }
-
-    public String passiveName(AbilityType type) {
-        String raw = plugin.getConfig().getString("passives." + type.id(), "");
-        if (raw == null || raw.isBlank() || raw.equalsIgnoreCase("none")) return "None";
-        String[] parts = raw.split(":");
-        StringBuilder out = new StringBuilder();
-        for (String w : parts[0].split("_")) {
-            if (w.isEmpty()) continue;
-            out.append(Character.toUpperCase(w.charAt(0))).append(w.substring(1).toLowerCase(Locale.ROOT)).append(' ');
-        }
-        int amp = 0;
-        if (parts.length > 1) {
-            try { amp = Integer.parseInt(parts[1].trim()); } catch (NumberFormatException ignored) { }
-        }
-        return out.toString().trim() + (amp > 0 ? " " + (amp + 1) : "");
-    }
-
-    /** Runs every second: keeps each equipped ability's passive effect active, removes ones no longer equipped. */
-    public void tickPassives() {
-        boolean enabled = plugin.getConfig().getBoolean("passives.enabled", true);
-        for (Player player : plugin.getServer().getOnlinePlayers()) {
-            UUID id = player.getUniqueId();
-            PlayerData data = plugin.data().get(id);
-            Map<PotionEffectType, PotionEffect> desired = new HashMap<>();
-            if (enabled && data != null && !player.isDead()) {
-                for (int i = 1; i <= PlayerData.SLOTS; i++) {
-                    AbilitySlot s = data.slot(i);
-                    if (s.isEmpty()) continue;
-                    PotionEffect e = passiveFor(s.ability());
-                    if (e == null) continue;
-                    PotionEffect have = desired.get(e.getType());
-                    if (have == null || have.getAmplifier() < e.getAmplifier()) desired.put(e.getType(), e);
-                }
-            }
-            Set<PotionEffectType> previous = appliedPassives.getOrDefault(id, Set.of());
-            for (PotionEffectType type : previous) {
-                if (desired.containsKey(type)) continue;
-                PotionEffect cur = player.getPotionEffect(type);
-                // Only remove what we gave (ambient + infinite) - never a potion the player drank.
-                if (cur != null && cur.isAmbient() && cur.isInfinite()) {
-                    player.removePotionEffect(type);
-                }
-            }
-            for (PotionEffect e : desired.values()) {
-                PotionEffect cur = player.getPotionEffect(e.getType());
-                // Added once (infinite) so Night Vision never flickers and Health Boost hearts aren't reset.
-                boolean apply = cur == null || cur.getAmplifier() < e.getAmplifier()
-                        || (cur.getAmplifier() == e.getAmplifier() && !cur.isInfinite());
-                if (apply) player.addPotionEffect(e);
-            }
-            appliedPassives.put(id, new HashSet<>(desired.keySet()));
-        }
-    }
-
-    public void setShield(UUID uuid, Shield shield) { shields.put(uuid, shield); }
-    public void clearShield(UUID uuid) { shields.remove(uuid); }
-
-    public Shield activeShield(UUID uuid) {
-        Shield s = shields.get(uuid);
-        if (s == null) return null;
-        if (s.expiresAt() < System.currentTimeMillis()) {
-            shields.remove(uuid);
-            return null;
-        }
-        return s;
-    }
-
-    public void addFallImmunity(UUID uuid) { fallImmune.add(uuid); }
-    public void removeFallImmunity(UUID uuid) { fallImmune.remove(uuid); }
-    public boolean isFallImmune(UUID uuid) { return fallImmune.contains(uuid); }
-
     public void clear(UUID uuid) {
-        shields.remove(uuid);
-        fallImmune.remove(uuid);
         readyPinged.remove(uuid);
         hudPausedUntil.remove(uuid);
-        appliedPassives.remove(uuid);
     }
 }

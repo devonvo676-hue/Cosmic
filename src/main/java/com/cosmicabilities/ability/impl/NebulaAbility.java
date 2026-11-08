@@ -1,11 +1,13 @@
 package com.cosmicabilities.ability.impl;
 
 import com.cosmicabilities.CosmicAbilitiesPlugin;
+import com.cosmicabilities.ability.AbilityType;
 import com.cosmicabilities.ability.CosmicAbility;
 import com.cosmicabilities.data.AbilitySlot;
+import com.cosmicabilities.fx.Fx;
 import com.cosmicabilities.util.Targets;
-import org.bukkit.Color;
 import org.bukkit.Location;
+import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.entity.LivingEntity;
@@ -13,72 +15,64 @@ import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
-import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
+/** A drifting, layered gas cloud with twinkling stars. Buffs allies inside, weakens and reveals enemies. */
 public class NebulaAbility extends CosmicAbility {
-    private static final Color[] COLORS = {
-            Color.fromRGB(247, 37, 133), Color.fromRGB(114, 9, 183), Color.fromRGB(76, 201, 240), Color.fromRGB(181, 23, 158)
-    };
+    private static final int[] GAS = {0xf72585, 0xb5179e, 0x7209b7, 0x4cc9f0, 0xffafcc};
 
-    public NebulaAbility(CosmicAbilitiesPlugin plugin) { super(plugin); }
+    public NebulaAbility(CosmicAbilitiesPlugin plugin) { super(plugin, AbilityType.NEBULA); }
 
     @Override
-    public void cast(Player player, AbilitySlot data) {
-        int lvl = data.level();
-        double radius = scale(4, 0.3, lvl);
-        int duration = ticks(scale(4, 0.3, lvl));
-        int speedAmp = data.isPathA() ? 1 : 0;
-        boolean shroud = data.isPathB();
-        boolean veil = data.evolved();
+    public boolean cast(Player player, AbilitySlot slot) {
+        Location center = player.getLocation();
+        World w = center.getWorld();
+        double radius = 6;
+        int duration = 120;
+        boolean veil = bonus(slot);
+        w.playSound(center, Sound.BLOCK_AMETHYST_BLOCK_RESONATE, 1.2f, 0.6f);
+        w.playSound(center, Sound.ENTITY_EVOKER_CAST_SPELL, 0.8f, 1.4f);
 
-        World world = player.getWorld();
-        world.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_CHIME, 1f, 0.7f);
-        world.playSound(player.getLocation(), Sound.ENTITY_EVOKER_CAST_SPELL, 0.6f, 1.6f);
-
-        new BukkitRunnable() {
-            int t = 0;
-            @Override
-            public void run() {
-                if (t >= duration || !player.isOnline() || player.isDead()) { cancel(); return; }
-                Location c = player.getLocation().add(0, 1, 0);
-                ThreadLocalRandom rnd = ThreadLocalRandom.current();
-                for (int i = 0; i < 10; i++) {
-                    double a = rnd.nextDouble(Math.PI * 2);
-                    double r = Math.sqrt(rnd.nextDouble()) * radius;
-                    Location p = c.clone().add(Math.cos(a) * r, rnd.nextDouble(-0.8, 1.2), Math.sin(a) * r);
-                    dust(world, p, COLORS[rnd.nextInt(COLORS.length)], 2.0f, 1, 0.1);
+        every(duration, t -> {
+            ThreadLocalRandom r = ThreadLocalRandom.current();
+            if (t % 2 == 0) {
+                // gas: slowly rotating spiral bands at different heights, big soft particles
+                for (int i = 0; i < 16; i++) {
+                    double band = (i % 4) / 3.0;
+                    double a = t * 0.025 * (i % 2 == 0 ? 1 : -1) + i * 0.8 + r.nextDouble(0.3);
+                    double rr = radius * (0.25 + 0.75 * Math.sqrt(r.nextDouble()));
+                    double y = 0.2 + band * 2.2 + r.nextDouble(-0.2, 0.2);
+                    w.spawnParticle(Particle.DUST, center.getX() + Math.cos(a) * rr, center.getY() + y, center.getZ() + Math.sin(a) * rr,
+                            1, 0.15, 0.1, 0.15, 0, Fx.dust(GAS[(i + t / 10) % GAS.length], (float) r.nextDouble(2.2, 3.4)));
                 }
-                if (t % 10 == 0) {
-                    List<Player> allies = Targets.allies(player, c, radius);
-                    for (Player ally : allies) {
-                        if (!ally.equals(player) && Targets.isEnemy(player, ally) && !sameTeam(player, ally)) {
-                            // Allies = caster + players on the same scoreboard team (or everyone if PvP hits are off).
-                            continue;
-                        }
-                        ally.addPotionEffect(new PotionEffect(PotionEffectType.SPEED, 30, speedAmp, true, true));
-                        if (veil) ally.addPotionEffect(new PotionEffect(PotionEffectType.RESISTANCE, 30, 0, true, true));
-                    }
-                    for (LivingEntity e : Targets.enemies(player, c, radius)) {
-                        if (shroud) {
-                            e.addPotionEffect(new PotionEffect(PotionEffectType.GLOWING, 30, 0, true, false));
-                            e.addPotionEffect(new PotionEffect(PotionEffectType.WEAKNESS, 30, 0, true, false));
-                        }
-                        if (veil && e instanceof Mob mob && mob.getTarget() instanceof Player targeted
-                                && allies.contains(targeted)) {
-                            mob.setTarget(null);
-                        }
-                    }
-                }
-                t++;
             }
-        }.runTaskTimer(plugin, 0L, 1L);
-    }
-
-    private static boolean sameTeam(Player a, Player b) {
-        var team = a.getScoreboard().getEntryTeam(a.getName());
-        return team != null && !com.cosmicabilities.admin.RankTags.isTagTeam(team) && team.hasEntry(b.getName());
+            if (t % 3 == 0) {  // stars that twinkle in and out
+                double a = r.nextDouble(Math.PI * 2), rr = radius * Math.sqrt(r.nextDouble());
+                w.spawnParticle(Particle.END_ROD, center.clone().add(Math.cos(a) * rr, r.nextDouble(0.3, 2.8), Math.sin(a) * rr), 1, 0, 0, 0, 0);
+            }
+            if (t % 20 == 0) {
+                Fx.ring(w, center.clone().add(0, 0.1, 0), radius, 60, t, Fx.dust(0xf72585, 1.0f));
+                if (r.nextBoolean()) w.playSound(center, Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.8f, (float) r.nextDouble(0.6, 1.4));
+            }
+            if (t % 10 == 0 && player.isOnline()) {
+                List<Player> allies = Targets.allies(player, center, radius);
+                for (Player ally : allies) {
+                    ally.addPotionEffect(new PotionEffect(PotionEffectType.SPEED, 30, 0, false, true, true));
+                    ally.addPotionEffect(new PotionEffect(PotionEffectType.REGENERATION, 30, 0, false, true, true));
+                    if (veil) ally.addPotionEffect(new PotionEffect(PotionEffectType.RESISTANCE, 30, 0, false, true, true));
+                }
+                for (LivingEntity e : Targets.enemies(player, center, radius)) {
+                    e.addPotionEffect(new PotionEffect(PotionEffectType.GLOWING, 30, 0, false, false, false));
+                    e.addPotionEffect(new PotionEffect(PotionEffectType.WEAKNESS, 30, 0, false, true, true));
+                    e.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS, 30, 0, false, true, true));
+                    if (t % 20 == 0) hit(player, e, dmg(1.5, slot));
+                    if (veil && e instanceof Mob mob && mob.getTarget() instanceof Player tp && allies.contains(tp)) mob.setTarget(null);
+                }
+            }
+            return true;
+        });
+        return true;
     }
 }
