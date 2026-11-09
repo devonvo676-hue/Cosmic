@@ -302,9 +302,8 @@ public class BanPistol implements Listener {
 
     /** A real dropped magazine falls out of the grip and clatters on the ground (it can't be picked up). */
     private void dropMagazine(Player p) {
-        Vector dir = p.getLocation().getDirection().setY(0);
-        if (dir.lengthSquared() < 0.01) dir = new Vector(0, 0, 1);
-        dir.normalize();
+        Vector look = p.getLocation().getDirection().setY(0);
+        final Vector dir = look.lengthSquared() < 0.01 ? new Vector(0, 0, 1) : look.normalize();
         Location from = p.getLocation().add(0, 0.9, 0).add(dir.clone().multiply(0.45)).add(rightOf(dir).multiply(0.35));
         ItemStack mag = new ItemStack(Material.IRON_INGOT);
         ItemMeta meta = mag.getItemMeta();
