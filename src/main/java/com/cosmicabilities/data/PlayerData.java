@@ -22,6 +22,9 @@ public final class PlayerData {
     private int lostTier = 1;
     private final java.util.Set<UUID> trusted = new java.util.HashSet<>();
     private boolean dirty = false;
+    /** Cosmic cash; -1 = never set (gets the starting amount on first join). */
+    private long cash = -1;
+    private String lastDaily = "";
 
     public PlayerData(UUID uuid) {
         this.uuid = uuid;
@@ -76,4 +79,8 @@ public final class PlayerData {
 
     void markDirty() { dirty = true; }
     public void markClean() { dirty = false; }
+    public long cash() { return cash; }
+    public void setCash(long amount) { cash = amount; dirty = true; }
+    public String lastDaily() { return lastDaily; }
+    public void setLastDaily(String day) { lastDaily = day == null ? "" : day; dirty = true; }
 }

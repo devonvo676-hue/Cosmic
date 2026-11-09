@@ -53,8 +53,16 @@ public class BanPistol implements Listener {
         this.ammoKey = new NamespacedKey(plugin, "ban_pistol_ammo");
     }
 
+    /** admin.op-only (default true): only server operators count as admins - the admin panel and every admin
+     *  tool stay hidden from everyone else, even players given the permission. */
+    public static volatile boolean opOnly = true;
+
     public static boolean isStaff(Player p) {
-        return p.isOp() || p.hasPermission("cosmicabilities.admin");
+        return p.isOp() || (!opOnly && p.hasPermission("cosmicabilities.admin"));
+    }
+
+    public static boolean isAdmin(org.bukkit.command.CommandSender s) {
+        return s instanceof Player p ? isStaff(p) : true;
     }
 
     public ItemStack create() {
@@ -64,7 +72,7 @@ public class BanPistol implements Listener {
         meta.displayName(plugin.mm("<!italic><red><bold>Ban Pistol"));
         meta.lore(List.of(
                 plugin.mm("<!italic><gray>Right-click to aim, left-click to fire."),
-                plugin.mm("<!italic><gray>Q drops the magazine and reloads."),
+                plugin.mm("<!italic><gray>F or Q drops the magazine and reloads."),
                 plugin.mm("<!italic><dark_red>Any player hit is banned."),
                 plugin.mm("<!italic><dark_gray>Admin only - /unban <player> to undo")));
         meta.getPersistentDataContainer().set(key, PersistentDataType.STRING, "1");
@@ -79,7 +87,7 @@ public class BanPistol implements Listener {
 
     // ------------------------------------------------------------------ handling: aim, shoot, rack, reload
 
-    private enum Look { HIP, HIP_SLIDE, NO_MAG, AIM, AIM_SLIDE }
+    private enum Look { HIP, HIP_SLIDE, NO_MAG, AIM, AIM_SLIDE, RECOIL }
 
     /** Per-player gun state (aiming / reloading); ammo lives on the item itself. */
     private static final class GunState {
@@ -118,6 +126,7 @@ public class BanPistol implements Listener {
             case NO_MAG -> "ban_pistol_nomag";
             case AIM -> "ban_pistol_aim";
             case AIM_SLIDE -> "ban_pistol_aim_slide";
+            case RECOIL -> "ban_pistol_recoil";
         };
         ItemMeta meta = hand.getItemMeta();
         meta.setItemModel(new NamespacedKey("cosmic", model));
@@ -253,15 +262,42 @@ public class BanPistol implements Listener {
         st.busyUntil = now + plugin.getConfig().getLong("ban-pistol.cooldown-ms", 300);
         setAmmo(gun, ammo - 1);
         fire(p);
-        // the slide kicks back and springs forward; on the last round it locks back and you reload
-        look(p, Look.AIM_SLIDE);
+        // recoil: the gun kicks up and back with the slide racked, your aim jumps up, then it settles
+        look(p, Look.RECOIL);
+        kick(p);
         p.playSound(p.getLocation(), Sound.BLOCK_IRON_TRAPDOOR_CLOSE, 0.6f, 2f);
+        later(2, () -> { if (state(p).aiming && !state(p).reloading) look(p, Look.AIM_SLIDE); });
         if (ammo - 1 <= 0) {
             later(6, () -> reload(p));
         } else {
-            later(2, () -> { if (state(p).aiming && !state(p).reloading) look(p, Look.AIM); });
+            later(4, () -> { if (state(p).aiming && !state(p).reloading) look(p, Look.AIM); });
         }
         ammoBar(p);
+    }
+
+    /** Camera kick: the view jumps up a little (keeps your position and momentum). */
+    private void kick(Player p) {
+        float amount = (float) plugin.getConfig().getDouble("ban-pistol.recoil-degrees", 3.5);
+        if (amount <= 0) return;
+        org.bukkit.Location to = p.getLocation();
+        to.setPitch(Math.max(-90f, to.getPitch() - amount));
+        to.setYaw(to.getYaw() + (float) ((Math.random() - 0.5) * amount * 0.4));
+        java.util.List<io.papermc.paper.entity.TeleportFlag> flags = new java.util.ArrayList<>();
+        for (io.papermc.paper.entity.TeleportFlag.Relative r : io.papermc.paper.entity.TeleportFlag.Relative.values()) {
+            String n = r.name();
+            if (!n.contains("PITCH") && !n.contains("YAW")) flags.add(r);
+        }
+        flags.add(io.papermc.paper.entity.TeleportFlag.EntityState.RETAIN_PASSENGERS);
+        p.teleport(to, flags.toArray(new io.papermc.paper.entity.TeleportFlag[0]));
+    }
+
+    /** F (swap hands) reloads while holding the gun - Minecraft has no R key for servers to listen to. */
+    @EventHandler(ignoreCancelled = true)
+    public void onSwapHands(org.bukkit.event.player.PlayerSwapHandItemsEvent event) {
+        Player p = event.getPlayer();
+        if (!isPistol(event.getOffHandItem()) || !isStaff(p)) return;
+        event.setCancelled(true);
+        reload(p);
     }
 
     /** Drops the empty magazine (you can see it fall), slaps in a new one and racks the slide. */
@@ -436,7 +472,7 @@ public class BanPistol implements Listener {
         int life = plugin.getConfig().getInt("ban-pistol.wound-seconds", 12) * 20;
         Fx.removeLater(splat, life + 40);
         Vector normal0 = hole.toVector().subtract(centre.toVector());
-        org.bukkit.entity.ItemDisplay wound = Fx.disc(hole, "bullet_hole", 0.3f, normal0.lengthSquared() < 1.0E-4 ? dir.clone().multiply(-1) : normal0);
+        org.bukkit.entity.ItemDisplay wound = Fx.disc(hole, "bullet_hole", 0.42f, normal0.lengthSquared() < 1.0E-4 ? dir.clone().multiply(-1) : normal0);
         wound.setTeleportDuration(1);
         new org.bukkit.scheduler.BukkitRunnable() {
             int t = 0;
@@ -458,7 +494,7 @@ public class BanPistol implements Listener {
                 now.setYaw(0);
                 now.setPitch(0);
                 wound.teleport(now);
-                wound.setTransformation(Fx.discShape(0.3f, n, 0));
+                wound.setTransformation(Fx.discShape(0.42f, n, 0));
                 // blood seeping out and dripping down
                 if (t % 3 == 0) w.spawnParticle(Particle.DUST, now, 1, 0.03, 0.03, 0.03, 0, Fx.dust(0x8a0303, 0.7f));
                 if (t % 5 == 0) w.spawnParticle(Particle.FALLING_DUST, now, 1, 0.02, 0, 0.02, 0, Material.RED_CONCRETE.createBlockData());

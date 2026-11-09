@@ -1,5 +1,5 @@
 # =========================================================
-#  Cosmic Abilities 2.3 - configuration (Paper 1.21.11)
+#  Cosmic Abilities 2.5 - configuration (Paper 1.21.11)
 # =========================================================
 
 # Players can always cast with /ability 1 and /ability 2, and pick their own keys in /keybinds
@@ -66,6 +66,7 @@ magnetosphere:
 
 # Each ability can be upgraded ONCE. The upgrade shortens its cooldown.
 upgrades:
+  require-token: true      # upgrading uses a crafted Upgrade Token (right-click it, pick the ability). false = old fragment cost
   cooldown-reduction: 0.3  # 0.3 = 30% shorter cooldown
   cost:
     fragments: 16          # of the fragment that matches the ability
@@ -94,11 +95,20 @@ recipes:
   cosmic_pickaxe:
     enabled: true
     shape: ["BAB", "ANA", "BAB"]
-    ingredients: {B: DIAMOND_BLOCK, A: AMETHYST_SHARD, N: NETHERITE_PICKAXE}
+    ingredients: {B: DIAMOND_BLOCK, A: "cosmic:cosmic_shard", N: NETHERITE_PICKAXE}
   cosmic_axe:
     enabled: true
     shape: ["BAB", "ANA", "BAB"]
-    ingredients: {B: DIAMOND_BLOCK, A: AMETHYST_SHARD, N: NETHERITE_AXE}
+    ingredients: {B: DIAMOND_BLOCK, A: "cosmic:cosmic_shard", N: NETHERITE_AXE}
+  cosmic_shard:            # makes `amount` shards
+    enabled: true
+    amount: 2
+    shape: ["GAG", "AEA", "GAG"]
+    ingredients: {G: GLOWSTONE_DUST, A: AMETHYST_SHARD, E: ENDER_PEARL}
+  upgrade_token:
+    enabled: true
+    shape: ["SDS", "DND", "SDS"]
+    ingredients: {S: "cosmic:cosmic_shard", D: DIAMOND, N: NETHER_STAR}
 
 # Cosmic Pickaxe (3x3 mining) and Cosmic Axe (whole trees). Shift + right-click toggles them.
 cosmic-tools:
@@ -137,6 +147,7 @@ bossfight:
   wait-timeout-seconds: 300  # cancel the fight if not enough players arrive in time
 
 bosses:
+  custom-models: true      # animated 3D cosmic boss models (needs the resource pack)
   min-players-to-damage: 3 # boss is shielded unless this many players are within fight-radius (1 = off)
   fight-radius: 32
   bossbar-range: 48
@@ -178,6 +189,7 @@ ban-pistol:
   magazine-despawn-seconds: 8
   animal-damage: 8          # mobs/animals hit by the bullet take this much damage and bleed
   wound-seconds: 12         # how long the bullet hole stays on them
+  recoil-degrees: 3.5      # how far your aim kicks up per shot (0 = no camera kick)
 
 # Death messages name the ability: "Steve was killed by Alex's Pulsar"
 death-messages:
@@ -201,3 +213,28 @@ afk:
 
 messages:
   prefix: "<dark_gray>[<gradient:#9b5de5:#00bbf9>Cosmic</gradient><dark_gray>] "
+
+# Only server operators are admins: the admin panel and every admin tool/command are hidden from everyone else.
+admin:
+  op-only: true
+
+# Cosmic cash and coinflips (/cf, /balance, /pay; admins: /eco give|take|set)
+economy:
+  starting-cash: 10000
+  daily-reward: 20000      # given the first time each player logs in each day
+  timezone: America/Denver # when the "day" rolls over
+coinflip:
+  min-bet: 1000
+  max-bet: 0               # 0 = no maximum
+  max-per-player: 3        # open coinflips per player
+  tax: 0.0                 # 0.05 = the house keeps 5% of each pot
+  announce-min: 50000      # pots this big are announced to everyone
+
+# Game chat -> Discord. In Discord: channel settings -> Integrations -> Webhooks -> New Webhook -> Copy Webhook URL,
+# then in game: /discordbridge set <url>. Only public chat is sent (never /msg or other commands).
+discord:
+  enabled: true
+  webhook-url: ""
+  join-leave: true
+  deaths: true
+  server-name: "Minecraft"

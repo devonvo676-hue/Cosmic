@@ -65,9 +65,8 @@ public class AbilitiesPanel implements Listener {
         inv.setItem(38, Icons.button(plugin, Material.EXPERIENCE_BOTTLE, "<aqua><bold>Upgrading",
                 "<gray>Each ability can be upgraded <white>once<gray>:",
                 "<white>" + pct + "% shorter cooldown<gray>.",
-                "<gray>Cost: <white>" + plugin.getConfig().getInt("upgrades.cost.fragments", 16) + " <gray>of its fragment"
-                        + " + <white>" + plugin.getConfig().getInt("upgrades.cost.astral-fragments", 2) + " <gray>Astral",
-                "<yellow>/cosmic upgrade [1|2]"));
+                "<gray>Craft an <white>Upgrade Token <gray>(see <yellow>/recipes<gray>),",
+                "<gray>right-click it and pick the ability."));
         inv.setItem(40, Icons.button(plugin, Material.NETHER_STAR, "<gold><bold>Your two slots",
                 "<white>Slot 1<gray>: the ability the cosmic wheel gave",
                 "<gray>you when you first joined. You keep it -",

@@ -1,12 +1,12 @@
-# Cosmic Abilities 2.4 (Paper 1.21.11)
+# Cosmic Abilities 2.5 (Paper 1.21.11)
 
 ## Build the jar
 Upload this whole folder (including `.github`) to your GitHub repo. GitHub builds it automatically:
 **Actions** tab -> latest run -> **Artifacts** -> **CosmicAbilities** (jar + resource pack).
-Or on a PC with Java 21: `gradlew.bat build` -> `build/libs/CosmicAbilities-2.4.0.jar`.
+Or on a PC with Java 21: `gradlew.bat build` -> `build/libs/CosmicAbilities-2.5.0.jar`.
 
 ## Install
-1. Delete the old CosmicAbilities jar from `plugins/`, add `CosmicAbilities-2.4.0.jar`, restart.
+1. Delete the old CosmicAbilities jar from `plugins/`, add `CosmicAbilities-2.5.0.jar`, restart.
    Your existing config is kept and the new settings are added to it automatically. Player data carries over.
 2. Upload `CosmicAbilities-ResourcePack.zip` (direct download link, e.g. mc-packs.net), put the link and
    its SHA-1 in `config.yml` under `resource-pack`, then `/cosmic admin reload` and rejoin.
@@ -76,3 +76,23 @@ To test alone, set it to 1.
 The slide kicks back on every shot; after 7 shots the magazine drops out and you reload (Q reloads early).
 Any player the bullet hits is banned (staff can't be). Animals and mobs take damage and get a bleeding bullet hole.
 `/unban <player>` lifts a ban. Settings under `ban-pistol` in config.
+
+## Cash and coinflips
+Everyone starts with **$10,000** and gets **$20,000** the first time they log in each day.
+`/cf` opens the coinflip menu: click the sign to put up a bet (min $1,000, no max; the money is held until someone
+accepts or you cancel). Click someone's head to accept - the coin flips between both heads and lands on the winner,
+who takes the pot. `/balance`, `/pay <player> <amount>`; admins `/eco give|take|set <player> <amount>`.
+
+## Discord chat
+Discord: channel settings -> Integrations -> Webhooks -> New Webhook -> Copy Webhook URL.
+In game: `/discordbridge set <url>`. Public chat, joins/leaves and deaths go to that channel; /msg never does.
+
+## Crafting (`/recipes`)
+Cosmic Shard (glowstone, amethyst, ender pearl -> 2 shards), Cosmic Pickaxe / Axe (diamond blocks, Cosmic Shards,
+netherite tool), Upgrade Token (Cosmic Shards, diamonds, nether star), Cosmic Reroll. All editable in
+`/adminpanel` -> Recipes. Hover an item in `/recipes` to see the real items in the crafting grid.
+Upgrading an ability uses an **Upgrade Token**: right-click it and pick the ability.
+
+## Bosses
+Every boss has its own animated 3D model (Void Emperor, Solar Titan, Frost Leviathan, Nebula Dragon, Cosmic
+Destroyer). `bosses.custom-models: false` brings back the plain mobs.

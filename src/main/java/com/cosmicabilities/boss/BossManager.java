@@ -136,6 +136,7 @@ public class BossManager {
         BossBar bar = Bukkit.createBossBar(title, type.barColor, BarStyle.SEGMENTED_10);
         ActiveBoss ab = new ActiveBoss(boss, type, bar);
         active.put(boss.getUniqueId(), ab);
+        plugin.bossRig().attach(boss, type);
         return ab;
     }
 
@@ -329,6 +330,7 @@ public class BossManager {
         int n = 0;
         for (ActiveBoss ab : new ArrayList<>(active.values())) {
             ab.bar.removeAll();
+            plugin.bossRig().detach(ab.entity.getUniqueId());
             if (ab.entity.isValid()) { ab.entity.remove(); n++; }
         }
         active.clear();
@@ -336,6 +338,7 @@ public class BossManager {
     }
 
     public void shutdown() {
+        plugin.bossRig().shutdown();
         for (ActiveBoss ab : active.values()) ab.bar.removeAll();
         active.clear();
     }

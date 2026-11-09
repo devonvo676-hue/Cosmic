@@ -106,6 +106,8 @@ public final class AfkShop implements Listener {
         if ("reroll".equalsIgnoreCase(special)) return plugin.orbs().reroll();
         if ("cosmic_pickaxe".equalsIgnoreCase(special)) return plugin.tools().create(com.cosmicabilities.item.CosmicTools.Tool.PICKAXE);
         if ("cosmic_axe".equalsIgnoreCase(special)) return plugin.tools().create(com.cosmicabilities.item.CosmicTools.Tool.AXE);
+        if ("cosmic_shard".equalsIgnoreCase(special)) return plugin.items().shard(Math.max(1, sec.getInt("amount", 1)));
+        if ("upgrade_token".equalsIgnoreCase(special)) return plugin.items().token(Math.max(1, sec.getInt("amount", 1)));
         int amount = Math.max(1, sec.getInt("amount", 1));
         if (sec.getString("cosmic") != null) {
             CosmicMaterial m = CosmicMaterial.fromId(sec.getString("cosmic"));
@@ -166,8 +168,11 @@ public final class AfkShop implements Listener {
             String craft = craftId(e.display());
             if (craft != null) {
                 lore.clear();
-                List<String> lines = plugin.recipes().owns(p, craft) ? plugin.recipes().details(craft) : plugin.recipes().recipeLore(craft);
-                for (String l : lines) if (!l.startsWith("<yellow>Click")) lore.add(plugin.mm("<!italic>" + l));
+                if (plugin.recipes().owns(p, craft)) {
+                    for (String l : plugin.recipes().details(craft)) lore.add(plugin.mm("<!italic>" + l));
+                } else {
+                    lore.addAll(plugin.recipes().recipeComponents(craft, false));
+                }
             }
             lore.add(Component.empty());
             lore.add(plugin.mm("<!italic><gray>Price: " + (tokens >= e.price() ? "<green>" : "<red>") + e.price() + " AFK tokens"));
@@ -220,6 +225,7 @@ public final class AfkShop implements Listener {
 
     private String craftId(ItemStack it) {
         if (plugin.orbs().isReroll(it)) return com.cosmicabilities.recipe.RecipeManager.REROLL;
+        if (plugin.items().idOf(it) != null) return plugin.items().idOf(it);
         com.cosmicabilities.item.CosmicTools.Tool t = plugin.tools().toolOf(it);
         return t == null ? null : t.id;
     }
@@ -261,6 +267,8 @@ public final class AfkShop implements Listener {
                 "<white>Remove: <gray>shift + right-click an entry.",
                 "<white>Move: <gray>press Q on an entry, then click an empty spot."));
         inv.setItem(50, button(Material.EMERALD, "<green>Open the shop as a player"));
+        inv.setItem(51, button(Material.AMETHYST_SHARD, "<light_purple>Add Cosmic Shard", "<gray>Price 2, change it after"));
+        inv.setItem(52, button(Material.PAPER, "<light_purple>Add Upgrade Token", "<gray>Price 15, change it after"));
         inv.setItem(53, button(Material.REPEATER, "<green>Reload afkshop.yml", "<gray>After editing the file by hand"));
         admin.openInventory(inv);
     }
@@ -297,6 +305,8 @@ public final class AfkShop implements Listener {
                 case 47 -> addSpecial(p, "cosmic_pickaxe", 20);
                 case 48 -> addSpecial(p, "cosmic_axe", 20);
                 case 50 -> open(p);
+                case 51 -> addSpecial(p, "cosmic_shard", 2);
+                case 52 -> addSpecial(p, "upgrade_token", 15);
                 case 53 -> { reload(); openEditor(p); }
                 default -> { }
             }

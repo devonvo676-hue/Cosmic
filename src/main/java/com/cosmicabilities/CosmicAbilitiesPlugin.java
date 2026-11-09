@@ -59,6 +59,11 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
     private com.cosmicabilities.gui.AdminHub adminHub;
     private com.cosmicabilities.gui.MainMenu menu;
     private MiscCommands miscCommands;
+    private com.cosmicabilities.economy.Economy economy;
+    private com.cosmicabilities.economy.Coinflip coinflip;
+    private com.cosmicabilities.discord.DiscordBridge discord;
+    private com.cosmicabilities.item.CosmicItems items;
+    private com.cosmicabilities.boss.BossRig bossRig;
 
     @Override
     public void onEnable() {
@@ -72,6 +77,17 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
             if (buffs.isEmpty()) buffs.add("resistance:1:4");
             getConfig().set("cast-buffs.paradox", buffs);
             getConfig().set("migrations.paradox-no-speed", true);
+        }
+        // 2.5: the Cosmic Pickaxe and Axe are crafted with Cosmic Shards instead of amethyst shards
+        if (!getConfig().getBoolean("migrations.tools-cosmic-shards", false)) {
+            for (String id : new String[]{"cosmic_pickaxe", "cosmic_axe"}) {
+                org.bukkit.configuration.ConfigurationSection ing = getConfig().getConfigurationSection("recipes." + id + ".ingredients");
+                if (ing == null) continue;
+                for (String k : ing.getKeys(false)) {
+                    if ("AMETHYST_SHARD".equalsIgnoreCase(ing.getString(k))) getConfig().set("recipes." + id + ".ingredients." + k, "cosmic:cosmic_shard");
+                }
+            }
+            getConfig().set("migrations.tools-cosmic-shards", true);
         }
         saveConfig();
         CosmicMaterial.init(this);
@@ -87,6 +103,12 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
         holdersPanel = new HoldersPanel(this);
         keybindPanel = new KeybindPanel(this);
         orbs = new AbilityOrbs(this);
+        items = new com.cosmicabilities.item.CosmicItems(this);
+        economy = new com.cosmicabilities.economy.Economy(this);
+        coinflip = new com.cosmicabilities.economy.Coinflip(this);
+        discord = new com.cosmicabilities.discord.DiscordBridge(this);
+        bossRig = new com.cosmicabilities.boss.BossRig(this);
+        com.cosmicabilities.admin.BanPistol.opOnly = getConfig().getBoolean("admin.op-only", true);
         tools = new com.cosmicabilities.item.CosmicTools(this);
         recipes = new com.cosmicabilities.recipe.RecipeManager(this);
         recipes.registerAll();
@@ -105,7 +127,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
 
         for (Listener l : new Listener[]{playerListener, new BossListener(this), new StatusListener(this), combat,
                 new KeybindListener(this), bossFightPanel, holdersPanel, keybindPanel, orbs, configPanel,
-                banPistol, adminPanel, abilitiesPanel, cutscenes, afk, afkShop, tools, recipes, roll, adminHub, menu}) {
+                banPistol, adminPanel, abilitiesPanel, cutscenes, afk, afkShop, tools, recipes, roll, adminHub, menu, items, economy, coinflip, discord}) {
             getServer().getPluginManager().registerEvents(l, this);
         }
 
@@ -115,6 +137,14 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
             cosmic.setExecutor(cmd);
             cosmic.setTabCompleter(cmd);
         }
+        for (String name : new String[]{"balance", "pay", "eco"}) bind(name, economy, economy);
+        bind("cf", coinflip, coinflip);
+        bind("discordbridge", discord, discord);
+        PluginCommand recipesCmd = getCommand("recipes");
+        if (recipesCmd != null) recipesCmd.setExecutor((s, c, l, a) -> {
+            if (s instanceof Player p) menu.openItems(p);
+            return true;
+        });
         MiscCommands misc = new MiscCommands(this);
         miscCommands = misc;
         for (String name : new String[]{"ability", "abilities", "abilityholders", "keybinds", "bossfight", "creload", "cconfig", "trust", "untrust", "adminpanel", "tag", "unban", "announce", "afk", "afkshop"}) {
@@ -135,6 +165,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
         Fx.sweep(true);
         getServer().getScheduler().runTaskTimer(this, () -> Fx.sweep(false), 200L, 200L);
         getServer().getScheduler().runTaskTimer(this, status::tick, 1L, 1L);
+        getServer().getScheduler().runTaskTimer(this, bossRig::tick, 1L, 1L);
         getServer().getScheduler().runTaskTimer(this, engine::tickHud, 20L, 10L);
         getServer().getScheduler().runTaskTimer(this, bossManager::tick, 20L, 20L);
         getServer().getScheduler().runTaskTimer(this, afk::tick, 20L, 20L);
@@ -146,6 +177,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
     @Override
     public void onDisable() {
         if (roll != null) roll.shutdown();
+        if (coinflip != null) coinflip.shutdown();
         if (cutscenes != null) cutscenes.shutdown();
         if (status != null) status.shutdown();
         if (bossManager != null) bossManager.shutdown();
@@ -164,6 +196,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
 
     /** Re-applies settings that aren't read live (recipe on/off, name tag style). */
     public void applyConfig() {
+        com.cosmicabilities.admin.BanPistol.opOnly = getConfig().getBoolean("admin.op-only", true);
         recipes.registerAll();
         for (Player p : getServer().getOnlinePlayers()) rankTags.validate(p);
     }
@@ -200,4 +233,17 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
     public com.cosmicabilities.gui.AdminHub adminHub() { return adminHub; }
     public com.cosmicabilities.gui.MainMenu menu() { return menu; }
     public MiscCommands miscCommands() { return miscCommands; }
+    public com.cosmicabilities.economy.Economy economy() { return economy; }
+    public com.cosmicabilities.economy.Coinflip coinflip() { return coinflip; }
+    public com.cosmicabilities.discord.DiscordBridge discord() { return discord; }
+    public com.cosmicabilities.item.CosmicItems items() { return items; }
+    public com.cosmicabilities.boss.BossRig bossRig() { return bossRig; }
+
+    private void bind(String name, org.bukkit.command.CommandExecutor exec, org.bukkit.command.TabCompleter tab) {
+        PluginCommand c = getCommand(name);
+        if (c != null) {
+            c.setExecutor(exec);
+            c.setTabCompleter(tab);
+        }
+    }
 }

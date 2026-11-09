@@ -39,8 +39,11 @@ import java.util.function.Supplier;
  * Ingredients are Minecraft item names (DIAMOND) or cosmic fragments (cosmic:astral_fragment).
  */
 public class RecipeManager implements Listener {
-    public static final String REROLL = "reroll", PICKAXE = "cosmic_pickaxe", AXE = "cosmic_axe";
-    public static final List<String> IDS = List.of(REROLL, PICKAXE, AXE);
+    public static final String REROLL = "reroll", PICKAXE = "cosmic_pickaxe", AXE = "cosmic_axe",
+            SHARD = "cosmic_shard", TOKEN = "upgrade_token";
+    public static final List<String> IDS = List.of(REROLL, PICKAXE, AXE, SHARD, TOKEN);
+    /** where each recipe sits in the 27-slot menus (picker and /recipes) */
+    public static final int[] MENU_SLOTS = {10, 12, 14, 16, 13};
     private static final int[] GRID = {10, 11, 12, 19, 20, 21, 28, 29, 30};
     private static final int RESULT = 24, ARROW = 23;
 
@@ -77,6 +80,8 @@ public class RecipeManager implements Listener {
         results.put(REROLL, () -> plugin.orbs().reroll());
         results.put(PICKAXE, () -> plugin.tools().create(CosmicTools.Tool.PICKAXE));
         results.put(AXE, () -> plugin.tools().create(CosmicTools.Tool.AXE));
+        results.put(SHARD, () -> plugin.items().shard(Math.max(1, plugin.getConfig().getInt("recipes.cosmic_shard.amount", 2))));
+        results.put(TOKEN, () -> plugin.items().token(1));
         for (String id : IDS) keys.put(id, new NamespacedKey(plugin, id));
     }
 
@@ -88,6 +93,8 @@ public class RecipeManager implements Listener {
         return switch (id) {
             case REROLL -> "<gradient:#f72585:#4cc9f0><bold>Cosmic Reroll";
             case PICKAXE -> CosmicTools.Tool.PICKAXE.name;
+            case SHARD -> "<gradient:#b15cff:#4cc9f0><bold>Cosmic Shard";
+            case TOKEN -> "<gradient:#7b2ff7:#00e5ff><bold>Upgrade Token";
             default -> CosmicTools.Tool.AXE.name;
         };
     }
@@ -141,6 +148,7 @@ public class RecipeManager implements Listener {
     /** "DIAMOND" -> material choice; "cosmic:astral_fragment" -> that exact fragment. */
     private RecipeChoice choice(String v) {
         if (v.toLowerCase(Locale.ROOT).startsWith("cosmic:")) {
+            if (v.substring(7).equalsIgnoreCase(SHARD)) return new RecipeChoice.ExactChoice(plugin.items().shard(1));
             CosmicMaterial m = CosmicMaterial.fromId(v.substring(7));
             return m == null ? null : new RecipeChoice.ExactChoice(m.create(1));
         }
@@ -151,6 +159,7 @@ public class RecipeManager implements Listener {
     private ItemStack display(String v) {
         if (v == null) return null;
         if (v.toLowerCase(Locale.ROOT).startsWith("cosmic:")) {
+            if (v.substring(7).equalsIgnoreCase(SHARD)) return plugin.items().shard(1);
             CosmicMaterial m = CosmicMaterial.fromId(v.substring(7));
             return m == null ? null : m.create(1);
         }
@@ -161,6 +170,7 @@ public class RecipeManager implements Listener {
     public String pretty(String v) {
         if (v == null) return "";
         if (v.toLowerCase(Locale.ROOT).startsWith("cosmic:")) {
+            if (v.substring(7).equalsIgnoreCase(SHARD)) return "Cosmic Shard";
             CosmicMaterial m = CosmicMaterial.fromId(v.substring(7));
             return m == null ? v : m.displayName;
         }
@@ -175,6 +185,7 @@ public class RecipeManager implements Listener {
 
     /** Ingredient name for an item someone put in the editor grid. */
     private String ingredientOf(ItemStack it) {
+        if (plugin.items().isShard(it)) return "cosmic:" + SHARD;
         CosmicMaterial cm = CosmicMaterial.of(it);
         if (cm != null) return "cosmic:" + cm.id();
         return it.getType().name();
@@ -232,6 +243,69 @@ public class RecipeManager implements Listener {
      * Hover text for a craftable item in a menu: the crafting recipe if the player doesn't have one yet,
      * otherwise just what it does.
      */
+    /** A small picture of an ingredient for item lore (the real item texture, drawn inside the text). */
+    private Component sprite(String v) {
+        net.kyori.adventure.key.Key atlas, tex;
+        if (v == null) {
+            atlas = net.kyori.adventure.key.Key.key("minecraft", "blocks");
+            tex = net.kyori.adventure.key.Key.key("minecraft", "block/gray_stained_glass");
+        } else if (v.toLowerCase(Locale.ROOT).startsWith("cosmic:")) {
+            atlas = net.kyori.adventure.key.Key.key("minecraft", "items");
+            tex = net.kyori.adventure.key.Key.key("cosmic", "item/" + v.substring(7).toLowerCase(Locale.ROOT));
+        } else {
+            Material m = Material.matchMaterial(v);
+            String id = m == null ? "barrier" : m.getKey().getKey();
+            boolean block = m != null && m.isBlock();
+            atlas = net.kyori.adventure.key.Key.key("minecraft", block ? "blocks" : "items");
+            tex = net.kyori.adventure.key.Key.key("minecraft", (block ? "block/" : "item/") + id);
+        }
+        return Component.object(net.kyori.adventure.text.object.ObjectContents.sprite(atlas, tex));
+    }
+
+    /**
+     * The recipe as a picture: a 3x3 grid of the real item icons, then what each one is.
+     * Used on hover in menus when the player doesn't own the item yet.
+     */
+    public List<Component> recipeComponents(String id, boolean clickHint) {
+        List<Component> out = new ArrayList<>();
+        if (!enabled(id)) {
+            out.add(plugin.mm("<!italic><red>Not craftable on this server."));
+            return out;
+        }
+        Grid g = grid(id);
+        out.add(plugin.mm("<!italic><gold>Recipe <gray>(crafting table):"));
+        for (int row = 0; row < 3; row++) {
+            Component line = Component.text("  ");
+            for (int col = 0; col < 3; col++) {
+                line = line.append(sprite(g.cells()[row * 3 + col]));
+                if (col < 2) line = line.append(Component.text(" "));
+            }
+            out.add(line);
+        }
+        java.util.LinkedHashSet<String> uniq = new java.util.LinkedHashSet<>();
+        for (String c : g.cells()) if (c != null) uniq.add(c);
+        for (String v : uniq) {
+            int n = 0;
+            for (String c : g.cells()) if (v.equals(c)) n++;
+            out.add(Component.text("  ").append(sprite(v)).append(plugin.mm("<!italic> <white>" + n + "x " + pretty(v))));
+        }
+        if (clickHint) out.add(plugin.mm("<!italic><yellow>Click <gray>to see it in a crafting grid"));
+        return out;
+    }
+
+    /** Cosmic items can't be used as their plain vanilla base item in vanilla recipes. */
+    @EventHandler
+    public void onPrepare(org.bukkit.event.inventory.PrepareItemCraftEvent event) {
+        org.bukkit.inventory.Recipe r = event.getRecipe();
+        if (r instanceof org.bukkit.Keyed k && k.getKey().getNamespace().equals(plugin.getName().toLowerCase(Locale.ROOT))) return;
+        for (ItemStack it : event.getInventory().getMatrix()) {
+            if (it != null && (plugin.items().idOf(it) != null || plugin.tools().toolOf(it) != null)) {
+                event.getInventory().setResult(null);
+                return;
+            }
+        }
+    }
+
     public List<String> recipeLore(String id) {
         List<String> out = new ArrayList<>();
         if (!enabled(id)) {
@@ -263,6 +337,8 @@ public class RecipeManager implements Listener {
             case REROLL -> List.of("<gray>Right-click it to spin the wheel and", "<gray>swap the ability you joined with",
                     "<gray>(slot 1) for a new random one.", "<dark_gray>Announced to the whole server.");
             case PICKAXE -> List.of("<gray>Netherite pickaxe that mines a <white>3x3", "<gray>area. <yellow>Shift + right-click <gray>toggles it.");
+            case SHARD -> List.of("<gray>Crafting material for the Cosmic", "<gray>Pickaxe, Cosmic Axe and Upgrade Tokens.");
+            case TOKEN -> List.of("<gray>Right-click it and choose which of", "<gray>your abilities to upgrade", "<gray>(shorter cooldown).");
             default -> List.of("<gray>Netherite axe that chops down the", "<gray>whole tree. <yellow>Shift + right-click <gray>toggles it.");
         };
     }
@@ -271,6 +347,7 @@ public class RecipeManager implements Listener {
         for (ItemStack it : p.getInventory().getContents()) {
             if (it == null || it.getType().isAir()) continue;
             if (id.equals(REROLL) && plugin.orbs().isReroll(it)) return true;
+            if (id.equals(plugin.items().idOf(it))) return true;
             CosmicTools.Tool t = plugin.tools().toolOf(it);
             if (t != null && t.id.equals(id)) return true;
         }
@@ -283,7 +360,8 @@ public class RecipeManager implements Listener {
         ItemMeta meta = it.getItemMeta();
         List<Component> lore = new ArrayList<>();
         boolean owned = owns(viewer, id);
-        for (String l : owned ? details(id) : recipeLore(id)) lore.add(plugin.mm("<!italic>" + l));
+        if (owned) for (String l : details(id)) lore.add(plugin.mm("<!italic>" + l));
+        else lore.addAll(recipeComponents(id, true));
         if (owned) {
             lore.add(Component.empty());
             lore.add(plugin.mm("<!italic><green>You have one."));
@@ -332,13 +410,13 @@ public class RecipeManager implements Listener {
         h.inventory = inv;
         ItemStack pane = Icons.button(plugin, Material.BLACK_STAINED_GLASS_PANE, " ");
         for (int i = 0; i < 27; i++) inv.setItem(i, pane);
-        int[] at = {11, 13, 15};
+        int[] at = MENU_SLOTS;
         for (int i = 0; i < IDS.size(); i++) {
             String id = IDS.get(i);
             ItemStack it = result(id);
             ItemMeta meta = it.getItemMeta();
             List<Component> lore = new ArrayList<>();
-            for (String l : recipeLore(id)) if (!l.startsWith("<yellow>Click")) lore.add(plugin.mm("<!italic>" + l));
+            lore.addAll(recipeComponents(id, false));
             lore.add(Component.empty());
             lore.add(plugin.mm("<!italic>" + (enabled(id) ? "<green>Craftable" : "<red>Disabled")));
             lore.add(plugin.mm("<!italic><yellow>Left-click <gray>edit the recipe"));
@@ -401,7 +479,8 @@ public class RecipeManager implements Listener {
             if (!BanPistol.isStaff(p)) { p.closeInventory(); return; }
             int raw = event.getRawSlot();
             if (raw == 22) { plugin.adminHub().open(p); return; }
-            int idx = raw == 11 ? 0 : raw == 13 ? 1 : raw == 15 ? 2 : -1;
+            int idx = -1;
+            for (int i = 0; i < MENU_SLOTS.length; i++) if (MENU_SLOTS[i] == raw) idx = i;
             if (idx < 0) return;
             String id = IDS.get(idx);
             ClickType click = event.getClick();

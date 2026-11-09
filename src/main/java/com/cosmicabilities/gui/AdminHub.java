@@ -98,7 +98,7 @@ public class AdminHub implements Listener {
         inv.setItem(H_PLAYERS, Icons.button(plugin, Material.PLAYER_HEAD, "<yellow><bold>Players",
                 "<gray>Set or spin someone's abilities, upgrades,", "<gray>orbs, AFK tokens, cooldowns."));
         inv.setItem(H_GIVE, Icons.button(plugin, Material.CHEST, "<white><bold>Give Items",
-                "<gray>Rerolls, cosmic tools, orbs, fragments,", "<gray>Ban Pistol."));
+                "<gray>Rerolls, cosmic tools, shards, upgrade", "<gray>tokens, orbs, fragments, cash, Ban Pistol."));
         inv.setItem(H_ANNOUNCE, Icons.button(plugin, Material.BELL, "<gold><bold>Announce",
                 "<gray>Type your message in chat next.", "<gray>Use <white>title | subtitle <gray>for two lines."));
         inv.setItem(H_RELOAD, Icons.button(plugin, Material.REPEATER, "<green><bold>Reload",
@@ -129,6 +129,9 @@ public class AdminHub implements Listener {
         put(h, 11, plugin.tools().create(CosmicTools.Tool.PICKAXE), "pickaxe");
         put(h, 12, plugin.tools().create(CosmicTools.Tool.AXE), "axe");
         put(h, 13, plugin.banPistol().create(), "pistol");
+        put(h, 14, plugin.items().shard(16), "shard");
+        put(h, 15, plugin.items().token(1), "token");
+        put(h, 16, plugin.coinflip().coin("<gold><bold>+$100,000", "<gray>Click: give yourself $100,000", "<gray>Shift: $1,000,000"), "cash");
         CosmicMaterial[] mats = CosmicMaterial.values();
         for (int i = 0; i < mats.length; i++) put(h, 19 + i, mats[i].create(16), mats[i]);
         AbilityType[] types = AbilityType.values();
@@ -335,9 +338,17 @@ public class AdminHub implements Listener {
             case "reroll" -> { ItemStack r = plugin.orbs().reroll(); r.setAmount(click.isShiftClick() ? 16 : 1); yield r; }
             case "pickaxe" -> plugin.tools().create(CosmicTools.Tool.PICKAXE);
             case "axe" -> plugin.tools().create(CosmicTools.Tool.AXE);
+            case "shard" -> plugin.items().shard(click.isShiftClick() ? 64 : 16);
+            case "token" -> plugin.items().token(click.isShiftClick() ? 16 : 1);
+            case "cash" -> {
+                long amt = click.isShiftClick() ? 1_000_000 : 100_000;
+                plugin.economy().add(admin.getUniqueId(), amt);
+                admin.sendMessage(plugin.mm(plugin.prefix() + "<gold>+$" + plugin.economy().format(amt)));
+                yield null;
+            }
             default -> plugin.banPistol().create();
         };
-        for (ItemStack left : admin.getInventory().addItem(it).values()) admin.getWorld().dropItemNaturally(admin.getLocation(), left);
+        if (it != null) for (ItemStack left : admin.getInventory().addItem(it).values()) admin.getWorld().dropItemNaturally(admin.getLocation(), left);
         admin.playSound(admin.getLocation(), Sound.ENTITY_ITEM_PICKUP, 1f, 1f);
         if (n > 1 && key instanceof AbilityType) admin.sendMessage(plugin.mm(plugin.prefix() + "<gray>Orbs don't stack - gave one."));
     }

@@ -39,7 +39,7 @@ public class RankTags {
     }
 
     public static boolean canUse(Player p, Rank rank) {
-        return rank == Rank.OWNER ? p.isOp() : (p.isOp() || p.hasPermission("cosmicabilities.admin"));
+        return rank == Rank.OWNER ? p.isOp() : com.cosmicabilities.admin.BanPistol.isStaff(p);
     }
 
     public static boolean isTagTeam(Team team) {

@@ -153,15 +153,49 @@ public class CosmicTools implements Listener {
                 broken++;
                 if (p.getGameMode() != GameMode.CREATIVE && broken % 2 == 0) p.damageItemStack(EquipmentSlot.HAND, 1);
             }
-            if (broken > 0) {
-                Location c = origin.getLocation().add(0.5, 0.5, 0.5);
-                p.getWorld().spawnParticle(Particle.END_ROD, c, 8, 0.6, 0.6, 0.6, 0.02);
-                p.getWorld().spawnParticle(Particle.DUST, c, 10, 0.7, 0.7, 0.7, 0,
-                        new Particle.DustOptions(org.bukkit.Color.fromRGB(tool == Tool.PICKAXE ? 0xb15cff : 0x3ee8ff), 1.2f));
-                if (tool == Tool.AXE) p.getWorld().playSound(c, Sound.BLOCK_WOOD_BREAK, 1f, 0.6f);
-            }
+            if (broken > 0) effect(p, tool, origin, extra);
         } finally {
             busy.remove(p.getUniqueId());
+        }
+    }
+
+    /**
+     * The mining animation: a cosmic shockwave ring bursts off the face you mined and every extra block pops in a
+     * puff of starlight; the axe sends a wave of light racing up the trunk.
+     */
+    private void effect(Player p, Tool tool, Block origin, List<Block> extra) {
+        org.bukkit.World w = p.getWorld();
+        Location c = origin.getLocation().add(0.5, 0.5, 0.5);
+        if (tool == Tool.PICKAXE) {
+            BlockFace face = p.getTargetBlockFace(6);
+            org.bukkit.util.Vector n = face == null ? p.getLocation().getDirection().multiply(-1) : face.getDirection();
+            Location at = c.clone().add(n.clone().multiply(0.52));
+            org.bukkit.entity.ItemDisplay ring = com.cosmicabilities.fx.Fx.disc(at, "ring_purple", 0.4f, n);
+            com.cosmicabilities.fx.Fx.animate(ring, 5, com.cosmicabilities.fx.Fx.discShape(3.6f, n, 1.2f), 1);
+            com.cosmicabilities.fx.Fx.animate(ring, 3, com.cosmicabilities.fx.Fx.discShape(0.05f, n, 2f), 6);
+            com.cosmicabilities.fx.Fx.removeLater(ring, 11);
+            com.cosmicabilities.fx.Fx.flare(at, "flare_cyan", 1.6f, 6);
+            for (Block b : extra) {
+                Location bl = b.getLocation().add(0.5, 0.5, 0.5);
+                w.spawnParticle(Particle.DUST, bl, 4, 0.3, 0.3, 0.3, 0, new Particle.DustOptions(org.bukkit.Color.fromRGB(0xb15cff), 1.1f));
+                w.spawnParticle(Particle.END_ROD, bl, 1, 0.2, 0.2, 0.2, 0.03);
+            }
+            w.playSound(c, Sound.BLOCK_AMETHYST_BLOCK_RESONATE, 0.6f, 1.6f);
+        } else {
+            int i = 0;
+            for (Block b : extra) {
+                Location bl = b.getLocation().add(0.5, 0.5, 0.5);
+                int delay = Math.min(30, i++ / 2);
+                plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+                    w.spawnParticle(Particle.DUST, bl, 5, 0.35, 0.35, 0.35, 0, new Particle.DustOptions(org.bukkit.Color.fromRGB(0x3ee8ff), 1.2f));
+                    w.spawnParticle(Particle.END_ROD, bl, 1, 0.2, 0.2, 0.2, 0.05);
+                }, delay);
+            }
+            org.bukkit.entity.ItemDisplay ring = com.cosmicabilities.fx.Fx.flat(origin.getLocation().add(0.5, 0.05, 0.5), "ring_cyan", 0.4f, 0);
+            com.cosmicabilities.fx.Fx.animate(ring, 6, com.cosmicabilities.fx.Fx.flatShape(4.5f, 1f), 1);
+            com.cosmicabilities.fx.Fx.removeLater(ring, 9);
+            w.playSound(c, Sound.BLOCK_WOOD_BREAK, 1f, 0.6f);
+            w.playSound(c, Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.8f, 1.4f);
         }
     }
 

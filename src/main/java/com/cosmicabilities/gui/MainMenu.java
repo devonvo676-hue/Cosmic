@@ -35,7 +35,7 @@ public class MainMenu implements Listener {
         public @NotNull Inventory getInventory() { return inventory; }
     }
 
-    private static final int[] ITEM_SLOTS = {11, 13, 15};
+    private static final int[] ITEM_SLOTS = RecipeManager.MENU_SLOTS;
     private final CosmicAbilitiesPlugin plugin;
 
     public MainMenu(CosmicAbilitiesPlugin plugin) {
@@ -70,8 +70,9 @@ public class MainMenu implements Listener {
         inv.setItem(33, Icons.button(plugin, Material.SHIELD, "<white><bold>Trusted Players",
                 "<gray>Your abilities never hit them.", "<yellow>/trust <player> <gray>/ <yellow>/untrust <player>", "<gray>Click to list them in chat"));
         inv.setItem(34, Icons.button(plugin, Material.CRAFTING_TABLE, "<gold><bold>Cosmic Items",
-                "<gray>Cosmic Reroll, Pickaxe and Axe:", "<gray>what they do and how to craft them"));
-        if (BanPistol.isStaff(p)) inv.setItem(49, Icons.button(plugin, Material.COMMAND_BLOCK, "<dark_red><bold>Admin Panel"));
+                "<gray>Everything you can craft: Reroll, Pickaxe,", "<gray>Axe, Cosmic Shard, Upgrade Token <dark_gray>(/recipes)"));
+        inv.setItem(40, Icons.button(plugin, Material.SUNFLOWER, "<gold><bold>Coinflip", "<gray>Cash: <yellow>$" + plugin.economy().format(plugin.economy().balance(p.getUniqueId())), "<gray>Bet against other players <dark_gray>(/cf)"));
+        if (BanPistol.isStaff(p) && p.isOp()) inv.setItem(49, Icons.button(plugin, Material.COMMAND_BLOCK, "<dark_red><bold>Admin Panel"));
         else inv.setItem(49, Icons.button(plugin, Material.BARRIER, "<red>Close"));
         p.openInventory(inv);
         p.playSound(p.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.6f, 1.4f);
@@ -88,8 +89,12 @@ public class MainMenu implements Listener {
         extra.add("<gold><bold>SLOT " + slot + "</bold> <gray>- " + AbilityType.tierName(s.tier()) + " <dark_gray>(/ability " + slot + ")");
         extra.add("<gray>Cast with: <white>" + d.bind(slot).label);
         if (!s.upgraded()) {
-            extra.add("<yellow>Click to upgrade <gray>(" + plugin.getConfig().getInt("upgrades.cost.fragments", 16) + " " + t.material.displayName
-                    + "s + " + plugin.getConfig().getInt("upgrades.cost.astral-fragments", 2) + " Astral)");
+            if (plugin.getConfig().getBoolean("upgrades.require-token", true)) {
+                extra.add("<yellow>Click to upgrade <gray>(uses 1 Upgrade Token - craft it, see /recipes)");
+            } else {
+                extra.add("<yellow>Click to upgrade <gray>(" + plugin.getConfig().getInt("upgrades.cost.fragments", 16) + " " + t.material.displayName
+                        + "s + " + plugin.getConfig().getInt("upgrades.cost.astral-fragments", 2) + " Astral)");
+            }
         } else {
             extra.add("<aqua>Upgraded");
         }
@@ -104,7 +109,7 @@ public class MainMenu implements Listener {
 
     public void openItems(Player p) {
         Holder h = new Holder(true);
-        Inventory inv = Bukkit.createInventory(h, 27, plugin.mm("<gold><bold>Cosmic Items <dark_gray>- hover / click"));
+        Inventory inv = Bukkit.createInventory(h, 27, plugin.mm("<gold><bold>Recipes <dark_gray>- hover / click"));
         h.inventory = inv;
         ItemStack pane = Icons.button(plugin, Material.BLACK_STAINED_GLASS_PANE, " ");
         for (int i = 0; i < 27; i++) inv.setItem(i, pane);
@@ -145,6 +150,7 @@ public class MainMenu implements Listener {
             case 32 -> { p.closeInventory(); plugin.afk().toggle(p); }
             case 33 -> { p.closeInventory(); p.performCommand("trust list"); }
             case 34 -> openItems(p);
+            case 40 -> plugin.coinflip().open(p);
             case 49 -> {
                 if (BanPistol.isStaff(p)) plugin.adminHub().open(p); else p.closeInventory();
             }

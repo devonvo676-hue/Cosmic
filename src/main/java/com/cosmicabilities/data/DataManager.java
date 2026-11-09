@@ -60,6 +60,8 @@ public class DataManager {
             }
             data.setAfkTokens(yml.getInt("afk.tokens", 0));
             data.setAfkProgress(yml.getInt("afk.progress", 0));
+            data.setCash(yml.getLong("cash", -1));
+            data.setLastDaily(yml.getString("daily.last", ""));
             data.markClean();
         }
         cache.put(uuid, data);
@@ -100,6 +102,8 @@ public class DataManager {
         yml.set("trusted", trusted);
         yml.set("afk.tokens", data.afkTokens());
         yml.set("afk.progress", data.afkProgress());
+        yml.set("cash", data.cash());
+        yml.set("daily.last", data.lastDaily());
         try {
             yml.save(file(data.uuid()));
             data.markClean();

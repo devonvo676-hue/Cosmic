@@ -49,16 +49,16 @@ public class CosmicCommand implements CommandExecutor, TabCompleter {
             case "menu" -> { if (sender instanceof Player p) plugin.menu().open(p); }
             case "items", "recipes" -> { if (sender instanceof Player p) plugin.menu().openItems(p); }
             case "config" -> {
-                if (!sender.hasPermission("cosmicabilities.admin")) { send(sender, "<red>You don't have permission."); return true; }
+                if (!com.cosmicabilities.admin.BanPistol.isAdmin(sender)) { send(sender, "<red>You don't have permission."); return true; }
                 if (sender instanceof Player p) plugin.configPanel().open(p);
             }
             case "reload" -> {
-                if (!sender.hasPermission("cosmicabilities.admin")) { send(sender, "<red>You don't have permission."); return true; }
+                if (!com.cosmicabilities.admin.BanPistol.isAdmin(sender)) { send(sender, "<red>You don't have permission."); return true; }
                 plugin.reloadAll();
                 send(sender, "<green>Config, AFK shop and recipes reloaded - changes are live.");
             }
             case "admin" -> {
-                if (!sender.hasPermission("cosmicabilities.admin")) { send(sender, "<red>You don't have permission."); return true; }
+                if (!com.cosmicabilities.admin.BanPistol.isAdmin(sender)) { send(sender, "<red>You don't have permission."); return true; }
                 admin(sender, Arrays.copyOfRange(args, 1, args.length));
             }
             default -> help(sender);
@@ -76,7 +76,7 @@ public class CosmicCommand implements CommandExecutor, TabCompleter {
         s.sendMessage(plugin.mm("<yellow>/afk <gray>- earn AFK tokens   <yellow>/afkshop <gray>- spend them"));
         s.sendMessage(plugin.mm("<gray>Slot 1 is the ability you spun when you joined (never lost). Slot 2 is a gained ability:"));
         s.sendMessage(plugin.mm("<gray>bosses drop them, and you drop yours if someone kills you. A <light_purple>Cosmic Reroll <gray>changes your slot 1 ability."));
-        if (s.hasPermission("cosmicabilities.admin")) {
+        if (com.cosmicabilities.admin.BanPistol.isAdmin(s)) {
             s.sendMessage(plugin.mm("<red>/bossfight  /adminpanel  /cconfig  /creload  /announce <msg>  /tag <admin|owner|off>  /unban <player>"));
             s.sendMessage(plugin.mm("<red>/cosmic admin <gray>set | reroll | settier | give | giveorb | givereroll | tokens | boss | resetcd | reload"));
         }
@@ -140,6 +140,10 @@ public class CosmicCommand implements CommandExecutor, TabCompleter {
         AbilityType t = s.ability();
         if (s.upgraded()) { send(player, t.colored() + " <gray>is already upgraded."); return; }
         if (plugin.combat().inCombat(player, 10)) { send(player, "<red>You can't upgrade during combat."); return; }
+        if (plugin.getConfig().getBoolean("upgrades.require-token", true)) {
+            plugin.items().upgradeWithToken(player, slotNumber);
+            return;
+        }
         int frag = fragCost(), astral = astralCost();
         int needOwn = frag + (t.material == CosmicMaterial.ASTRAL_FRAGMENT ? astral : 0);
         if (t.material.count(player) < needOwn) {
@@ -260,7 +264,7 @@ public class CosmicCommand implements CommandExecutor, TabCompleter {
     @Override
     public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String alias, @NotNull String[] args) {
         List<String> options = new ArrayList<>();
-        boolean admin = sender.hasPermission("cosmicabilities.admin");
+        boolean admin = com.cosmicabilities.admin.BanPistol.isAdmin(sender);
         if (args.length == 1) {
             options.addAll(List.of("info", "upgrade", "abilities", "help"));
             if (admin) options.addAll(List.of("admin", "config", "reload"));

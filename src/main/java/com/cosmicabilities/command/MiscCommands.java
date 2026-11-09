@@ -67,7 +67,7 @@ public class MiscCommands implements CommandExecutor, TabCompleter {
                 else plugin.bossFightPanel().open(player);
             }
             case "adminpanel" -> {
-                if (!BanPistol.isStaff(player)) send(player, "<red>Only admins can open the admin panel.");
+                if (!BanPistol.isStaff(player)) send(player, "<red>Unknown command.");
                 else plugin.adminHub().open(player);
             }
             case "tag" -> tag(player, args);

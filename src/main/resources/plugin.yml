@@ -65,6 +65,30 @@ commands:
     description: Wear the [ADMIN] or [OWNER] tag beside your name
     usage: /tag <admin|owner|off>
     aliases: [nametag]
+    permission: cosmicabilities.admin
+  cf:
+    description: Coinflip other players for cash
+    usage: /cf [create <amount>|cancel]
+    aliases: [coinflip]
+  balance:
+    description: See your cash
+    usage: /balance [player]
+    aliases: [bal, money, cash]
+  pay:
+    description: Send cash to another player
+    usage: /pay <player> <amount>
+  eco:
+    description: Give, take or set a player's cash
+    usage: /eco <give|take|set> <player> <amount>
+    permission: cosmicabilities.admin
+  recipes:
+    description: Everything you can craft and how
+    usage: /recipes
+    aliases: [crecipes]
+  discordbridge:
+    description: Link game chat to a Discord channel
+    usage: /discordbridge set <webhook url>
+    permission: cosmicabilities.admin
   afk:
     description: Go AFK and earn AFK tokens
     usage: /afk
@@ -79,3 +103,5 @@ permissions:
   cosmicabilities.admin:
     description: Admin panel, ban pistol, ADMIN tag, /announce, /unban, AFK shop editing and /cosmic admin
     default: op
+    children:
+      cosmicabilities.use: true
