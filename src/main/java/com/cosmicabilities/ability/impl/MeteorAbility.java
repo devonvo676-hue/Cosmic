@@ -94,17 +94,17 @@ public class MeteorAbility extends CosmicAbility {
         float yaw = (float) Math.atan2(dir.getX(), dir.getZ());
         ThreadLocalRandom r = ThreadLocalRandom.current();
         for (int s = -1; s <= 1; s += 2) {
-            for (int k = 0; k < 2; k++) {
-                Location base = loc.clone().add(side.clone().multiply(s * r.nextDouble(1.15, 1.5)))
-                        .add(dir.clone().multiply(-k * 0.85 + r.nextDouble(-0.2, 0.2)));
+            for (int k = 0; k < 3; k++) {
+                Location base = loc.clone().add(side.clone().multiply(s * r.nextDouble(0.75, 1.05)))
+                        .add(dir.clone().multiply(-k * 0.6 + r.nextDouble(-0.15, 0.15)));
                 base.setY(surfaceY);
-                spire(base, yaw, s, top, body, (float) r.nextDouble(1.3, 2.3));
+                spire(base, yaw, s, top, body, (float) r.nextDouble(0.35, 0.7));
             }
         }
         Location trench = loc.clone();
         trench.setY(surfaceY + 0.05);
-        w.spawnParticle(Particle.BLOCK, trench, 22, 0.9, 0.1, 0.9, 0.25, ground.getBlockData());
-        w.spawnParticle(Particle.DUST, trench, 4, 0.8, 0.05, 0.8, 0, Fx.dust(0x06d6a0, 1.0f));
+        w.spawnParticle(Particle.BLOCK, trench, 10, 0.6, 0.05, 0.6, 0.15, ground.getBlockData());
+        w.spawnParticle(Particle.DUST, trench, 2, 0.5, 0.05, 0.5, 0, Fx.dust(0x06d6a0, 0.8f));
         w.spawnParticle(Particle.CAMPFIRE_COSY_SMOKE, trench, 1, 0.5, 0, 0.5, 0.01);
         if (t % 2 == 0) w.playSound(trench, Sound.BLOCK_BASALT_BREAK, 1f, 0.5f);
         if (t % 3 == 0) w.playSound(trench, Sound.BLOCK_DRIPSTONE_BLOCK_BREAK, 0.9f, 0.6f);
@@ -118,18 +118,18 @@ public class MeteorAbility extends CosmicAbility {
         at.setPitch(0);
         Quaternionf lean = new Quaternionf().rotateY(yaw).rotateZ(-side * (float) r.nextDouble(0.18, 0.38))
                 .rotateX((float) r.nextDouble(-0.12, 0.12));
-        float[] widths = {0.95f, 0.72f, 0.46f};
+        float[] widths = {0.3f, 0.22f, 0.13f};
         float[] parts = {0.42f, 0.34f, 0.24f};
         float y = 0;
         for (int i = 0; i < 3; i++) {
             float wdt = widths[i] * (float) r.nextDouble(0.85, 1.15), h = parts[i] * height;
             Quaternionf rot = new Quaternionf(lean).rotateY((float) r.nextDouble(-0.6, 0.6));
             BlockDisplay piece = Fx.block(at, i == 2 ? top : body, new Vector3f(wdt, h, wdt), rot, false);
-            Vector3f sink = new Vector3f(0, -(height + 0.4f), 0);
+            Vector3f sink = new Vector3f(0, -(height + 0.15f), 0);
             piece.setTransformation(pillar(lean, rot, wdt, h, y, sink));
-            Fx.animate(piece, 3, pillar(lean, rot, wdt, h, y, new Vector3f(0, -0.15f, 0)), 1);
-            Fx.animate(piece, 10, pillar(lean, rot, wdt, h, y, sink), 30 + r.nextInt(8));
-            Fx.removeLater(piece, 52);
+            Fx.animate(piece, 3, pillar(lean, rot, wdt, h, y, new Vector3f(0, -0.03f, 0)), 1);
+            Fx.animate(piece, 8, pillar(lean, rot, wdt, h, y, sink), 22 + r.nextInt(8));
+            Fx.removeLater(piece, 40);
             y += h * 0.92f;
         }
     }

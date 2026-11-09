@@ -218,6 +218,16 @@ public class CosmicTools implements Listener {
         return out;
     }
 
+    /** Dropped cosmic gear glows white so it's easy to find (orbs already glow). */
+    @EventHandler(ignoreCancelled = true)
+    public void onItemSpawn(org.bukkit.event.entity.ItemSpawnEvent event) {
+        if (!plugin.getConfig().getBoolean("dropped-item-glow", true)) return;
+        ItemStack it = event.getEntity().getItemStack();
+        if (toolOf(it) != null || plugin.banPistol().isPistol(it) || plugin.orbs().isReroll(it)) {
+            event.getEntity().setGlowing(true);   // no team colour = white outline
+        }
+    }
+
     public static boolean hasTool(Collection<ItemStack> items, CosmicTools tools, Tool tool) {
         for (ItemStack it : items) if (tools.toolOf(it) == tool) return true;
         return false;

@@ -12,10 +12,12 @@ import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.block.Block;
-import org.bukkit.entity.Display;
-import org.bukkit.entity.ItemDisplay;
+import org.bukkit.entity.BlockDisplay;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
+import org.bukkit.util.Transformation;
+import org.joml.Quaternionf;
+import org.joml.Vector3f;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -23,8 +25,8 @@ import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * Frost nova. A freezing shockwave rolls out across the ground, clear ice crystals burst up along it,
- * and anyone caught is sealed inside a crystal prison.
+ * Frost nova. A burst of freezing mist leaves you, the ground frosts over in an expanding ring, crystal clusters
+ * erupt along the wavefront, and anyone caught is sealed in an ice prison.
  */
 public class CryostasisAbility extends CosmicAbility {
     private static final double RADIUS = 6.5;
@@ -44,18 +46,19 @@ public class CryostasisAbility extends CosmicAbility {
         w.playSound(center, Sound.BLOCK_POWDER_SNOW_BREAK, 1.4f, 0.6f);
         w.playSound(center, Sound.ENTITY_PLAYER_HURT_FREEZE, 1.2f, 0.7f);
         w.playSound(center, Sound.BLOCK_AMETHYST_BLOCK_RESONATE, 1f, 0.5f);
-        Fx.flare(center.clone().add(0, 1, 0), "flare_white", 3f, 10);
-        Fx.wave(center, "ring_frost", 0.5f, (float) RADIUS * 2.2f, STEPS);
-        Fx.wave(center.clone().add(0, 0.02, 0), "ring_white", 0.5f, (float) RADIUS * 1.6f, STEPS + 4);
-        w.spawnParticle(Particle.CLOUD, center.clone().add(0, 0.3, 0), 30, 1.2, 0.1, 1.2, 0.04);
+        // cold exhale: a white puff that rolls out low along the ground
         Fx.burst(w, center.clone().add(0, 1, 0), Particle.SNOWFLAKE, 40, 0.25);
+        w.spawnParticle(Particle.CLOUD, center.clone().add(0, 0.3, 0), 30, 1.2, 0.1, 1.2, 0.04);
 
         every(STEPS, t -> {
             double r = RADIUS * (t + 1) / STEPS;
-            Location ring = center.clone().add(0, 0.15, 0);
-            Fx.ring(w, ring, r, (int) (r * 8), t * 0.3, Particle.SNOWFLAKE);
-            Fx.ring(w, ring, Math.max(0.2, r - 0.3), (int) (r * 6), 0.15, Fx.dust(0xcaf0f8, 1.2f));
-            if (t % 2 == 0) crystals(center, r, 4 + t);
+            Location ring = center.clone().add(0, 0.12, 0);
+            // the frost line: bright white leading edge with pale blue behind it
+            Fx.ring(w, ring, r, (int) (r * 10), t * 0.3, Fx.dust(0xffffff, 1.4f));
+            Fx.ring(w, ring, Math.max(0.2, r - 0.45), (int) (r * 6), 0.15, Fx.dust(0x90e0ef, 1.1f));
+            Fx.ring(w, ring.clone().add(0, 0.3, 0), r, (int) (r * 4), t, Particle.SNOWFLAKE);
+            frostGround(center, r, t);
+            if (t % 2 == 0) clusters(center, r, 5 + t);
             if (t % 3 == 0) w.playSound(center, Sound.BLOCK_GLASS_BREAK, 0.7f, 1.6f - t * 0.08f);
             for (LivingEntity e : Targets.enemies(player, center, r + 0.6)) {
                 if (!hitSet.add(e.getUniqueId())) continue;
@@ -67,26 +70,49 @@ public class CryostasisAbility extends CosmicAbility {
         return true;
     }
 
-    /** Clear crystal clusters that burst out of the ground along the wavefront, then crack apart. */
-    private void crystals(Location center, double r, int count) {
-        World w = center.getWorld();
+    /** Frost patches spreading across real ground (visual only - blocks are untouched). */
+    private void frostGround(Location center, double r, int t) {
         ThreadLocalRandom rnd = ThreadLocalRandom.current();
+        int count = (int) (r * 2.2);
         for (int i = 0; i < count; i++) {
-            double a = i * Math.PI * 2 / count + rnd.nextDouble(-0.25, 0.25);
+            double a = rnd.nextDouble(Math.PI * 2);
             Block top = surface(center.clone().add(Math.cos(a) * r, 0, Math.sin(a) * r));
             if (top == null) continue;
-            float h = (float) rnd.nextDouble(1.0, 1.8);
-            Location base = top.getLocation().add(0.5, 1.0 + h / 2, 0.5);
-            ItemDisplay c = Fx.sprite(base, "ice_cluster", 0.05f, Display.Billboard.VERTICAL);
-            Fx.animate(c, 3, Fx.sized(h * 0.8f, h, 0), 1);
-            int life = 26 + rnd.nextInt(14);
-            Fx.animate(c, 4, Fx.sized(0.01f, 0.01f, 0), life);
-            Fx.removeLater(c, life + 6);
-            plugin.getServer().getScheduler().runTaskLater(plugin, () ->
-                    w.spawnParticle(Particle.BLOCK, base, 8, 0.2, h / 3, 0.2, 0, Material.PACKED_ICE.createBlockData()), life);
+            Fx.decal(top.getLocation().add(0.5, 1.005, 0.5), i % 3 == 0 ? Material.PACKED_ICE : Material.SNOW_BLOCK,
+                    (float) rnd.nextDouble(0.6, 1.1), (float) rnd.nextDouble(6.28), 50 + t * 3);
         }
     }
 
+    /** Clusters of 3 crystals erupting from the ground, angled outward, then cracking apart. */
+    private void clusters(Location center, double r, int count) {
+        World w = center.getWorld();
+        ThreadLocalRandom rnd = ThreadLocalRandom.current();
+        for (int i = 0; i < count; i++) {
+            double a = i * Math.PI * 2 / count + rnd.nextDouble(-0.2, 0.2);
+            Block top = surface(center.clone().add(Math.cos(a) * r, 0, Math.sin(a) * r));
+            if (top == null) continue;
+            Location base = top.getLocation().add(0.5, 1.0, 0.5);
+            for (int k = 0; k < 3; k++) {
+                float h = (float) rnd.nextDouble(0.6, 1.5) * (k == 0 ? 1.3f : 0.8f);
+                float wd = (float) rnd.nextDouble(0.16, 0.3);
+                Quaternionf tilt = new Quaternionf().rotateY((float) (-a + (k - 1) * 0.6)).rotateZ((float) -rnd.nextDouble(0.15, 0.55));
+                BlockDisplay spike = Fx.block(base, k == 0 ? Material.BLUE_ICE : Material.PACKED_ICE,
+                        new Vector3f(wd, 0.01f, wd), tilt, false);
+                Fx.animate(spike, 2 + k, new Transformation(new Vector3f(-wd / 2, 0, -wd / 2), tilt,
+                        new Vector3f(wd, h, wd), new Quaternionf()), 1);
+                int life = 30 + rnd.nextInt(12);
+                plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+                    if (!spike.isValid()) return;
+                    w.spawnParticle(Particle.BLOCK, base.clone().add(0, h / 2, 0), 6, 0.1, h / 3, 0.1, 0, Material.PACKED_ICE.createBlockData());
+                    Fx.animate(spike, 4, new Transformation(new Vector3f(0, h * 0.2f, 0), tilt,
+                            new Vector3f(0.01f, 0.01f, 0.01f), new Quaternionf()), 1);
+                    Fx.removeLater(spike, 6);
+                }, life);
+            }
+        }
+    }
+
+    /** The solid block at the surface below a point (searches 3 up / 3 down), or null. */
     private static Block surface(Location at) {
         Block b = at.getBlock();
         for (int dy = 2; dy >= -3; dy--) {

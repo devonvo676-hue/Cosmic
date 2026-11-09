@@ -93,8 +93,24 @@ public final class Targets {
      * shows a floating damage number and hitmarker, and tags both players as in combat.
      * Returns the damage actually dealt after armor.
      */
+    /** Who last hit each entity with which ability, so death messages can name it. */
+    public record AbilityHit(String caster, String ability, long at) {}
+    private static final java.util.Map<java.util.UUID, AbilityHit> lastHits = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** The ability hit that most likely killed this entity (within the last 3 seconds), or null. */
+    public static AbilityHit lastAbilityHit(java.util.UUID victim) {
+        AbilityHit h = lastHits.remove(victim);
+        return h == null || System.currentTimeMillis() - h.at() > 3000 ? null : h;
+    }
+
     public static double damage(Player caster, LivingEntity target, double amount, int rgb) {
+        return damage(caster, target, amount, rgb, null);
+    }
+
+    /** Deals ability damage. `ability` (MiniMessage, e.g. "<#4cc9f0>Pulsar") is used in the death message. */
+    public static double damage(Player caster, LivingEntity target, double amount, int rgb, String ability) {
         if (amount <= 0 || target.isDead()) return 0;
+        if (ability != null) lastHits.put(target.getUniqueId(), new AbilityHit(caster.getName(), ability, System.currentTimeMillis()));
         double mult = plugin.getConfig().getDouble("abilities.damage-multiplier", 1.0);
         double before = target.getHealth() + target.getAbsorptionAmount();
         target.setNoDamageTicks(0);

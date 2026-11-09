@@ -92,6 +92,16 @@ public class PlayerListener implements Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onDeath(PlayerDeathEvent event) {
         Player p = event.getPlayer();
+        // "Steve was killed by Alex's Pulsar" instead of "Steve was killed by magic"
+        com.cosmicabilities.util.Targets.AbilityHit hit = com.cosmicabilities.util.Targets.lastAbilityHit(p.getUniqueId());
+        if (hit != null && plugin.getConfig().getBoolean("death-messages.name-ability", true)) {
+            boolean byAbility = event.getDamageSource().getDamageType() == org.bukkit.damage.DamageType.MAGIC
+                    || System.currentTimeMillis() - hit.at() < 300;
+            if (byAbility) {
+                event.deathMessage(plugin.mm("<white>" + p.getName() + " <gray>was killed by <white>" + hit.caster()
+                        + "<gray>'s " + hit.ability()));
+            }
+        }
         plugin.status().clear(p.getUniqueId());
         String lost = plugin.orbs().handleDeath(p);
         if (lost != null) {

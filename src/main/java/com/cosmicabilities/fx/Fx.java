@@ -307,6 +307,19 @@ public final class Fx {
                 new Vector3f(size, size, size), new Quaternionf());
     }
 
+    /** A flat sprite (ring, disc) facing along `normal` - e.g. a shockwave ring wrapped around a beam. */
+    public static ItemDisplay disc(Location at, String name, float size, Vector normal) {
+        ItemDisplay d = sprite(at, name, size, Display.Billboard.FIXED);
+        d.setTransformation(discShape(size, normal, 0));
+        return d;
+    }
+
+    public static Transformation discShape(float size, Vector normal, float roll) {
+        Vector3f n = new Vector3f((float) normal.getX(), (float) normal.getY(), (float) normal.getZ()).normalize();
+        Quaternionf rot = new Quaternionf().rotationTo(0, 0, 1, n.x, n.y, n.z).rotateZ(roll);
+        return new Transformation(new Vector3f(), rot, new Vector3f(size, size, size), new Quaternionf());
+    }
+
     /** An expanding shockwave ring on the ground: grows from `from` to `to` blocks across, then vanishes. */
     public static void wave(Location ground, String ring, float from, float to, int ticks) {
         Location at = ground.clone().add(0, 0.06, 0);

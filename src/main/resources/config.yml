@@ -48,7 +48,7 @@ cast-buffs:
   nebula: ["speed:1:6", "regeneration:1:6"]
   orbital: ["resistance:1:6"]
   celestial: ["regeneration:2:5", "absorption:1:10"]
-  paradox: ["speed:1:6"]
+  paradox: ["resistance:1:4"]
   entropy: ["strength:1:5"]
   magnetosphere: ["resistance:1:8"]
   umbra: ["speed:2:5"]
@@ -173,7 +173,18 @@ ban-pistol:
   duration-minutes: 0      # 0 = permanent. /unban <player> lifts it.
   exempt-staff: true
   broadcast: true
-  cooldown-ms: 800
+  cooldown-ms: 300          # time between shots
+  magazine-size: 7          # shots before the magazine drops out and you reload (Q reloads early)
+  magazine-despawn-seconds: 8
+  animal-damage: 8          # mobs/animals hit by the bullet take this much damage and bleed
+  wound-seconds: 12         # how long the bullet hole stays on them
+
+# Death messages name the ability: "Steve was killed by Alex's Pulsar"
+death-messages:
+  name-ability: true
+
+# Dropped cosmic items (Cosmic Pickaxe/Axe, Ban Pistol, Cosmic Reroll) glow white so they're easy to spot
+dropped-item-glow: true
 
 tags:
   use-icons: false         # false = "[OWNER] Name" text beside the username

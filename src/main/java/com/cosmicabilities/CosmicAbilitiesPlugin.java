@@ -65,6 +65,14 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
         saveDefaultConfig();
         // add any settings that are new in this version to an existing config.yml (keeps the server's own values)
         getConfig().options().copyDefaults(true);
+        // 2.4: Paradox no longer gives its caster a speed boost (one-time fix for configs saved by older versions)
+        if (!getConfig().getBoolean("migrations.paradox-no-speed", false)) {
+            java.util.List<String> buffs = new java.util.ArrayList<>(getConfig().getStringList("cast-buffs.paradox"));
+            buffs.removeIf(b -> b.trim().toLowerCase(java.util.Locale.ROOT).startsWith("speed"));
+            if (buffs.isEmpty()) buffs.add("resistance:1:4");
+            getConfig().set("cast-buffs.paradox", buffs);
+            getConfig().set("migrations.paradox-no-speed", true);
+        }
         saveConfig();
         CosmicMaterial.init(this);
         Targets.init(this);

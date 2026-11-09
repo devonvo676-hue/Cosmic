@@ -1,12 +1,12 @@
-# Cosmic Abilities 2.3 (Paper 1.21.11)
+# Cosmic Abilities 2.4 (Paper 1.21.11)
 
 ## Build the jar
 Upload this whole folder (including `.github`) to your GitHub repo. GitHub builds it automatically:
 **Actions** tab -> latest run -> **Artifacts** -> **CosmicAbilities** (jar + resource pack).
-Or on a PC with Java 21: `gradlew.bat build` -> `build/libs/CosmicAbilities-2.3.0.jar`.
+Or on a PC with Java 21: `gradlew.bat build` -> `build/libs/CosmicAbilities-2.4.0.jar`.
 
 ## Install
-1. Delete the old CosmicAbilities jar from `plugins/`, add `CosmicAbilities-2.3.0.jar`, restart.
+1. Delete the old CosmicAbilities jar from `plugins/`, add `CosmicAbilities-2.4.0.jar`, restart.
    Your existing config is kept and the new settings are added to it automatically. Player data carries over.
 2. Upload `CosmicAbilities-ResourcePack.zip` (direct download link, e.g. mc-packs.net), put the link and
    its SHA-1 in `config.yml` under `resource-pack`, then `/cosmic admin reload` and rejoin.
@@ -72,5 +72,7 @@ Bosses can only be damaged when `bosses.min-players-to-damage` players (default 
 To test alone, set it to 1.
 
 ## Ban Pistol
-3D pistol, loud gunshot, fires a visible bullet with a red tracer. Anyone it hits is banned
-(staff can't be). `/unban <player>` lifts it. Settings under `ban-pistol` in config.
+3D pistol held in your fist. **Right-click to aim** (sights centred, slight zoom), **left-click to fire** while aiming.
+The slide kicks back on every shot; after 7 shots the magazine drops out and you reload (Q reloads early).
+Any player the bullet hits is banned (staff can't be). Animals and mobs take damage and get a bleeding bullet hole.
+`/unban <player>` lifts a ban. Settings under `ban-pistol` in config.

@@ -113,13 +113,36 @@ public class StatusManager {
         mid.setYaw(0);
         mid.setPitch(0);
         List<org.bukkit.entity.Display> parts = new ArrayList<>();
-        // a tall clear crystal around the body that always faces the viewer, plus frost on the ground
-        org.bukkit.entity.ItemDisplay crystal = Fx.sprite(mid, "ice_prison", 0.05f, org.bukkit.entity.Display.Billboard.VERTICAL);
-        Fx.animate(crystal, 3, Fx.sized(w * 2.0f, h * 1.25f, 0), 1);
-        parts.add(crystal);
-        Location ground = at.clone().add(0, 0.06, 0);
-        org.bukkit.entity.ItemDisplay frost = Fx.flat(ground, "ring_frost", 0.1f, 0);
-        Fx.animate(frost, 5, Fx.flatShape(w * 2.6f, 0.5f), 1);
+        BlockDisplay core = Fx.block(mid, Material.ICE, new Vector3f(0.1f, 0.1f, 0.1f), new Quaternionf(), false);
+        Fx.animate(core, 3, Fx.centred(w, h, w, new Quaternionf().rotateY(0.3f)), 1);
+        parts.add(core);
+        java.util.concurrent.ThreadLocalRandom r = java.util.concurrent.ThreadLocalRandom.current();
+        for (int i = 0; i < 6; i++) {
+            double a = i * Math.PI / 3 + r.nextDouble(-0.3, 0.3);
+            float len = (float) r.nextDouble(0.7, 1.3) * h * 0.6f;
+            Location base = at.clone().add(Math.cos(a) * w * 0.45, r.nextDouble(0.1, h * 0.6), Math.sin(a) * w * 0.45);
+            base.setYaw(0);
+            base.setPitch(0);
+            Quaternionf tilt = new Quaternionf().rotateY((float) -a).rotateZ((float) -r.nextDouble(0.35, 0.9));
+            BlockDisplay shard = Fx.block(base, i % 2 == 0 ? Material.BLUE_ICE : Material.PACKED_ICE,
+                    new Vector3f(0.05f, 0.05f, 0.05f), tilt, false);
+            float sw = (float) r.nextDouble(0.16, 0.28);
+            Fx.animate(shard, 3 + i % 3, new Transformation(new Vector3f(-sw / 2, 0, -sw / 2), tilt,
+                    new Vector3f(sw, len, sw), new Quaternionf()), 1);
+            parts.add(shard);
+        }
+        Location ground = at.clone().add(0, 0.02, 0);
+        ground.setYaw(0);
+        ground.setPitch(0);
+        BlockDisplay frost = ground.getWorld().spawn(ground, BlockDisplay.class, d -> {
+            d.setBlock(Material.SNOW_BLOCK.createBlockData());
+            d.setPersistent(false);
+            d.addScoreboardTag(Fx.TAG);
+            d.setTransformation(new Transformation(new Vector3f(-0.05f, 0, -0.05f), new Quaternionf(), new Vector3f(0.1f, 0.03f, 0.1f), new Quaternionf()));
+        });
+        float fs = w * 2.2f;
+        Fx.animate(frost, 6, new Transformation(new Vector3f(-fs / 2, 0, -fs / 2), new Quaternionf().rotateY(0.4f),
+                new Vector3f(fs, 0.03f, fs), new Quaternionf()), 1);
         parts.add(frost);
         frozen.put(target.getUniqueId(), new Frozen(at, System.currentTimeMillis() + ticks * 50L, parts, caster, shatterDamage));
         target.setVelocity(new Vector());
@@ -146,13 +169,15 @@ public class StatusManager {
         if (f == null) return;
         LivingEntity e = (LivingEntity) plugin.getServer().getEntity(id);
         World w = f.at.getWorld();
-        // the prison shatters: a burst of light and ice shards
+        // the prison cracks apart: shards fly outward and shrink
+        java.util.concurrent.ThreadLocalRandom r = java.util.concurrent.ThreadLocalRandom.current();
         for (org.bukkit.entity.Display part : f.shell) {
             if (!part.isValid()) continue;
-            Fx.animate(part, 4, Fx.sized(0.01f, 0.01f, 0.4f), 1);
-            Fx.removeLater(part, 6);
+            Vector3f out = new Vector3f((float) r.nextDouble(-1.2, 1.2), (float) r.nextDouble(0.3, 1.2), (float) r.nextDouble(-1.2, 1.2));
+            Fx.animate(part, 6, new Transformation(out, new Quaternionf().rotateXYZ((float) r.nextDouble(3), (float) r.nextDouble(3), 0),
+                    new Vector3f(0.05f, 0.05f, 0.05f), new Quaternionf()), 1);
+            Fx.removeLater(part, 8);
         }
-        Fx.flare(f.at.clone().add(0, 1, 0), "flare_white", 2.4f, 8);
         Location c = f.at.clone().add(0, 1, 0);
         w.spawnParticle(Particle.BLOCK, c, 40, 0.35, 0.6, 0.35, 0, Material.ICE.createBlockData());
         w.spawnParticle(Particle.SNOWFLAKE, c, 15, 0.4, 0.6, 0.4, 0.05);
@@ -162,7 +187,7 @@ public class StatusManager {
             e.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS, 60, 1, false, true, true));
             if (e instanceof Mob mob) mob.setAware(true);
             if (shatter && f.shatterDamage > 0 && f.caster.isOnline()) {
-                Targets.damage(f.caster, e, f.shatterDamage, 0x8ecae6);
+                Targets.damage(f.caster, e, f.shatterDamage, 0x8ecae6, com.cosmicabilities.ability.AbilityType.CRYOSTASIS.colored());
             }
         }
     }
@@ -196,6 +221,7 @@ public class StatusManager {
         int forward = (in.isForward() ? 1 : 0) - (in.isBackward() ? 1 : 0);
         int left = (in.isLeft() ? 1 : 0) - (in.isRight() ? 1 : 0);
         if (forward == 0 && left == 0) return;
+        if (p.isGliding() || p.isFlying() || p.isInWater() || p.isInsideVehicle()) return;
         forward = -forward;
         left = -left;
         double yaw = Math.toRadians(p.getLocation().getYaw());
@@ -203,7 +229,15 @@ public class StatusManager {
         double lx = Math.cos(yaw), lz = Math.sin(yaw);    // your left-hand side
         double vx = fx * forward + lx * left, vz = fz * forward + lz * left;
         double len = Math.sqrt(vx * vx + vz * vz);
-        double speed = in.isSprint() ? 0.42 : 0.32;
+        // Move exactly as fast as they normally would, just the other way - never faster.
+        // The client still pushes them toward the key they pressed, so cancel that push too:
+        // on the ground that push is ~45% of their walking speed, in the air it's tiny.
+        org.bukkit.attribute.AttributeInstance attr = p.getAttribute(org.bukkit.attribute.Attribute.MOVEMENT_SPEED);
+        double base = attr == null ? 0.1 : attr.getValue();
+        double normal = base * 2.16 * (in.isSprint() ? 1.3 : 1.0);   // blocks per tick they'd normally cover
+        double push = p.isOnGround() ? normal * 0.454 : (in.isSprint() ? 0.026 : 0.02);
+        double target = p.isOnGround() ? normal : Math.min(normal, 0.24);
+        double speed = Math.min(0.42, target + push);
         p.setVelocity(new Vector(vx / len * speed, p.getVelocity().getY(), vz / len * speed));
     }
 
@@ -328,7 +362,7 @@ public class StatusManager {
     public void reflect(Player owner, LivingEntity attacker, double amount, boolean burn) {
         reflecting = true;
         try {
-            Targets.damage(owner, attacker, amount, 0xffd166);
+            Targets.damage(owner, attacker, amount, 0xffd166, com.cosmicabilities.ability.AbilityType.SOLAR.colored());
         } finally {
             reflecting = false;
         }
@@ -452,7 +486,7 @@ public class StatusManager {
         }
         Player owner = plugin.getServer().getPlayer(f.owner);
         if (f.repel && owner != null && e instanceof LivingEntity le && Targets.isEnemy(owner, le)) {
-            Targets.damage(owner, le, plugin.getConfig().getDouble("magnetosphere.repulsor-shock-damage", 3), 0x48cae4);
+            Targets.damage(owner, le, plugin.getConfig().getDouble("magnetosphere.repulsor-shock-damage", 3), 0x48cae4, com.cosmicabilities.ability.AbilityType.MAGNETOSPHERE.colored());
         }
     }
 
