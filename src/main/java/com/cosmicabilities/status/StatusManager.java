@@ -71,6 +71,10 @@ public class StatusManager {
         public final long until;
         public final UUID owner;
         public final boolean repel;
+        /** Everyone standing inside when it went up: they can't get out until it drops. Everyone else can't get in. */
+        public final Set<UUID> trapped = new java.util.HashSet<>();
+        final List<org.bukkit.entity.ItemDisplay> tiles = new ArrayList<>();
+        final Map<UUID, Long> lastFlash = new java.util.HashMap<>();
         Field(Location center, double radius, long until, UUID owner, boolean repel) {
             this.center = center; this.radius = radius; this.until = until; this.owner = owner; this.repel = repel;
         }
@@ -265,41 +269,35 @@ public class StatusManager {
     }
 
     /**
-     * Umbra's tunnel: as you move underground, the ground splits into two walls of earth on either side of your path
-     * (made of whatever you're burrowing through), leaving a trench down the middle. Visual only.
+     * Umbra's burrow trail: the ground you're tunnelling under crumbles - a dense spray of crumbs of that exact block
+     * kicked up around and behind you, like something moving just under the surface.
      */
-    private void partEarth(Player p, Burrow b) {
+    private void crumbleTrail(Player p, Burrow b) {
         Location feet = p.getLocation();
-        if (b.lastWall == null) { b.lastWall = feet.clone(); return; }
-        if (!b.lastWall.getWorld().equals(feet.getWorld())) { b.lastWall = feet.clone(); return; }
-        Vector move = feet.toVector().subtract(b.lastWall.toVector()).setY(0);
-        if (move.lengthSquared() < 0.8 * 0.8) return;
-        b.lastWall = feet.clone();
         org.bukkit.block.Block ground = feet.clone().subtract(0, 0.2, 0).getBlock();
+        if (!ground.getType().isSolid()) ground = ground.getRelative(0, -1, 0);
         if (!ground.getType().isSolid()) return;
-        Material type = ground.getType();
-        Vector dir = move.normalize();
-        Vector side = new Vector(-dir.getZ(), 0, dir.getX());
-        float yaw = (float) Math.atan2(dir.getX(), dir.getZ());
-        Location surface = ground.getLocation().add(0.5, 1.0, 0.5);
-        surface.setX(feet.getX());
-        surface.setZ(feet.getZ());
-        for (int s = -1; s <= 1; s += 2) {
-            Location at = surface.clone().add(side.clone().multiply(0.75 * s));
-            at.setYaw(0);
-            at.setPitch(0);
-            // a slab of earth: long along the path, tilted away from the trench
-            Quaternionf rot = new Quaternionf().rotateY(yaw).rotateZ(0.45f * s);
-            BlockDisplay wall = Fx.block(at, type, new Vector3f(0.4f, 0.05f, 1.1f), rot, false);
-            Fx.animate(wall, 3, new Transformation(new Vector3f(-0.2f, -0.15f, -0.55f).rotate(rot), new Quaternionf(rot),
-                    new Vector3f(0.4f, 0.85f, 1.1f), new Quaternionf()), 1);
-            Fx.animate(wall, 8, new Transformation(new Vector3f(-0.2f, -0.9f, -0.55f).rotate(rot), new Quaternionf(rot),
-                    new Vector3f(0.4f, 0.85f, 1.1f), new Quaternionf()), 22);
-            Fx.removeLater(wall, 32);
+        org.bukkit.block.data.BlockData data = ground.getBlockData();
+        World w = p.getWorld();
+        Location surface = feet.clone();
+        surface.setY(ground.getY() + 1.02);
+        Vector back = new Vector();
+        if (b.lastWall != null && b.lastWall.getWorld().equals(feet.getWorld())) {
+            back = b.lastWall.toVector().subtract(feet.toVector()).setY(0);
         }
-        // the trench between the walls: earth bursting up and settling
-        p.getWorld().spawnParticle(Particle.BLOCK, surface.clone().add(0, 0.1, 0), 14, 0.2, 0.15, 0.4, 0.15, ground.getBlockData());
-        p.getWorld().spawnParticle(Particle.DUST, surface.clone().add(0, 0.05, 0), 4, 0.15, 0, 0.3, 0, Fx.dust(0xba68ff, 0.9f));
+        b.lastWall = feet.clone();
+        boolean moving = back.lengthSquared() > 0.0025;
+        // crumbs right on top of you, popping up
+        w.spawnParticle(Particle.BLOCK, surface, moving ? 26 : 10, 0.35, 0.04, 0.35, 0.12, data);
+        // a scattered tail of crumbs along the path behind you
+        if (moving) {
+            Vector step = back.clone().normalize();
+            for (int i = 1; i <= 4; i++) {
+                Location tail = surface.clone().add(step.clone().multiply(i * 0.45));
+                w.spawnParticle(Particle.BLOCK, tail, 8, 0.28 + i * 0.05, 0.02, 0.28 + i * 0.05, 0.05, data);
+            }
+            w.spawnParticle(Particle.FALLING_DUST, surface, 3, 0.4, 0.05, 0.4, 0, data);
+        }
     }
 
     /** Hide currently burrowed players from someone who just joined. */
@@ -346,7 +344,52 @@ public class StatusManager {
     // ------------------------------------------------------------------ forcefields (Magnetosphere)
 
     public void addField(Location center, double radius, int ticks, UUID owner, boolean repel) {
-        fields.add(new Field(center, radius, System.currentTimeMillis() + ticks * 50L, owner, repel));
+        Field f = new Field(center, radius, System.currentTimeMillis() + ticks * 50L, owner, repel);
+        for (org.bukkit.entity.Entity e : center.getWorld().getNearbyEntities(center, radius, radius, radius)) {
+            if (e instanceof LivingEntity && !(e instanceof org.bukkit.entity.ArmorStand) && f.contains(e.getLocation())) {
+                f.trapped.add(e.getUniqueId());
+            }
+        }
+        buildDome(f);
+        fields.add(f);
+    }
+
+    /**
+     * The forcefield itself: a real 3D dome of translucent blue hexagon panels (no particles), built band by band
+     * from the ground up. Each panel faces outward and is curved into place on the sphere.
+     */
+    private void buildDome(Field f) {
+        double r = f.radius;
+        boolean hide = plugin.getConfig().getBoolean("magnetosphere.hide-from-caster", false);
+        Player owner = plugin.getServer().getPlayer(f.owner);
+        int bands = 6;
+        double dLat = Math.PI / 2 / bands;
+        for (int k = 0; k < bands; k++) {
+            double lat = (k + 0.5) * dLat;
+            double ring = Math.cos(lat) * r;
+            float h = (float) (r * dLat * 1.05);
+            int n = Math.max(3, (int) Math.round(2 * Math.PI * ring / (h * 1.15)));
+            float w = (float) (2 * Math.PI * ring / n * 1.05);
+            double offset = (k % 2) * Math.PI / n;
+            for (int i = 0; i < n; i++) {
+                double a = offset + i * 2 * Math.PI / n;
+                Location at = f.center.clone().add(Math.cos(a) * ring, Math.sin(lat) * r, Math.sin(a) * ring);
+                Quaternionf rot = new Quaternionf().rotateY((float) (Math.PI / 2 - a)).rotateX((float) -lat);
+                org.bukkit.entity.ItemDisplay tile = Fx.sprite(at, "hex_tile", 0.01f, Display.Billboard.FIXED);
+                tile.setViewRange(2.5f);
+                tile.setTransformation(new Transformation(new Vector3f(), rot, new Vector3f(0.01f, 0.01f, 0.01f), new Quaternionf()));
+                Fx.animate(tile, 5, new Transformation(new Vector3f(), new Quaternionf(rot), new Vector3f(w, h, 1), new Quaternionf()), 1 + k * 2L);
+                if (hide && owner != null) owner.hideEntity(plugin, tile);
+                f.tiles.add(tile);
+            }
+        }
+        // a small cap closes the top
+        Location top = f.center.clone().add(0, r - 0.02, 0);
+        org.bukkit.entity.ItemDisplay cap = Fx.flat(top, "hex_tile", 0.01f, 0);
+        cap.setViewRange(2.5f);
+        Fx.animate(cap, 5, Fx.flatShape((float) (r * dLat * 1.6), 0), 1 + bands * 2L);
+        if (hide && owner != null) owner.hideEntity(plugin, cap);
+        f.tiles.add(cap);
     }
 
     /** The active field covering this location that the player does NOT own, or null. */
@@ -356,6 +399,89 @@ public class StatusManager {
             if (f.until > now && !f.owner.equals(who) && f.contains(l)) return f;
         }
         return null;
+    }
+
+    private boolean bypassBarrier = false;
+
+    /**
+     * The field this move would illegally cross (a trapped entity leaving, or an outsider entering), or null.
+     * The caster can pass freely unless magnetosphere.caster-can-pass is false.
+     */
+    public Field barrierCrossed(org.bukkit.entity.Entity e, Location from, Location to) {
+        if (bypassBarrier || fields.isEmpty()) return null;
+        if (e instanceof Player p && (p.getGameMode() == org.bukkit.GameMode.SPECTATOR || plugin.cutscenes().isPlaying(p.getUniqueId()))) return null;
+        boolean casterPasses = plugin.getConfig().getBoolean("magnetosphere.caster-can-pass", true);
+        long now = System.currentTimeMillis();
+        for (Field f : fields) {
+            if (f.until <= now) continue;
+            if (casterPasses && f.owner.equals(e.getUniqueId())) continue;
+            boolean was = f.contains(from), is = f.contains(to);
+            if (was == is) continue;
+            if (f.trapped.contains(e.getUniqueId()) ? (was && !is) : (!was && is)) return f;
+        }
+        return null;
+    }
+
+    /** Bounce someone off the dome wall: a ripple of light where they hit it, a zap, and a shove back. */
+    public void bounce(Field f, org.bukkit.entity.Entity e, Location hitAt) {
+        boolean wasInside = f.trapped.contains(e.getUniqueId());
+        Vector out = hitAt.toVector().subtract(f.center.toVector());
+        if (out.lengthSquared() < 0.01) out = new Vector(1, 0, 0);
+        out.normalize();
+        Vector push = out.clone().multiply(wasInside ? -0.45 : 0.55);
+        push.setY(wasInside ? 0.05 : 0.25);
+        e.setVelocity(push);
+        long now = System.currentTimeMillis();
+        Long last = f.lastFlash.get(e.getUniqueId());
+        if (last != null && now - last < 400) return;
+        f.lastFlash.put(e.getUniqueId(), now);
+        Location wall = f.center.clone().add(out.clone().multiply(f.radius));
+        wall.setY(Math.max(f.center.getY() + 0.3, Math.min(hitAt.getY() + 1, wall.getY())));
+        Fx.flare(wall, "flare_cyan", 1.8f, 6);
+        org.bukkit.entity.ItemDisplay ripple = Fx.sprite(wall, "hex_tile", 0.3f, Display.Billboard.CENTER);
+        Fx.animate(ripple, 6, Fx.sized(2.2f, 2.2f, 0), 1);
+        Fx.animate(ripple, 4, Fx.sized(0.01f, 0.01f, 0), 7);
+        Fx.removeLater(ripple, 13);
+        wall.getWorld().playSound(wall, Sound.BLOCK_BEACON_POWER_SELECT, 0.8f, 2f);
+        wall.getWorld().playSound(wall, Sound.ITEM_SHIELD_BLOCK, 0.7f, 1.5f);
+        if (e instanceof Player p) {
+            p.sendActionBar(Component.text(wasInside ? "You're trapped inside the Magnetosphere" : "A Magnetosphere forcefield blocks the way",
+                    TextColor.color(0x48cae4)));
+        }
+        Player owner = plugin.getServer().getPlayer(f.owner);
+        if (f.repel && owner != null && e instanceof LivingEntity le && Targets.isEnemy(owner, le)) {
+            Targets.damage(owner, le, plugin.getConfig().getDouble("magnetosphere.repulsor-shock-damage", 3), 0x48cae4);
+        }
+    }
+
+    /** Safety net (knockback, mobs, lag): put anyone on the wrong side of a wall back where they belong. */
+    private void enforceBarrier(Field f) {
+        boolean casterPasses = plugin.getConfig().getBoolean("magnetosphere.caster-can-pass", true);
+        double r = f.radius;
+        for (org.bukkit.entity.Entity e : f.center.getWorld().getNearbyEntities(f.center, r + 2, r + 2, r + 2)) {
+            if (!(e instanceof LivingEntity) || e instanceof org.bukkit.entity.ArmorStand) continue;
+            if (casterPasses && e.getUniqueId().equals(f.owner)) continue;
+            if (e instanceof Player p && (p.getGameMode() == org.bukkit.GameMode.SPECTATOR || plugin.cutscenes().isPlaying(p.getUniqueId()))) continue;
+            Location l = e.getLocation();
+            boolean in = f.contains(l);
+            boolean trapped = f.trapped.contains(e.getUniqueId());
+            if (in == trapped) continue;
+            Vector out = l.toVector().subtract(f.center.toVector());
+            if (out.lengthSquared() < 0.01) out = new Vector(1, 0, 0);
+            out.normalize();
+            Location fix = f.center.clone().add(out.clone().multiply(trapped ? r - 0.8 : r + 0.8));
+            fix.setY(Math.max(fix.getY(), l.getY()));
+            if (trapped) fix.setY(Math.min(fix.getY(), f.center.getY() + Math.sqrt(Math.max(0, r * r - fix.clone().subtract(f.center).toVector().setY(0).lengthSquared())) - 0.3));
+            fix.setYaw(l.getYaw());
+            fix.setPitch(l.getPitch());
+            bypassBarrier = true;
+            try {
+                e.teleport(fix);
+            } finally {
+                bypassBarrier = false;
+            }
+            bounce(f, e, l);
+        }
     }
 
     // ------------------------------------------------------------------ fall immunity
@@ -428,16 +554,11 @@ public class StatusManager {
                 surfacing.add(p);
                 continue;
             }
-            partEarth(p, en.getValue());
-            // "tremor" trail: the only clue other players get
+            // crumbling-ground trail: the only clue other players get
+            crumbleTrail(p, en.getValue());
             Location feet = p.getLocation();
-            org.bukkit.block.Block ground = feet.clone().subtract(0, 0.2, 0).getBlock();
-            if (ground.getType().isSolid()) {
-                p.getWorld().spawnParticle(Particle.BLOCK, feet.clone().add(0, 0.1, 0), 6, 0.3, 0.05, 0.3, 0, ground.getBlockData());
-            }
-            if (tick % 3 == 0) p.getWorld().spawnParticle(Particle.SMOKE, feet.clone().add(0, 0.1, 0), 2, 0.2, 0, 0.2, 0.01);
             if (tick % 10 == 0) p.getWorld().playSound(feet, Sound.BLOCK_GRAVEL_STEP, 0.4f, 0.6f);
-            if (tick % 10 == 0) p.sendActionBar(Component.text("Burrowed - hidden from everyone", TextColor.color(0xba68ff)));
+            if (tick % 10 == 0) p.sendActionBar(Component.text("Burrowed - hidden from everyone", TextColor.color(0xd9b38c)));
         }
         burrowed.keySet().removeIf(id -> plugin.getServer().getPlayer(id) == null);
         for (Player p : surfacing) endBurrow(p, true);
@@ -449,57 +570,8 @@ public class StatusManager {
                 collapse(f);
                 continue;
             }
-            drawField(f);
+            if (tick % 2 == 0) enforceBarrier(f);
             if (f.repel && tick % 2 == 0) repel(f);
-        }
-    }
-
-    /** Dome particles are sent per-player so the caster can optionally be excluded (magnetosphere.hide-from-caster). */
-    private List<Player> fieldViewers(Field f) {
-        boolean hide = plugin.getConfig().getBoolean("magnetosphere.hide-from-caster", false);
-        return Fx.viewers(f.center, 96, hide ? f.owner : null);
-    }
-
-    private void drawField(Field f) {
-        List<Player> viewers = fieldViewers(f);
-        if (viewers.isEmpty()) return;
-        double r = f.radius;
-        Particle.DustOptions edge = Fx.dust(0x48cae4, 1.2f);
-        Particle.DustOptions bright = Fx.dust(0xcaf0f8, 1.4f);
-        double cx = f.center.getX(), cy = f.center.getY(), cz = f.center.getZ();
-        if (tick % 2 == 0) {
-            // rotating meridians (dense enough to read as a solid shell)
-            double spin = tick * 0.03;
-            for (int m = 0; m < 12; m++) {
-                double a = spin + m * Math.PI / 6;
-                for (int k = 1; k <= 12; k++) {
-                    double lat = k / 12.0 * Math.PI / 2;
-                    double rr = Math.cos(lat) * r;
-                    Fx.dustFor(viewers, cx + Math.cos(a) * rr, cy + Math.sin(lat) * r, cz + Math.sin(a) * rr, edge);
-                }
-            }
-        }
-        if (tick % 6 == 0) {
-            // latitude rings + bright ground ring
-            for (double lat : new double[]{0, 0.35, 0.75, 1.15}) {
-                double rr = Math.cos(lat) * r;
-                int pts = (int) (rr * 9) + 4;
-                for (int i = 0; i < pts; i++) {
-                    double a = tick * 0.02 + i * Math.PI * 2 / pts;
-                    Fx.dustFor(viewers, cx + Math.cos(a) * rr, cy + Math.sin(lat) * r, cz + Math.sin(a) * rr, lat == 0 ? bright : edge);
-                }
-            }
-        }
-        if (tick % 4 == 0) {
-            // a hex panel flickers somewhere on the dome
-            java.util.concurrent.ThreadLocalRandom rnd = java.util.concurrent.ThreadLocalRandom.current();
-            double a = rnd.nextDouble(Math.PI * 2), lat = rnd.nextDouble(0.1, 1.2);
-            double px = cx + Math.cos(a) * Math.cos(lat) * r, py = cy + Math.sin(lat) * r, pz = cz + Math.sin(a) * Math.cos(lat) * r;
-            for (int i = 0; i < 6; i++) {
-                double h = i * Math.PI / 3;
-                Fx.dustFor(viewers, px + Math.cos(h) * 0.35, py + Math.sin(h) * 0.35, pz, bright);
-            }
-            Fx.particleFor(viewers, Particle.END_ROD, new Location(f.center.getWorld(), px, py, pz), 2, 0.1);
         }
     }
 
@@ -514,27 +586,23 @@ public class StatusManager {
                     proj.setShooter(owner);
                     e.getWorld().spawnParticle(Particle.ELECTRIC_SPARK, e.getLocation(), 6, 0.1, 0.1, 0.1, 0.1);
                 }
-            } else if (Targets.isEnemy(owner, e)) {
-                Targets.knockAway(f.center, (LivingEntity) e, 0.9, 0.35);
-                e.getWorld().spawnParticle(Particle.ELECTRIC_SPARK, e.getLocation().add(0, 1, 0), 8, 0.3, 0.5, 0.3, 0.1);
             }
         }
     }
 
+    /** The dome dissolves panel by panel from the top down. */
     private void collapse(Field f) {
         World w = f.center.getWorld();
         w.playSound(f.center, Sound.BLOCK_BEACON_DEACTIVATE, 1.2f, 1.2f);
-        List<Player> viewers = fieldViewers(f);
-        for (int i = 0; i < 4; i++) {
-            double y = f.radius * (0.9 - i * 0.25);
-            double rr = Math.sqrt(Math.max(0, f.radius * f.radius - y * y));
-            int pts = (int) (rr * 8) + 4;
-            for (int k = 0; k < pts; k++) {
-                double a = k * Math.PI * 2 / pts;
-                Fx.particleFor(viewers, Particle.END_ROD,
-                        f.center.clone().add(Math.cos(a) * rr, y, Math.sin(a) * rr), 1, 0);
-            }
+        w.playSound(f.center, Sound.BLOCK_AMETHYST_CLUSTER_BREAK, 1f, 0.8f);
+        for (org.bukkit.entity.ItemDisplay tile : f.tiles) {
+            if (!tile.isValid()) continue;
+            Transformation t = tile.getTransformation();
+            long delay = 1 + Math.max(0, Math.round((tile.getLocation().getY() - f.center.getY()) / f.radius * -6 + 6));
+            Fx.animate(tile, 5, new Transformation(t.getTranslation(), t.getLeftRotation(), new Vector3f(0.01f, 0.01f, 0.01f), new Quaternionf()), delay);
+            Fx.removeLater(tile, delay + 7);
         }
+        f.tiles.clear();
     }
 
     /** Clean up everything for a player who logs out. */
@@ -566,6 +634,7 @@ public class StatusManager {
             Player p = plugin.getServer().getPlayer(id);
             if (p != null) endBurrow(p, false);
         }
+        for (Field f : fields) f.tiles.forEach(t -> { if (t.isValid()) t.remove(); });
         fields.clear();
     }
 }

@@ -69,20 +69,15 @@ public class AbilitiesPanel implements Listener {
                         + " + <white>" + plugin.getConfig().getInt("upgrades.cost.astral-fragments", 2) + " <gray>Astral",
                 "<yellow>/cosmic upgrade [1|2]"));
         inv.setItem(40, Icons.button(plugin, Material.NETHER_STAR, "<gold><bold>Your two slots",
-                "<white>Slot 1<gray>: the ability you joined with.",
-                "<gray>You keep it forever.",
-                "<white>Slot 2<gray>: a gained ability (boss orbs, kills).",
+                "<white>Slot 1<gray>: the ability the cosmic wheel gave",
+                "<gray>you when you first joined. You keep it -",
+                "<gray>a <light_purple>Cosmic Reroll <gray>spins it into a new one.",
+                "<white>Slot 2<gray>: a second ability, only from",
+                "<gray>boss fight orbs (or taking it from a kill).",
                 "<red>If someone kills you, it drops for them.",
-                "<light_purple>Cosmic Reroll <gray>gets your lost one back.",
                 "",
                 "<yellow>/keybinds <gray>to choose how you cast."));
-        inv.setItem(42, Icons.button(plugin, Material.ECHO_SHARD, "<light_purple><bold>Cosmic Reroll recipe",
-                "<gray>Diamond  Eye of Ender  Diamond",
-                "<gray>Eye of Ender  <white>Totem<gray>  Eye of Ender",
-                "<gray>Diamond  Eye of Ender  Diamond",
-                "",
-                "<gray>Right-click it to reclaim your lost ability.",
-                "<dark_gray>Announced to the whole server."));
+        inv.setItem(42, plugin.recipes().icon(p, com.cosmicabilities.recipe.RecipeManager.REROLL));
         p.openInventory(inv);
     }
 
@@ -97,7 +92,11 @@ public class AbilitiesPanel implements Listener {
 
     @EventHandler
     public void onClick(InventoryClickEvent event) {
-        if (event.getInventory().getHolder() instanceof Holder) event.setCancelled(true);
+        if (!(event.getInventory().getHolder() instanceof Holder)) return;
+        event.setCancelled(true);
+        if (event.getRawSlot() == 42 && event.getWhoClicked() instanceof Player p) {
+            plugin.recipes().openView(p, com.cosmicabilities.recipe.RecipeManager.REROLL);
+        }
     }
 
     @EventHandler

@@ -68,7 +68,7 @@ public class MiscCommands implements CommandExecutor, TabCompleter {
             }
             case "adminpanel" -> {
                 if (!BanPistol.isStaff(player)) send(player, "<red>Only admins can open the admin panel.");
-                else plugin.adminPanel().open(player);
+                else plugin.adminHub().open(player);
             }
             case "tag" -> tag(player, args);
             case "afk" -> plugin.afk().toggle(player);
@@ -97,7 +97,7 @@ public class MiscCommands implements CommandExecutor, TabCompleter {
     }
 
     /** /announce <text> or /announce <title> | <subtitle>. Shows on every player's screen. */
-    private boolean announce(CommandSender sender, String[] args) {
+    public boolean announce(CommandSender sender, String[] args) {
         if (sender instanceof Player p && !BanPistol.isStaff(p)) { send(sender, "<red>Only admins can announce."); return true; }
         if (args.length == 0) {
             send(sender, "<gray>Usage: <yellow>/announce <message> <gray>or <yellow>/announce <title> | <subtitle>");
@@ -211,8 +211,9 @@ public class MiscCommands implements CommandExecutor, TabCompleter {
                 plugin.afkShop().reload();
                 send(player, "<green>AFK shop reloaded.");
             }
-            default -> send(player, "<gray>/afkshop <dark_gray>| <gray>/afkshop add <price> [slot] <dark_gray>| <gray>/afkshop reload "
-                    + "<dark_gray>| <gray>shift-right-click an item in the shop to remove it");
+            case "edit", "editor" -> plugin.afkShop().openEditor(player);
+            default -> send(player, "<gray>/afkshop <dark_gray>| <gray>/afkshop edit <dark_gray>| <gray>/afkshop add <price> [slot] "
+                    + "<dark_gray>| <gray>/afkshop reload");
         }
     }
 
@@ -242,7 +243,7 @@ public class MiscCommands implements CommandExecutor, TabCompleter {
                 if (RankTags.canUse(p, RankTags.Rank.OWNER)) out.add("owner");
                 out.add("off");
             }
-            case "afkshop" -> { if (BanPistol.isStaff(p)) out.addAll(List.of("add", "reload")); }
+            case "afkshop" -> { if (BanPistol.isStaff(p)) out.addAll(List.of("edit", "add", "reload")); }
             default -> { }
         }
         out.removeIf(o -> !o.toLowerCase(Locale.ROOT).startsWith(args[0].toLowerCase(Locale.ROOT)));

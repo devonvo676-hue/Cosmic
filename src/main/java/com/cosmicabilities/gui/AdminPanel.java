@@ -45,7 +45,7 @@ public class AdminPanel implements Listener {
 
     public void open(Player admin) {
         Holder holder = new Holder();
-        Inventory inv = Bukkit.createInventory(holder, 54, plugin.mm("<dark_red><bold>Cosmic Admin Panel"));
+        Inventory inv = Bukkit.createInventory(holder, 54, plugin.mm("<dark_red><bold>Abilities & Items"));
         holder.inventory = inv;
         render(admin, inv);
         admin.openInventory(inv);
@@ -82,7 +82,7 @@ public class AdminPanel implements Listener {
         inv.setItem(RESET_CD, Icons.button(plugin, Material.CLOCK, "<aqua>Reset my cooldowns"));
         inv.setItem(MAX_TIER, Icons.button(plugin, Material.EXPERIENCE_BOTTLE, "<light_purple>Upgrade my abilities", "<gray>Both slots upgraded"));
         inv.setItem(CLEAR_SLOT2, Icons.button(plugin, Material.LAVA_BUCKET, "<red>Clear slot 2"));
-        inv.setItem(CLOSE, Icons.button(plugin, Material.BARRIER, "<red>Close"));
+        inv.setItem(CLOSE, Icons.button(plugin, Material.ARROW, "<yellow>Back to admin panel"));
     }
 
     private static String slotText(PlayerData d, int slot) {
@@ -174,7 +174,7 @@ public class AdminPanel implements Listener {
                 plugin.data().save(d);
                 render(admin, event.getInventory());
             }
-            case CLOSE -> admin.closeInventory();
+            case CLOSE -> plugin.adminHub().open(admin);
             default -> { }
         }
     }

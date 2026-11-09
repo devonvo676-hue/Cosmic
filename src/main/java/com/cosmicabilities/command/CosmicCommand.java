@@ -34,6 +34,10 @@ public class CosmicCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
+        if (args.length == 0 && sender instanceof Player menuUser) {
+            plugin.menu().open(menuUser);
+            return true;
+        }
         String sub = args.length == 0 ? "info" : args[0].toLowerCase(Locale.ROOT);
         switch (sub) {
             case "info" -> info(sender);
@@ -42,6 +46,8 @@ public class CosmicCommand implements CommandExecutor, TabCompleter {
                 if (sender instanceof Player p) plugin.abilitiesPanel().open(p);
             }
             case "help" -> help(sender);
+            case "menu" -> { if (sender instanceof Player p) plugin.menu().open(p); }
+            case "items", "recipes" -> { if (sender instanceof Player p) plugin.menu().openItems(p); }
             case "config" -> {
                 if (!sender.hasPermission("cosmicabilities.admin")) { send(sender, "<red>You don't have permission."); return true; }
                 if (sender instanceof Player p) plugin.configPanel().open(p);
@@ -65,10 +71,11 @@ public class CosmicCommand implements CommandExecutor, TabCompleter {
         s.sendMessage(plugin.mm("<yellow>/ability 1 <gray>/ <yellow>/ability 2 <gray>- cast (or your keybind, see <yellow>/keybinds<gray>)"));
         s.sendMessage(plugin.mm("<yellow>/abilities <gray>- what every ability does"));
         s.sendMessage(plugin.mm("<yellow>/abilityholders <gray>- who has which ability"));
-        s.sendMessage(plugin.mm("<yellow>/cosmic <gray>- your abilities   <yellow>/cosmic upgrade [1|2] <gray>- shorter cooldown"));
+        s.sendMessage(plugin.mm("<yellow>/cosmic <gray>- the Cosmic menu   <yellow>/cosmic info <gray>- your abilities in chat"));
+        s.sendMessage(plugin.mm("<yellow>/cosmic upgrade [1|2] <gray>- shorter cooldown   <yellow>/cosmic items <gray>- cosmic items + recipes"));
         s.sendMessage(plugin.mm("<yellow>/afk <gray>- earn AFK tokens   <yellow>/afkshop <gray>- spend them"));
-        s.sendMessage(plugin.mm("<gray>Slot 1 is the ability you joined with (never lost). Slot 2 is a gained ability:"));
-        s.sendMessage(plugin.mm("<gray>bosses drop them, and you drop yours if someone kills you. A <light_purple>Cosmic Reroll <gray>gets it back."));
+        s.sendMessage(plugin.mm("<gray>Slot 1 is the ability you spun when you joined (never lost). Slot 2 is a gained ability:"));
+        s.sendMessage(plugin.mm("<gray>bosses drop them, and you drop yours if someone kills you. A <light_purple>Cosmic Reroll <gray>changes your slot 1 ability."));
         if (s.hasPermission("cosmicabilities.admin")) {
             s.sendMessage(plugin.mm("<red>/bossfight  /adminpanel  /cconfig  /creload  /announce <msg>  /tag <admin|owner|off>  /unban <player>"));
             s.sendMessage(plugin.mm("<red>/cosmic admin <gray>set | reroll | settier | give | giveorb | givereroll | tokens | boss | resetcd | reload"));
@@ -105,9 +112,6 @@ public class CosmicCommand implements CommandExecutor, TabCompleter {
                 }
                 player.sendMessage(plugin.mm(line + " <dark_gray>(/cosmic upgrade " + i + ")"));
             }
-        }
-        if (d.lostAbility() != null) {
-            player.sendMessage(plugin.mm("<gray>Lost: " + d.lostAbility().colored() + " <gray>- a <light_purple>Cosmic Reroll <gray>brings it back."));
         }
         player.sendMessage(plugin.mm("<gray>AFK tokens: <aqua>" + d.afkTokens()));
         player.sendMessage(plugin.mm("<dark_gray>━━━━━━━━━━━━━━━━━━━━━━━━━━━━"));
@@ -171,7 +175,7 @@ public class CosmicCommand implements CommandExecutor, TabCompleter {
                 if (type == null) { send(s, "<red>Bosses: " + String.join(", ", ids(BossType.values()))); return; }
                 plugin.bosses().spawn(type, p.getLocation());
             }
-            case "set", "reroll", "settier", "give", "giveorb", "givereroll", "tokens", "resetcd" -> {
+            case "set", "reroll", "spin", "settier", "give", "giveorb", "givereroll", "tokens", "resetcd" -> {
                 if (a.length < 2) { send(s, "<red>Usage: /cosmic admin " + sub + " <player> ..."); return; }
                 adminPlayer(s, sub, a);
             }
@@ -196,11 +200,11 @@ public class CosmicCommand implements CommandExecutor, TabCompleter {
                 send(s, "<green>Set " + name + "'s slot " + slot + " to " + t.displayName + ".");
                 if (online != null) send(online, "<gray>Your slot " + slot + " ability is now " + t.colored());
             }
-            case "reroll" -> {
-                AbilityType t = AbilityType.values()[ThreadLocalRandom.current().nextInt(AbilityType.values().length)];
-                pd.primary().equip(t, 1);
-                send(s, "<green>Rerolled " + name + " into " + t.displayName + " (Tier I).");
-                if (online != null) plugin.playerListener().awaken(online, t);
+            case "reroll", "spin" -> {
+                if (online == null) { send(s, "<red>" + name + " must be online to spin the wheel."); return; }
+                if (plugin.roll().spin(online, com.cosmicabilities.gui.RollPanel.Reason.ADMIN)) send(s, "<green>Spinning the wheel for " + name + ".");
+                else send(s, "<red>" + name + " is already spinning.");
+                return;
             }
             case "settier" -> {
                 int tier = a.length > 2 ? parse(a[2], 1) : 1;

@@ -37,8 +37,8 @@ public class CryostasisAbility extends CosmicAbility {
         Location center = player.getLocation();
         World w = center.getWorld();
         int freezeTicks = bonus(slot) ? 70 : 40;
-        double shatter = bonus(slot) ? dmg(6, slot) : 0;
-        double damage = dmg(4, slot);
+        double shatter = bonus(slot) ? dmg(9, slot) : 0;
+        double damage = dmg(7, slot);
         Set<UUID> hitSet = new HashSet<>();
 
         w.playSound(center, Sound.BLOCK_POWDER_SNOW_BREAK, 1.4f, 0.6f);

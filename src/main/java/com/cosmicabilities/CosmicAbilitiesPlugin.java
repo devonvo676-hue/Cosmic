@@ -53,6 +53,12 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
     private CutsceneManager cutscenes;
     private AfkManager afk;
     private AfkShop afkShop;
+    private com.cosmicabilities.item.CosmicTools tools;
+    private com.cosmicabilities.recipe.RecipeManager recipes;
+    private com.cosmicabilities.gui.RollPanel roll;
+    private com.cosmicabilities.gui.AdminHub adminHub;
+    private com.cosmicabilities.gui.MainMenu menu;
+    private MiscCommands miscCommands;
 
     @Override
     public void onEnable() {
@@ -73,7 +79,12 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
         holdersPanel = new HoldersPanel(this);
         keybindPanel = new KeybindPanel(this);
         orbs = new AbilityOrbs(this);
-        orbs.registerRecipe();
+        tools = new com.cosmicabilities.item.CosmicTools(this);
+        recipes = new com.cosmicabilities.recipe.RecipeManager(this);
+        recipes.registerAll();
+        roll = new com.cosmicabilities.gui.RollPanel(this);
+        adminHub = new com.cosmicabilities.gui.AdminHub(this);
+        menu = new com.cosmicabilities.gui.MainMenu(this);
         configPanel = new ConfigPanel(this);
         playerListener = new PlayerListener(this);
         banPistol = new BanPistol(this);
@@ -86,7 +97,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
 
         for (Listener l : new Listener[]{playerListener, new BossListener(this), new StatusListener(this), combat,
                 new KeybindListener(this), bossFightPanel, holdersPanel, keybindPanel, orbs, configPanel,
-                banPistol, adminPanel, abilitiesPanel, cutscenes, afk, afkShop}) {
+                banPistol, adminPanel, abilitiesPanel, cutscenes, afk, afkShop, tools, recipes, roll, adminHub, menu}) {
             getServer().getPluginManager().registerEvents(l, this);
         }
 
@@ -97,6 +108,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
             cosmic.setTabCompleter(cmd);
         }
         MiscCommands misc = new MiscCommands(this);
+        miscCommands = misc;
         for (String name : new String[]{"ability", "abilities", "abilityholders", "keybinds", "bossfight", "creload", "cconfig", "trust", "untrust", "adminpanel", "tag", "unban", "announce", "afk", "afkshop"}) {
             PluginCommand c = getCommand(name);
             if (c != null) {
@@ -120,11 +132,12 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
         getServer().getScheduler().runTaskTimer(this, afk::tick, 20L, 20L);
         getServer().getScheduler().runTaskTimer(this, dataManager::saveDirty, 6000L, 6000L);
 
-        getLogger().info("Cosmic Abilities 2.0 enabled - 14 abilities, 5 bosses, ability orbs, AFK shop.");
+        getLogger().info("Cosmic Abilities " + getPluginMeta().getVersion() + " enabled - 14 abilities, 5 bosses, ability orbs, cosmic tools, AFK shop.");
     }
 
     @Override
     public void onDisable() {
+        if (roll != null) roll.shutdown();
         if (cutscenes != null) cutscenes.shutdown();
         if (status != null) status.shutdown();
         if (bossManager != null) bossManager.shutdown();
@@ -143,7 +156,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
 
     /** Re-applies settings that aren't read live (recipe on/off, name tag style). */
     public void applyConfig() {
-        orbs.registerRecipe();
+        recipes.registerAll();
         for (Player p : getServer().getOnlinePlayers()) rankTags.validate(p);
     }
 
@@ -173,4 +186,10 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
     public CutsceneManager cutscenes() { return cutscenes; }
     public AfkManager afk() { return afk; }
     public AfkShop afkShop() { return afkShop; }
+    public com.cosmicabilities.item.CosmicTools tools() { return tools; }
+    public com.cosmicabilities.recipe.RecipeManager recipes() { return recipes; }
+    public com.cosmicabilities.gui.RollPanel roll() { return roll; }
+    public com.cosmicabilities.gui.AdminHub adminHub() { return adminHub; }
+    public com.cosmicabilities.gui.MainMenu menu() { return menu; }
+    public MiscCommands miscCommands() { return miscCommands; }
 }

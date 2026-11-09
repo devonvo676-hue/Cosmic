@@ -92,7 +92,7 @@ public class NebulaAbility extends CosmicAbility {
                     e.addPotionEffect(new PotionEffect(PotionEffectType.GLOWING, 30, 0, false, false, false));
                     e.addPotionEffect(new PotionEffect(PotionEffectType.WEAKNESS, 30, 0, false, true, true));
                     e.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS, 30, 0, false, true, true));
-                    if (t % 20 == 0) hit(player, e, dmg(1.5, slot));
+                    if (t % 20 == 0) hit(player, e, dmg(2.5, slot));
                     if (veil && e instanceof Mob mob && mob.getTarget() instanceof Player tp && allies.contains(tp)) mob.setTarget(null);
                 }
             }

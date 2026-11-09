@@ -25,7 +25,7 @@ import org.joml.Vector3f;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * Burrow: you sink into the ground and vanish from every player (only a tremor trail of dust gives you away),
+ * Burrow: you sink into the ground and vanish from every player (only a trail of crumbling ground gives you away),
  * then erupt beneath enemies in a fountain of earth.
  */
 public class UmbraAbility extends CosmicAbility {
@@ -43,15 +43,10 @@ public class UmbraAbility extends CosmicAbility {
         BlockData dirt = ground.getBlockData();
         // sinking: earth swallows the player
         w.spawnParticle(Particle.BLOCK, at.clone().add(0, 0.4, 0), 60, 0.4, 0.4, 0.4, 0, dirt);
-        w.spawnParticle(Particle.LARGE_SMOKE, at, 10, 0.4, 0.1, 0.4, 0.02);
+        w.spawnParticle(Particle.BLOCK, at.clone().add(0, 0.05, 0), 80, 0.9, 0.05, 0.9, 0.2, dirt);
         w.playSound(at, Sound.ENTITY_WARDEN_DIG, 1f, 1.3f);
         w.playSound(at, Sound.BLOCK_GRAVEL_BREAK, 1.2f, 0.6f);
 
-        Location hole = ground.getLocation().add(0.5, 1.005, 0.5);
-        org.bukkit.entity.ItemDisplay pit = Fx.flat(hole.clone().add(0, 0.02, 0), "blackhole", 2.2f, 0.3f);
-        Fx.animate(pit, 10, Fx.flatShape(0.01f, 2f), 40);
-        Fx.removeLater(pit, 52);
-        Fx.wave(hole, "ring_purple", 0.5f, 4f, 8);
         int ticks = bonus(slot) ? 120 : 80;
         status().burrow(player, ticks, () -> erupt(player, slot));
         return true;
@@ -65,15 +60,10 @@ public class UmbraAbility extends CosmicAbility {
         BlockData data = groundType.createBlockData();
         w.spawnParticle(Particle.BLOCK, at.clone().add(0, 0.5, 0), 120, 1.2, 0.8, 1.2, 0.3, data);
         w.spawnParticle(Particle.EXPLOSION, at, 2, 0.5, 0.2, 0.5, 0);
-        w.spawnParticle(Particle.DUST, at.clone().add(0, 0.3, 0), 30, 1.5, 0.2, 1.5, 0, Fx.dust(0xba68ff, 1.4f));
+        w.spawnParticle(Particle.BLOCK, at.clone().add(0, 0.05, 0), 90, 2.2, 0.05, 2.2, 0.15, data);
+        w.spawnParticle(Particle.FALLING_DUST, at.clone().add(0, 1.2, 0), 30, 1.4, 0.6, 1.4, 0, data);
         w.playSound(at, Sound.ENTITY_WARDEN_EMERGE, 0.8f, 1.6f);
         w.playSound(at, Sound.ENTITY_GENERIC_EXPLODE, 1f, 0.7f);
-        Location crater = ground.getLocation().add(0.5, 1.005, 0.5);
-        Fx.wave(crater, "ring_purple", 0.5f, 8f, 9);
-        Fx.flare(at.clone().add(0, 1, 0), "flare_purple", 3.5f, 10);
-        org.bukkit.entity.ItemDisplay scar = Fx.flat(crater.clone().add(0, 0.02, 0), "scorch", 3.5f, 0.7f);
-        Fx.animate(scar, 12, Fx.flatShape(0.01f, 0.7f), 50);
-        Fx.removeLater(scar, 64);
         // chunks of earth thrown into the air
         ThreadLocalRandom r = ThreadLocalRandom.current();
         for (int i = 0; i < 6; i++) {
@@ -89,7 +79,7 @@ public class UmbraAbility extends CosmicAbility {
         }
         double radius = 3.5;
         for (LivingEntity e : Targets.enemies(player, at, radius)) {
-            hit(player, e, dmg(bonus(slot) ? 10 : 7, slot));
+            hit(player, e, dmg(bonus(slot) ? 14 : 11, slot));
             e.setVelocity(e.getVelocity().setY(0.85));
             if (bonus(slot)) e.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, 40, 0, false, true, true));
         }

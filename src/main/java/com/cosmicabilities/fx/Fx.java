@@ -300,6 +300,12 @@ public final class Fx {
                 new Vector3f(size, size, size), new Quaternionf());
     }
 
+    /** A flat disk turned to face `yaw`, tilted `tilt` radians and turned `spin` radians around its own axis. */
+    public static Transformation disk(float size, float yaw, float tilt, float spin) {
+        return new Transformation(new Vector3f(), new Quaternionf().rotateY(yaw).rotateX(tilt).rotateY(spin).rotateX((float) (-Math.PI / 2)),
+                new Vector3f(size, size, size), new Quaternionf());
+    }
+
     /** An expanding shockwave ring on the ground: grows from `from` to `to` blocks across, then vanishes. */
     public static void wave(Location ground, String ring, float from, float to, int ticks) {
         Location at = ground.clone().add(0, 0.06, 0);

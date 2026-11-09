@@ -46,9 +46,9 @@ public class VoidwalkerAbility extends CosmicAbility {
         w.playSound(dest, Sound.ENTITY_ENDERMAN_TELEPORT, 1f, 1.4f);
         w.spawnParticle(Particle.REVERSE_PORTAL, dest.clone().add(0, 1, 0), 40, 0.3, 0.6, 0.3, 0.05);
 
-        rift(player, from.clone().add(0, 1, 0), dmg(7, slot), 12);
+        rift(player, from.clone().add(0, 1, 0), dmg(11, slot), 12);
         if (bonus(slot)) {
-            rift(player, dest.clone().add(0, 1, 0), dmg(5, slot), 6);
+            rift(player, dest.clone().add(0, 1, 0), dmg(8, slot), 6);
             player.addPotionEffect(new PotionEffect(PotionEffectType.RESISTANCE, 30, 1, false, true, true));
         }
         return true;

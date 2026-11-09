@@ -10,13 +10,13 @@ import java.util.Locale;
  */
 public enum AbilityType {
     SINGULARITY("Singularity", "Control / Damage", "#9b5de5", CosmicMaterial.VOID_SHARD, 18,
-            "Opens a black hole where you aim. It drags enemies into its core, crushing and slowing them.",
+            "Opens a 3D black hole with a spinning accretion disk where you aim. It drags enemies into its core, crushing and slowing them.",
             "Event Horizon", "The black hole collapses at the end, then detonates and hurls everyone out."),
     SUPERNOVA("Supernova", "Burst Damage", "#ff8c42", CosmicMaterial.SOLAR_CORE, 15,
             "Charge for a moment, then explode. Heavy damage, knockback and burning around you.",
             "Stellar Cataclysm", "A second, wider aftershock goes off a second later."),
     METEOR("Meteor", "Dash / Offense", "#06d6a0", CosmicMaterial.ASTRAL_FRAGMENT, 10,
-            "Dash forward like a comet, slamming through every enemy in your path.",
+            "Dash forward like a comet, slamming through every enemy in your path. Rock walls burst out of the ground on both sides.",
             "Comet Breaker", "The dash ends in a crater slam that sets enemies on fire."),
     SOLAR("Solar", "Defense / Reflect", "#ffd166", CosmicMaterial.SOLAR_CORE, 20,
             "A solar shield that cuts incoming damage and reflects half of it back at your attacker.",
@@ -46,10 +46,10 @@ public enum AbilityType {
             "A chaos pulse that scrambles enemy players' hotbars and disorients them.",
             "Total Collapse", "Also knocks the item out of their offhand (goodbye totem)."),
     MAGNETOSPHERE("Magnetosphere", "Forcefield", "#48cae4", CosmicMaterial.FROZEN_STARDUST, 40,
-            "Raises a forcefield dome for 15 seconds. Nobody else can place blocks, cobwebs or liquids inside.",
-            "Repulsor Field", "The dome also pushes enemies out and deflects their projectiles."),
+            "Raises a hexagon forcefield dome for 15 seconds. Anyone inside is trapped, anyone outside is kept out, and nobody else can place blocks, cobwebs or liquids inside.",
+            "Repulsor Field", "Enemy projectiles bounce off and enemies who hit the wall get shocked."),
     UMBRA("Umbra", "Stealth / Ambush", "#ba68ff", CosmicMaterial.VOID_SHARD, 20,
-            "Burrow underground. You're hidden from everyone and move faster, then erupt beneath your enemies.",
+            "Burrow underground, hidden from everyone - only a trail of crumbling ground gives you away - then erupt beneath your enemies.",
             "Shadow Eruption", "Burrow lasts longer and the eruption hits harder and blinds.");
 
     public final String displayName;

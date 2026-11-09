@@ -61,7 +61,7 @@ public class ParadoxAbility extends CosmicAbility {
             }
             for (LivingEntity e : Targets.enemies(player, center, r + 0.5)) {
                 if (!hitSet.add(e.getUniqueId())) continue;
-                hit(player, e, dmg(4, slot));
+                hit(player, e, dmg(7, slot));
                 if (e instanceof Player victim) {
                     status().invert(victim, invertTicks);
                     victim.showTitle(Title.title(Component.text("⇄", TextColor.color(0x00f5d4)),

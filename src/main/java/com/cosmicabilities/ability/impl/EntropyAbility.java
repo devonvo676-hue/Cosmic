@@ -58,7 +58,7 @@ public class EntropyAbility extends CosmicAbility {
             return true;
         });
         for (LivingEntity e : Targets.enemies(player, c, radius)) {
-            hit(player, e, dmg(5, slot));
+            hit(player, e, dmg(8, slot));
             Fx.flare(e.getLocation().add(0, 1.1, 0), "flare_white", 1.8f, 8);
             glitch(e.getLocation().add(0, 1, 0));
             if (e instanceof Player victim) {

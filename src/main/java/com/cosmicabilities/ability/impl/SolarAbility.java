@@ -83,7 +83,7 @@ public class SolarAbility extends CosmicAbility {
         Fx.wave(player.getLocation(), "ring_orange", 0.5f, (float) r * 2.2f, 8);
         Fx.ring(w, c.clone().subtract(0, 0.6, 0), r * 0.7, 30, 0.2, Particle.FLAME);
         for (LivingEntity e : Targets.enemies(player, c, r)) {
-            hit(player, e, dmg(5, slot));
+            hit(player, e, dmg(8, slot));
             Targets.knockAway(c, e, 0.6, 0.35);
             if (bonus(slot)) e.setFireTicks(Math.max(e.getFireTicks(), 80));
         }

@@ -35,9 +35,17 @@ import java.util.Map;
 
 /**
  * AFK token shop. Everything sold is defined in plugins/CosmicAbilities/afkshop.yml.
- * Admins can also add the item in their hand with /afkshop add &lt;price&gt;, and shift-right-click an entry to remove it.
+ * Admins edit it in game from /adminpanel -> AFK Shop Editor (or /afkshop edit), or hold an item and /afkshop add &lt;price&gt;.
  */
 public final class AfkShop implements Listener {
+    /** The admin editor: same layout as the shop, but clicks edit instead of buy. */
+    public static final class Editor implements InventoryHolder {
+        private Inventory inventory;
+        final Map<Integer, String> slots = new HashMap<>();
+        @Override
+        public @NotNull Inventory getInventory() { return inventory; }
+    }
+
     public static final class Holder implements InventoryHolder {
         private Inventory inventory;
         final Map<Integer, String> slots = new HashMap<>();
@@ -94,7 +102,10 @@ public final class AfkShop implements Listener {
     /** Supports: item (saved via /afkshop add), cosmic: fragment, or material + amount + name + lore + enchantments. */
     private ItemStack buildItem(ConfigurationSection sec) {
         if (sec.isItemStack("item")) return sec.getItemStack("item");
-        if ("reroll".equalsIgnoreCase(sec.getString("special"))) return plugin.orbs().reroll();
+        String special = sec.getString("special");
+        if ("reroll".equalsIgnoreCase(special)) return plugin.orbs().reroll();
+        if ("cosmic_pickaxe".equalsIgnoreCase(special)) return plugin.tools().create(com.cosmicabilities.item.CosmicTools.Tool.PICKAXE);
+        if ("cosmic_axe".equalsIgnoreCase(special)) return plugin.tools().create(com.cosmicabilities.item.CosmicTools.Tool.AXE);
         int amount = Math.max(1, sec.getInt("amount", 1));
         if (sec.getString("cosmic") != null) {
             CosmicMaterial m = CosmicMaterial.fromId(sec.getString("cosmic"));
@@ -152,10 +163,16 @@ public final class AfkShop implements Listener {
             ItemStack shown = e.display().clone();
             ItemMeta meta = shown.getItemMeta();
             List<Component> lore = meta.lore() == null ? new ArrayList<>() : new ArrayList<>(meta.lore());
+            String craft = craftId(e.display());
+            if (craft != null) {
+                lore.clear();
+                List<String> lines = plugin.recipes().owns(p, craft) ? plugin.recipes().details(craft) : plugin.recipes().recipeLore(craft);
+                for (String l : lines) if (!l.startsWith("<yellow>Click")) lore.add(plugin.mm("<!italic>" + l));
+            }
             lore.add(Component.empty());
             lore.add(plugin.mm("<!italic><gray>Price: " + (tokens >= e.price() ? "<green>" : "<red>") + e.price() + " AFK tokens"));
             lore.add(plugin.mm("<!italic><yellow>Click to buy"));
-            if (admin) lore.add(plugin.mm("<!italic><dark_red>Shift + right-click to remove (admin)"));
+            if (admin) lore.add(plugin.mm("<!italic><dark_red>Admins: edit this shop in /adminpanel"));
             meta.lore(lore);
             shown.setItemMeta(meta);
             inv.setItem(e.slot(), shown);
@@ -179,12 +196,6 @@ public final class AfkShop implements Listener {
         Entry e = id == null ? null : entries.get(id);
         if (e == null) return;
 
-        if (event.getClick().isShiftClick() && event.getClick().isRightClick() && BanPistol.isStaff(p)) {
-            remove(id);
-            p.sendMessage(plugin.mm(plugin.prefix() + "<gray>Removed <white>" + id + " <gray>from the AFK shop."));
-            open(p);
-            return;
-        }
         PlayerData d = plugin.data().get(p.getUniqueId());
         if (d == null) return;
         if (d.afkTokens() < e.price()) {
@@ -207,19 +218,164 @@ public final class AfkShop implements Listener {
         open(p);
     }
 
-    /** /afkshop add &lt;price&gt; [slot]: saves the held item (with all its enchants/name) as a new entry. */
-    public String add(Player admin, int price, int slot) {
-        ItemStack held = admin.getInventory().getItemInMainHand();
-        if (held.getType().isAir()) return null;
-        String id = held.getType().name().toLowerCase(Locale.ROOT);
+    private String craftId(ItemStack it) {
+        if (plugin.orbs().isReroll(it)) return com.cosmicabilities.recipe.RecipeManager.REROLL;
+        com.cosmicabilities.item.CosmicTools.Tool t = plugin.tools().toolOf(it);
+        return t == null ? null : t.id;
+    }
+
+    // ------------------------------------------------------------------ admin editor
+
+    public void openEditor(Player admin) {
+        Editor ed = new Editor();
+        Inventory inv = Bukkit.createInventory(ed, 54, plugin.mm("<dark_red><bold>AFK Shop Editor"));
+        ed.inventory = inv;
+        for (Entry e : entries.values()) {
+            ItemStack shown = e.display().clone();
+            ItemMeta meta = shown.getItemMeta();
+            List<Component> lore = meta.lore() == null ? new ArrayList<>() : new ArrayList<>(meta.lore());
+            lore.add(Component.empty());
+            lore.add(plugin.mm("<!italic><gold>Price: <white>" + e.price() + " AFK tokens"));
+            lore.add(plugin.mm("<!italic><yellow>Left <gray>+1   <yellow>Right <gray>-1   <yellow>Shift-left <gray>+10"));
+            lore.add(plugin.mm("<!italic><red>Shift-right <gray>remove from the shop"));
+            if (!e.commands().isEmpty()) lore.add(plugin.mm("<!italic><dark_gray>Runs " + e.commands().size() + " command(s)"));
+            meta.lore(lore);
+            shown.setItemMeta(meta);
+            inv.setItem(e.slot(), shown);
+            ed.slots.put(e.slot(), e.id());
+        }
+        ItemStack pane = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
+        ItemMeta pm = pane.getItemMeta();
+        pm.displayName(Component.text(" "));
+        pane.setItemMeta(pm);
+        for (int i = 45; i < 54; i++) inv.setItem(i, pane);
+        inv.setItem(45, button(Material.ARROW, "<yellow>Back to admin panel"));
+        inv.setItem(46, button(Material.ECHO_SHARD, "<light_purple>Add Cosmic Reroll", "<gray>Price 10, change it after"));
+        inv.setItem(47, button(Material.NETHERITE_PICKAXE, "<light_purple>Add Cosmic Pickaxe", "<gray>Price 20, change it after"));
+        inv.setItem(48, button(Material.NETHERITE_AXE, "<light_purple>Add Cosmic Axe", "<gray>Price 20, change it after"));
+        inv.setItem(49, button(Material.BOOK, "<gold><bold>How to edit",
+                "<white>Add: <gray>click any item in your own inventory",
+                "<gray>(the exact item, enchants and name are saved;",
+                "<gray>you keep yours). It goes in the first free spot.",
+                "<white>Price: <gray>left/right-click an entry.",
+                "<white>Remove: <gray>shift + right-click an entry.",
+                "<white>Move: <gray>press Q on an entry, then click an empty spot."));
+        inv.setItem(50, button(Material.EMERALD, "<green>Open the shop as a player"));
+        inv.setItem(53, button(Material.REPEATER, "<green>Reload afkshop.yml", "<gray>After editing the file by hand"));
+        admin.openInventory(inv);
+    }
+
+    private ItemStack button(Material m, String name, String... lore) {
+        return com.cosmicabilities.gui.Icons.button(plugin, m, name, lore);
+    }
+
+    private final Map<java.util.UUID, String> moving = new HashMap<>();
+
+    @EventHandler
+    public void onEditorClick(InventoryClickEvent event) {
+        if (!(event.getInventory().getHolder() instanceof Editor ed)) return;
+        event.setCancelled(true);
+        if (!(event.getWhoClicked() instanceof Player p)) return;
+        if (!BanPistol.isStaff(p)) { p.closeInventory(); return; }
+        int raw = event.getRawSlot();
+        org.bukkit.event.inventory.ClickType click = event.getClick();
+        if (raw >= event.getInventory().getSize()) {
+            ItemStack clicked = event.getCurrentItem();
+            if (clicked == null || clicked.getType().isAir()) return;
+            int slot = freeSlot();
+            if (slot < 0) { p.sendMessage(plugin.mm(plugin.prefix() + "<red>The shop is full (45 items).")); return; }
+            String id = addItem(clicked.clone(), 1, slot);
+            p.sendMessage(plugin.mm(plugin.prefix() + "<green>Added <white>" + id + " <green>for 1 token. <gray>Left-click it to raise the price."));
+            p.playSound(p.getLocation(), Sound.ENTITY_ITEM_PICKUP, 0.8f, 1.2f);
+            openEditor(p);
+            return;
+        }
+        if (raw >= 45) {
+            switch (raw) {
+                case 45 -> plugin.adminHub().open(p);
+                case 46 -> addSpecial(p, "reroll", 10);
+                case 47 -> addSpecial(p, "cosmic_pickaxe", 20);
+                case 48 -> addSpecial(p, "cosmic_axe", 20);
+                case 50 -> open(p);
+                case 53 -> { reload(); openEditor(p); }
+                default -> { }
+            }
+            return;
+        }
+        String id = ed.slots.get(raw);
+        if (id == null) {
+            String mv = moving.remove(p.getUniqueId());
+            if (mv != null && yml.contains("items." + mv)) {
+                yml.set("items." + mv + ".slot", raw);
+                save();
+                reload();
+                openEditor(p);
+            }
+            return;
+        }
+        if (click == org.bukkit.event.inventory.ClickType.DROP || click == org.bukkit.event.inventory.ClickType.CONTROL_DROP) {
+            moving.put(p.getUniqueId(), id);
+            p.sendActionBar(plugin.mm("<yellow>Now click an empty spot to move <white>" + id));
+            return;
+        }
+        Entry e = entries.get(id);
+        if (e == null) return;
+        if (click.isShiftClick() && click.isRightClick()) {
+            remove(id);
+            p.sendMessage(plugin.mm(plugin.prefix() + "<gray>Removed <white>" + id + " <gray>from the AFK shop."));
+        } else {
+            int delta = click.isRightClick() ? -1 : click.isShiftClick() ? 10 : 1;
+            yml.set("items." + id + ".price", Math.max(0, e.price() + delta));
+            save();
+            reload();
+        }
+        p.playSound(p.getLocation(), Sound.UI_BUTTON_CLICK, 0.5f, 1.4f);
+        openEditor(p);
+    }
+
+    @EventHandler
+    public void onEditorDrag(InventoryDragEvent event) {
+        if (event.getInventory().getHolder() instanceof Editor) event.setCancelled(true);
+    }
+
+    private void addSpecial(Player p, String special, int price) {
+        int slot = freeSlot();
+        if (slot < 0) return;
+        String unique = special;
+        for (int n = 2; yml.contains("items." + unique); n++) unique = special + "_" + n;
+        yml.set("items." + unique + ".price", price);
+        yml.set("items." + unique + ".slot", slot);
+        yml.set("items." + unique + ".special", special);
+        save();
+        reload();
+        openEditor(p);
+    }
+
+    private int freeSlot() {
+        java.util.Set<Integer> used = new java.util.HashSet<>();
+        for (Entry e : entries.values()) used.add(e.slot());
+        for (int i = 0; i < 45; i++) if (!used.contains(i)) return i;
+        return -1;
+    }
+
+    /** Saves an exact item as a new shop entry. */
+    public String addItem(ItemStack item, int price, int slot) {
+        String id = item.getType().name().toLowerCase(Locale.ROOT);
         String unique = id;
         for (int n = 2; yml.contains("items." + unique); n++) unique = id + "_" + n;
         yml.set("items." + unique + ".price", price);
         if (slot >= 0) yml.set("items." + unique + ".slot", slot);
-        yml.set("items." + unique + ".item", held.clone());
+        yml.set("items." + unique + ".item", item);
         save();
         reload();
         return unique;
+    }
+
+    /** /afkshop add &lt;price&gt; [slot]: saves the held item (with all its enchants/name) as a new entry. */
+    public String add(Player admin, int price, int slot) {
+        ItemStack held = admin.getInventory().getItemInMainHand();
+        if (held.getType().isAir()) return null;
+        return addItem(held.clone(), price, slot);
     }
 
     public void remove(String id) {

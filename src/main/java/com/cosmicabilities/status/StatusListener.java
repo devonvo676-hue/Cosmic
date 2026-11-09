@@ -22,6 +22,7 @@ import org.bukkit.event.entity.EntityTargetLivingEntityEvent;
 import org.bukkit.event.player.PlayerBucketEmptyEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
+import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.util.Vector;
 
 /** Enforces freeze, inverted controls, burrow, forcefields, Solar reflect and fall immunity. */
@@ -51,6 +52,30 @@ public class StatusListener implements Listener {
             return;
         }
 
+        // Magnetosphere: whoever was inside can't get out, whoever was outside can't get in
+        StatusManager.Field wall = s().barrierCrossed(p, from, to);
+        if (wall != null) {
+            Location back = from.clone();
+            back.setYaw(to.getYaw());
+            back.setPitch(to.getPitch());
+            event.setTo(back);
+            s().bounce(wall, p, to);
+        }
+    }
+
+    /** No ender-pearling, chorus-fruiting or ability-teleporting through a Magnetosphere wall either. */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onTeleport(PlayerTeleportEvent event) {
+        String cause = event.getCause().name();
+        if (cause.equals("COMMAND") || cause.equals("SPECTATE") || cause.equals("NETHER_PORTAL") || cause.equals("END_PORTAL")
+                || cause.equals("END_GATEWAY") || cause.equals("DISMOUNT") || cause.equals("EXIT_BED")) return;
+        Location to = event.getTo();
+        if (to == null || to.getWorld() == null || !to.getWorld().equals(event.getFrom().getWorld())) return;
+        StatusManager.Field wall = s().barrierCrossed(event.getPlayer(), event.getFrom(), to);
+        if (wall != null) {
+            event.setCancelled(true);
+            s().bounce(wall, event.getPlayer(), event.getFrom());
+        }
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)

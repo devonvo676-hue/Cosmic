@@ -129,6 +129,7 @@ public class AbilityEngine {
             PotionEffectType effect = Registry.EFFECT.get(NamespacedKey.minecraft(parts[0]));
             if (effect == null) continue;
             int level = parts.length > 1 ? parseInt(parts[1], 1) : 1;
+            if (effect == PotionEffectType.STRENGTH) level = Math.min(level, 1);   // no ability ever gives Strength II
             int seconds = parts.length > 2 ? parseInt(parts[2], 5) : 5;
             out.add(new PotionEffect(effect, seconds * 20, Math.max(0, level - 1), false, true, true));
         }
@@ -145,6 +146,7 @@ public class AbilityEngine {
                 if (!w.isEmpty()) name.append(Character.toUpperCase(w.charAt(0))).append(w.substring(1).toLowerCase(Locale.ROOT)).append(' ');
             }
             int level = parts.length > 1 ? parseInt(parts[1], 1) : 1;
+            if (parts[0].trim().equalsIgnoreCase("strength")) level = Math.min(level, 1);
             sb.append(name.toString().trim()).append(' ').append(roman(level));
             if (parts.length > 2) sb.append(" (").append(parts[2]).append("s)");
         }

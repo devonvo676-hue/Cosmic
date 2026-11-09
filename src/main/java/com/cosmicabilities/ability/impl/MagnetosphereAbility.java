@@ -14,8 +14,10 @@ import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 
 /**
- * Forcefield dome for 15 seconds at the cast spot. Nobody but the caster can place blocks, cobwebs or liquids inside,
- * and any cobwebs already inside dissolve. Tier III: enemies are pushed out and their projectiles bounce back.
+ * A dome of translucent hexagon panels for 15 seconds at the cast spot. Whoever is inside when it goes up is trapped
+ * until it drops; nobody outside can get in (walking, pearls, teleports). Nobody but the caster can place blocks,
+ * cobwebs or liquids inside, and cobwebs already inside dissolve.
+ * Repulsor (bonus): enemy projectiles bounce off and enemies who hit the wall are shocked.
  */
 public class MagnetosphereAbility extends CosmicAbility {
     public MagnetosphereAbility(CosmicAbilitiesPlugin plugin) { super(plugin, AbilityType.MAGNETOSPHERE); }
@@ -43,19 +45,9 @@ public class MagnetosphereAbility extends CosmicAbility {
 
         w.playSound(center, Sound.BLOCK_BEACON_ACTIVATE, 1.4f, 1.2f);
         w.playSound(center, Sound.BLOCK_CONDUIT_ACTIVATE, 1.2f, 1f);
-        // the dome assembles itself ring by ring from the ground up (everyone sees it, unless hide-from-caster is on)
-        java.util.List<Player> viewers = Fx.viewers(center, 96,
-                plugin.getConfig().getBoolean("magnetosphere.hide-from-caster", false) ? player.getUniqueId() : null);
-        every(10, t -> {
-            double lat = t / 10.0 * Math.PI / 2;
-            double rr = Math.cos(lat) * radius;
-            double y = center.getY() + Math.sin(lat) * radius;
-            int pts = (int) (rr * 9) + 4;
-            for (int i = 0; i < pts; i++) {
-                double ang = t * 0.3 + i * Math.PI * 2 / pts;
-                Fx.dustFor(viewers, center.getX() + Math.cos(ang) * rr, y, center.getZ() + Math.sin(ang) * rr, Fx.dust(0xcaf0f8, 1.2f));
-            }
-            if (t % 2 == 0) w.playSound(center, Sound.BLOCK_AMETHYST_BLOCK_HIT, 0.6f, 0.8f + t * 0.1f);
+        // the dome of hexagon panels builds itself from the ground up (see StatusManager.buildDome)
+        every(12, t -> {
+            if (t % 2 == 0) w.playSound(center, Sound.BLOCK_AMETHYST_BLOCK_HIT, 0.7f, 0.8f + t * 0.08f);
             return true;
         });
         status().addField(center.clone(), radius, seconds * 20, player.getUniqueId(), bonus(slot));

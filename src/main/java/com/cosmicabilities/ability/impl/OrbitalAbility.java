@@ -44,7 +44,7 @@ public class OrbitalAbility extends CosmicAbility {
     @Override
     public boolean cast(Player player, AbilitySlot slot) {
         World w = player.getWorld();
-        double damage = dmg(4, slot);
+        double damage = dmg(6, slot);
         List<ItemDisplay> bodies = new ArrayList<>();
         for (int i = 0; i < PLANETS.length; i++) {
             ItemDisplay d = Fx.sprite(position(player.getLocation(), i, 0), PLANETS[i].sprite(), 0.05f, Display.Billboard.CENTER);
@@ -101,7 +101,7 @@ public class OrbitalAbility extends CosmicAbility {
             if (t % 20 == 0) w.playSound(center, Sound.BLOCK_BEACON_AMBIENT, 0.5f, 1.8f);
             if (t >= DURATION) {
                 path.remove();
-                if (bonus(slot)) launch(player, bodies, dmg(6, slot));
+                if (bonus(slot)) launch(player, bodies, dmg(9, slot));
                 else bodies.forEach(b -> {
                     Fx.animate(b, 5, Fx.sized(0.01f, 0.01f, 0), 1);
                     Fx.removeLater(b, 7);

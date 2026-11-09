@@ -1,5 +1,5 @@
 # =========================================================
-#  Cosmic Abilities 2.0 - configuration (Paper 1.21.11)
+#  Cosmic Abilities 2.3 - configuration (Paper 1.21.11)
 # =========================================================
 
 # Players can always cast with /ability 1 and /ability 2, and pick their own keys in /keybinds
@@ -12,6 +12,10 @@ abilities:
   hit-players: true          # PvP / region plugins still apply on top of this
   hit-passive-mobs: false
   bonus-mechanics: true      # each ability's signature extra (Event Horizon, Quasar, ...). false = simpler abilities
+  # Abilities deal magic damage: armor points don't block it, but Protection enchants still do. Tuned so a full
+  # Prot IV diamond player takes about 2-3 hearts from a big hit (vs ~0.5 from a Sharp V netherite sword swing).
+  # false = normal damage that armor reduces (abilities become very weak against armored players).
+  armor-piercing: true
 
 # Per-ability balance. cooldown = seconds before upgrade/global multiplier; damage-multiplier scales only that ability.
 # Also editable in game with /cconfig.
@@ -56,6 +60,9 @@ magnetosphere:
   radius: 6
   duration-seconds: 15
   hide-from-caster: false  # true = the caster can't see their own forcefield (everyone else still can)
+  # Whoever is inside when it goes up can't leave until it drops; nobody outside can get in (walking, pearls, teleports).
+  caster-can-pass: true    # the caster can walk in and out of their own dome
+  repulsor-shock-damage: 3 # with the Repulsor bonus, enemies who hit the wall take this much damage
 
 # Each ability can be upgraded ONCE. The upgrade shortens its cooldown.
 upgrades:
@@ -74,7 +81,35 @@ ability-drops:
   lose-on-any-death: false # true = also drop it when dying to mobs/falling/etc.
 
 reroll:
-  craftable: true          # Diamond corners, Eye of Ender sides, Totem of Undying centre
+  craftable: true          # false = can't be crafted (still sold in the AFK shop / given by admins)
+
+# Craftable cosmic items. Edit them in game: /adminpanel -> Recipes (pick up an item, click a grid slot).
+# shape = 3 rows of 3 characters (space = empty). ingredients = a Minecraft item name, or cosmic:<fragment>
+# (void_shard, solar_core, frozen_stardust, nebula_essence, astral_fragment).
+recipes:
+  reroll:
+    enabled: true
+    shape: ["DED", "ETE", "DED"]
+    ingredients: {D: DIAMOND, E: ENDER_EYE, T: TOTEM_OF_UNDYING}
+  cosmic_pickaxe:
+    enabled: true
+    shape: ["BAB", "ANA", "BAB"]
+    ingredients: {B: DIAMOND_BLOCK, A: AMETHYST_SHARD, N: NETHERITE_PICKAXE}
+  cosmic_axe:
+    enabled: true
+    shape: ["BAB", "ANA", "BAB"]
+    ingredients: {B: DIAMOND_BLOCK, A: AMETHYST_SHARD, N: NETHERITE_AXE}
+
+# Cosmic Pickaxe (3x3 mining) and Cosmic Axe (whole trees). Shift + right-click toggles them.
+cosmic-tools:
+  efficiency: 5
+  unbreaking: 3
+  max-tree-blocks: 200
+  break-leaves: false      # true = the axe also clears the leaves near the trunk
+
+# The cosmic wheel spins for every new player's first ability (and for every Cosmic Reroll).
+first-join:
+  spin-delay-ticks: 80     # wait this long after joining (lets the resource pack load first)
 
 death:
   lose-upgrade: true       # dying also removes the upgrade from your abilities

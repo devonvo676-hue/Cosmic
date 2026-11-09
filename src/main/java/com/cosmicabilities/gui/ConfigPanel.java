@@ -52,7 +52,11 @@ public class ConfigPanel implements Listener {
             new Setting("afk.minutes-per-token", "Minutes per AFK token", Kind.INT, 5, 5, 600, Material.COMPASS, 30),
             new Setting("afk.invulnerable", "AFK players invulnerable", Kind.BOOL, 0, 0, 0, Material.TOTEM_OF_UNDYING, 1),
             new Setting("ban-pistol.duration-minutes", "Ban Pistol length (min, 0 = forever)", Kind.INT, 10, 0, 525600, Material.IRON_HORSE_ARMOR, 0),
-            new Setting("reroll.craftable", "Cosmic Reroll craftable", Kind.BOOL, 0, 0, 0, Material.ECHO_SHARD, 1));
+            new Setting("reroll.craftable", "Cosmic Reroll craftable", Kind.BOOL, 0, 0, 0, Material.ECHO_SHARD, 1),
+            new Setting("abilities.armor-piercing", "Abilities pierce armor (magic dmg)", Kind.BOOL, 0, 0, 0, Material.NETHERITE_CHESTPLATE, 1),
+            new Setting("magnetosphere.caster-can-pass", "Caster can pass own forcefield", Kind.BOOL, 0, 0, 0, Material.LIGHT_BLUE_STAINED_GLASS, 1),
+            new Setting("magnetosphere.radius", "Forcefield radius", Kind.INT, 1, 3, 15, Material.HEART_OF_THE_SEA, 6),
+            new Setting("cosmic-tools.max-tree-blocks", "Cosmic Axe max logs per tree", Kind.INT, 25, 10, 2000, Material.OAK_LOG, 200));
 
     /** The combat buffs an ability can give on cast (PvP-relevant only). */
     private static final String[] BUFFS = {"strength", "speed", "resistance", "regeneration", "absorption", "fire_resistance", "health_boost"};
@@ -104,7 +108,7 @@ public class ConfigPanel implements Listener {
         }
         inv.setItem(49, Icons.button(plugin, Material.REPEATER, "<green><bold>Reload from file",
                 "<gray>Re-reads config.yml and the AFK shop", "<gray>(same as /creload)"));
-        inv.setItem(53, Icons.button(plugin, Material.BARRIER, "<red>Close"));
+        inv.setItem(53, Icons.button(plugin, Material.ARROW, "<yellow>Back to admin panel"));
     }
 
     private ItemStack settingItem(Setting s) {
@@ -154,7 +158,7 @@ public class ConfigPanel implements Listener {
             ItemStack it = Icons.button(plugin, BUFF_ICONS[i], (on ? "<green>" : "<gray>") + pretty(BUFFS[i])
                             + (on ? " " + roman(lv[0]) : " (off)"),
                     "<gray>Level: <white>" + lv[0] + "   <gray>Length: <white>" + lv[1] + "s", "",
-                    "<yellow>Left-click <gray>level up (wraps to off after III)",
+                    BUFFS[i].equals("strength") ? "<yellow>Left-click <gray>on/off (Strength is capped at I)" : "<yellow>Left-click <gray>level up (wraps to off after III)",
                     "<yellow>Right-click <gray>+1s   <yellow>Shift-right <gray>-1s");
             if (on) {
                 ItemMeta m = it.getItemMeta();
@@ -207,7 +211,7 @@ public class ConfigPanel implements Listener {
                 p.sendMessage(plugin.mm(plugin.prefix() + "<green>Config reloaded from file."));
                 renderMain(event.getInventory());
             } else if (raw == 53) {
-                p.closeInventory();
+                plugin.adminHub().open(p);
             }
             return;
         }
@@ -234,7 +238,7 @@ public class ConfigPanel implements Listener {
                 if (idx < 0 || idx >= BUFFS.length) return;
                 Map<String, int[]> buffs = buffs(t);
                 int[] lv = buffs.getOrDefault(BUFFS[idx], new int[]{0, 5});
-                if (click.isLeftClick() && !click.isShiftClick()) lv[0] = (lv[0] + 1) % 4;
+                if (click.isLeftClick() && !click.isShiftClick()) lv[0] = (lv[0] + 1) % (BUFFS[idx].equals("strength") ? 2 : 4);
                 else if (click.isRightClick() && !click.isShiftClick()) lv[1] = Math.min(120, lv[1] + 1);
                 else if (click.isRightClick()) lv[1] = Math.max(1, lv[1] - 1);
                 buffs.put(BUFFS[idx], lv);

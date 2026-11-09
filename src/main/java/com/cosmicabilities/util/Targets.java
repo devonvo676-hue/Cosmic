@@ -98,7 +98,14 @@ public final class Targets {
         double mult = plugin.getConfig().getDouble("abilities.damage-multiplier", 1.0);
         double before = target.getHealth() + target.getAbsorptionAmount();
         target.setNoDamageTicks(0);
-        target.damage(amount * mult, caster);
+        if (plugin.getConfig().getBoolean("abilities.armor-piercing", true)) {
+            // magic damage ignores armor points (diamond/netherite plates) but Protection still reduces it,
+            // so abilities stay meaningful against a full Prot IV kit without one-shotting anyone
+            target.damage(amount * mult, org.bukkit.damage.DamageSource.builder(org.bukkit.damage.DamageType.MAGIC)
+                    .withCausingEntity(caster).withDirectEntity(caster).build());
+        } else {
+            target.damage(amount * mult, caster);
+        }
         double after = target.isDead() ? 0 : target.getHealth() + target.getAbsorptionAmount();
         double dealt = Math.max(0, before - after);
         if (dealt > 0.05) {

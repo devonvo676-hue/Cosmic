@@ -39,18 +39,17 @@ import java.util.concurrent.ThreadLocalRandom;
  *  - When a player is killed, their GAINED ability (slot 2) drops as an orb only the killer can pick up at first.
  *    The ability they joined with (slot 1) is never lost.
  *  - Right-click an orb to absorb it into slot 2 (a gained ability already there is dropped as an orb).
- *  - Cosmic Reroll (craftable): right-click to get back the gained ability you last lost. Announced to everyone.
+ *  - Cosmic Reroll (craftable): right-click to spin for a new slot-1 ability. Announced to everyone.
  */
 public class AbilityOrbs implements Listener {
     private final CosmicAbilitiesPlugin plugin;
-    private final NamespacedKey orbKey, orbTierKey, rerollKey, recipeKey;
+    private final NamespacedKey orbKey, orbTierKey, rerollKey;
 
     public AbilityOrbs(CosmicAbilitiesPlugin plugin) {
         this.plugin = plugin;
         this.orbKey = new NamespacedKey(plugin, "ability_orb");
         this.orbTierKey = new NamespacedKey(plugin, "ability_orb_tier");
         this.rerollKey = new NamespacedKey(plugin, "cosmic_reroll");
-        this.recipeKey = new NamespacedKey(plugin, "cosmic_reroll");
     }
 
     // ------------------------------------------------------------------ items
@@ -80,8 +79,9 @@ public class AbilityOrbs implements Listener {
         meta.setItemModel(new NamespacedKey("cosmic", "reroll"));
         meta.displayName(plugin.mm("<!italic><gradient:#f72585:#4cc9f0><bold>Cosmic Reroll"));
         meta.lore(List.of(
-                plugin.mm("<!italic><gray>Right-click to reclaim the cosmic"),
-                plugin.mm("<!italic><gray>ability you lost when you were killed."),
+                plugin.mm("<!italic><gray>Right-click to spin the cosmic wheel"),
+                plugin.mm("<!italic><gray>and change the ability you joined with"),
+                plugin.mm("<!italic><gray>(slot 1) to a new random one."),
                 Component.empty(),
                 plugin.mm("<!italic><dark_gray>The whole server will know.")));
         meta.setEnchantmentGlintOverride(true);
@@ -100,27 +100,9 @@ public class AbilityOrbs implements Listener {
         return t == null ? 1 : t;
     }
 
-    private boolean isReroll(ItemStack it) {
+    public boolean isReroll(ItemStack it) {
         return it != null && !it.getType().isAir() && it.hasItemMeta()
                 && it.getItemMeta().getPersistentDataContainer().get(rerollKey, PersistentDataType.STRING) != null;
-    }
-
-    /** Diamonds in the corners, ender eyes on the sides, a totem in the middle (configurable on/off). */
-    public void registerRecipe() {
-        Bukkit.removeRecipe(recipeKey);
-        if (!plugin.getConfig().getBoolean("reroll.craftable", true)) return;
-        ShapedRecipe r = new ShapedRecipe(recipeKey, reroll());
-        r.shape("DED", "ETE", "DED");
-        r.setIngredient('D', Material.DIAMOND);
-        r.setIngredient('E', Material.ENDER_EYE);
-        r.setIngredient('T', Material.TOTEM_OF_UNDYING);
-        Bukkit.removeRecipe(recipeKey);
-        Bukkit.addRecipe(r);
-    }
-
-    @EventHandler
-    public void onJoin(PlayerJoinEvent event) {
-        if (plugin.getConfig().getBoolean("reroll.craftable", true)) event.getPlayer().discoverRecipe(recipeKey);
     }
 
     // ------------------------------------------------------------------ drops
@@ -213,29 +195,13 @@ public class AbilityOrbs implements Listener {
         return true;
     }
 
+    /** A Cosmic Reroll spins the wheel for a new slot-1 ability (the one you joined with). */
     private void useReroll(Player p, ItemStack hand) {
         PlayerData d = plugin.data().get(p.getUniqueId());
         if (d == null) return;
-        AbilityType lost = d.lostAbility();
-        if (lost == null) {
-            p.sendMessage(plugin.mm(plugin.prefix() + "<red>You haven't lost a cosmic ability to reclaim."));
-            return;
-        }
-        if (d.primary().ability() == lost || d.gained().ability() == lost) {
-            p.sendMessage(plugin.mm(plugin.prefix() + "<red>You already have " + lost.colored() + "<red>."));
-            return;
-        }
-        if (!d.gained().isEmpty()) {
-            drop(p.getLocation(), d.gained().ability(), d.gained().tier(), p.getUniqueId());
-        }
-        d.gained().equip(lost, d.lostTier());
-        d.setLost(null, 1);
-        plugin.data().save(d);
+        if (plugin.roll().isSpinning(p.getUniqueId())) return;
         hand.setAmount(hand.getAmount() - 1);
-        absorbFx(p, lost, "REROLLED");
-        for (Player online : Bukkit.getOnlinePlayers()) online.playSound(online.getLocation(), Sound.ENTITY_ELDER_GUARDIAN_CURSE, 0.5f, 1.6f);
-        Bukkit.broadcast(plugin.mm(plugin.prefix() + "<gradient:#f72585:#4cc9f0><bold>REROLL!</bold></gradient> <white>" + p.getName()
-                + " <gray>used a Cosmic Reroll and reclaimed " + lost.colored() + "<gray>!"));
+        plugin.roll().spin(p, com.cosmicabilities.gui.RollPanel.Reason.REROLL);
     }
 
     private void absorbFx(Player p, AbilityType type, String title) {

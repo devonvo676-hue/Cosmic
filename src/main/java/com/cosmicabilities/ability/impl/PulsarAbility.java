@@ -39,7 +39,7 @@ public class PulsarAbility extends CosmicAbility {
             if (t == 0) Fx.flare(hand, "flare_cyan", 1.2f, 6);
             if (t == 4) {
                 Vector dir = player.getEyeLocation().getDirection().normalize();
-                double damage = dmg(10, slot);
+                double damage = dmg(14, slot);
                 if (bonus(slot)) {
                     for (double yaw : new double[]{-10, 0, 10}) fire(player, rotateY(dir.clone(), Math.toRadians(yaw)), damage * 0.8);
                 } else {

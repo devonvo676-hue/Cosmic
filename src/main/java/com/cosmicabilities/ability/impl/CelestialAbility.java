@@ -35,7 +35,7 @@ public class CelestialAbility extends CosmicAbility {
     @Override
     public boolean cast(Player player, AbilitySlot slot) {
         World w = player.getWorld();
-        double heal = dmg(8, slot);
+        double heal = dmg(10, slot);
         Location feet = player.getLocation();
         Location mid = feet.clone().add(0, HEIGHT / 2, 0);
         // wide soft glow + narrow bright core, both always turned toward the viewer (vertical billboard)

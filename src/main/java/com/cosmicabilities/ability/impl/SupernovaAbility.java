@@ -64,8 +64,8 @@ public class SupernovaAbility extends CosmicAbility {
                 w.spawnParticle(Particle.FLAME, c, 2, size * 0.3, size * 0.3, size * 0.3, 0.01);
                 if (t % 4 == 0) w.playSound(c, Sound.BLOCK_NOTE_BLOCK_PLING, 0.5f, 0.6f + t * 0.05f);
             }
-            if (t == CHARGE) volley(player, c, dmg(9, slot), 12);
-            if (bonus(slot) && t == CHARGE + 16) volley(player, c, dmg(6, slot), 10);
+            if (t == CHARGE) volley(player, c, dmg(13, slot), 12);
+            if (bonus(slot) && t == CHARGE + 16) volley(player, c, dmg(8, slot), 10);
             if (t > life - 10) {
                 float size = Math.max(0.01f, 2.0f * (life - t) / 10f);
                 Fx.animate(sun, 2, Fx.sized(size, size, t * 0.05f), 1);

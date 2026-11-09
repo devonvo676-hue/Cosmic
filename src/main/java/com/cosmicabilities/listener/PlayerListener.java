@@ -37,11 +37,13 @@ public class PlayerListener implements Listener {
         plugin.engine().stripOldPassives(player);
         sendPack(player);
         if (data.primary().isEmpty()) {
-            AbilityType[] all = AbilityType.values();
-            AbilityType chosen = all[ThreadLocalRandom.current().nextInt(all.length)];
-            data.primary().equip(chosen, 1);
-            plugin.data().save(data);
-            plugin.getServer().getScheduler().runTaskLater(plugin, () -> awaken(player, chosen), 60L);
+            // first time here: spin the cosmic wheel for their ability (after the resource pack has had time to load)
+            plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+                PlayerData d = plugin.data().get(player.getUniqueId());
+                if (player.isOnline() && d != null && d.primary().isEmpty()) {
+                    plugin.roll().spin(player, com.cosmicabilities.gui.RollPanel.Reason.FIRST_JOIN);
+                }
+            }, plugin.getConfig().getLong("first-join.spin-delay-ticks", 80L));
         }
     }
 
@@ -93,7 +95,7 @@ public class PlayerListener implements Listener {
         plugin.status().clear(p.getUniqueId());
         String lost = plugin.orbs().handleDeath(p);
         if (lost != null) {
-            p.sendMessage(plugin.mm(plugin.prefix() + "<red>You lost " + lost + "<red>! <gray>Craft a <light_purple>Cosmic Reroll <gray>to get it back."));
+            p.sendMessage(plugin.mm(plugin.prefix() + "<red>You lost " + lost + "<red>! <gray>Win a boss fight to gain a new second ability."));
         }
         if (!plugin.getConfig().getBoolean("death.lose-upgrade", true)) return;
         if (plugin.getConfig().getBoolean("death.pvp-only", false) && p.getKiller() == null) return;
