@@ -34,6 +34,7 @@ import java.util.concurrent.ThreadLocalRandom;
 public final class Fx {
     /** Every effect entity carries this tag so strays can always be found and removed. */
     public static final String TAG = "cosmic_fx";
+    public static final String KEEP = "cosmic_fx_keep";
     private static CosmicAbilitiesPlugin plugin;
 
     private Fx() {}
@@ -358,7 +359,8 @@ public final class Fx {
         for (org.bukkit.World w : org.bukkit.Bukkit.getWorlds()) {
             for (Display d : w.getEntitiesByClass(Display.class)) {
                 if (!d.getScoreboardTags().contains(TAG)) continue;
-                if (force || d.getTicksLived() > 20 * 45) {
+                // long-lived effects (forcefield panels) are cleaned up by their owner, unless forced
+                if (force || (d.getTicksLived() > 20 * 45 && !d.getScoreboardTags().contains(KEEP))) {
                     d.remove();
                     n++;
                 }

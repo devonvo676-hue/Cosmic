@@ -377,6 +377,7 @@ public class StatusManager {
                 Quaternionf rot = new Quaternionf().rotateY((float) (Math.PI / 2 - a)).rotateX((float) -lat);
                 org.bukkit.entity.ItemDisplay tile = Fx.sprite(at, "hex_tile", 0.01f, Display.Billboard.FIXED);
                 tile.setViewRange(2.5f);
+                tile.addScoreboardTag(Fx.KEEP);
                 tile.setTransformation(new Transformation(new Vector3f(), rot, new Vector3f(0.01f, 0.01f, 0.01f), new Quaternionf()));
                 Fx.animate(tile, 5, new Transformation(new Vector3f(), new Quaternionf(rot), new Vector3f(w, h, 1), new Quaternionf()), 1 + k * 2L);
                 if (hide && owner != null) owner.hideEntity(plugin, tile);
@@ -387,6 +388,7 @@ public class StatusManager {
         Location top = f.center.clone().add(0, r - 0.02, 0);
         org.bukkit.entity.ItemDisplay cap = Fx.flat(top, "hex_tile", 0.01f, 0);
         cap.setViewRange(2.5f);
+        cap.addScoreboardTag(Fx.KEEP);
         Fx.animate(cap, 5, Fx.flatShape((float) (r * dLat * 1.6), 0), 1 + bands * 2L);
         if (hide && owner != null) owner.hideEntity(plugin, cap);
         f.tiles.add(cap);
@@ -611,6 +613,7 @@ public class StatusManager {
         if (online != null) unscramble(online);
         shields.remove(uuid);
         fallImmune.remove(uuid);
+        for (Field f : fields) f.trapped.remove(uuid);   // died or left: don't drag them back into a dome
         Inverted i = inverted.remove(uuid);
         if (i != null && i.marker.isValid()) i.marker.remove();
         if (frozen.containsKey(uuid)) unfreeze(uuid, false);
