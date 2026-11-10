@@ -33,7 +33,7 @@ import java.util.List;
  * right-click a token, pick which of your abilities to upgrade, done.
  */
 public class CosmicItems implements Listener {
-    public static final String SHARD = "cosmic_shard", TOKEN = "upgrade_token";
+    public static final String SHARD = "cosmic_shard", TOKEN = "upgrade_token", AFK = "afk_token";
 
     public static final class Picker implements InventoryHolder {
         Inventory inventory;
@@ -75,6 +75,65 @@ public class CosmicItems implements Listener {
         meta.getPersistentDataContainer().set(key, PersistentDataType.STRING, TOKEN);
         it.setItemMeta(meta);
         return it;
+    }
+
+    /** AFK Token: an amethyst cluster you earn by being AFK and spend in /afkshop. */
+    public ItemStack afkToken(int amount) {
+        ItemStack it = new ItemStack(Material.AMETHYST_CLUSTER, Math.max(1, Math.min(64, amount)));
+        ItemMeta meta = it.getItemMeta();
+        meta.displayName(plugin.mm("<!italic><light_purple><bold>AFK Token"));
+        meta.lore(List.of(plugin.mm("<!italic><gray>Earned by being AFK (<yellow>/afk<gray>)."),
+                plugin.mm("<!italic><gray>Spend it in <yellow>/afkshop<gray>.")));
+        meta.getPersistentDataContainer().set(key, PersistentDataType.STRING, AFK);
+        it.setItemMeta(meta);
+        return it;
+    }
+
+    public boolean isAfkToken(ItemStack it) { return AFK.equals(idOf(it)); }
+
+    public int afkTokens(Player p) {
+        int n = 0;
+        for (ItemStack it : p.getInventory().getContents()) if (isAfkToken(it)) n += it.getAmount();
+        return n;
+    }
+
+    public void giveAfkTokens(Player p, int amount) {
+        while (amount > 0) {
+            int n = Math.min(64, amount);
+            for (ItemStack left : p.getInventory().addItem(afkToken(n)).values()) p.getWorld().dropItemNaturally(p.getLocation(), left);
+            amount -= n;
+        }
+    }
+
+    /** Takes AFK Tokens out of the inventory; false (and nothing taken) if they don't have enough. */
+    public boolean takeAfkTokens(Player p, int amount) {
+        if (afkTokens(p) < amount) return false;
+        ItemStack[] contents = p.getInventory().getContents();
+        for (int i = 0; i < contents.length && amount > 0; i++) {
+            ItemStack it = contents[i];
+            if (!isAfkToken(it)) continue;
+            int take = Math.min(amount, it.getAmount());
+            it.setAmount(it.getAmount() - take);
+            p.getInventory().setItem(i, it.getAmount() <= 0 ? null : it);
+            amount -= take;
+        }
+        return true;
+    }
+
+    /** AFK Tokens are items now: hand out any old token balance, and never let one be placed as a block. */
+    @EventHandler(priority = org.bukkit.event.EventPriority.MONITOR)
+    public void onJoin(org.bukkit.event.player.PlayerJoinEvent event) {
+        Player p = event.getPlayer();
+        PlayerData d = plugin.data().get(p.getUniqueId());
+        if (d == null || d.afkTokens() <= 0) return;
+        giveAfkTokens(p, d.afkTokens());
+        d.setAfkTokens(0);
+        plugin.data().save(d);
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onPlace(org.bukkit.event.block.BlockPlaceEvent event) {
+        if (idOf(event.getItemInHand()) != null) event.setCancelled(true);
     }
 
     public String idOf(ItemStack it) {

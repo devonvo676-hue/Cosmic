@@ -151,7 +151,7 @@ public final class AfkShop implements Listener {
         for (int i = 45; i < 54; i++) inv.setItem(i, pane);
 
         PlayerData d = plugin.data().get(p.getUniqueId());
-        int tokens = d == null ? 0 : d.afkTokens();
+        int tokens = plugin.items().afkTokens(p);
         ItemStack info = new ItemStack(Material.CLOCK);
         ItemMeta im = info.getItemMeta();
         im.displayName(plugin.mm("<!italic><aqua><bold>Your AFK tokens: <white>" + tokens));
@@ -203,12 +203,11 @@ public final class AfkShop implements Listener {
 
         PlayerData d = plugin.data().get(p.getUniqueId());
         if (d == null) return;
-        if (d.afkTokens() < e.price()) {
-            p.sendMessage(plugin.mm(plugin.prefix() + "<red>You need " + e.price() + " AFK tokens (you have " + d.afkTokens() + ")."));
+        if (!plugin.items().takeAfkTokens(p, e.price())) {
+            p.sendMessage(plugin.mm(plugin.prefix() + "<red>You need " + e.price() + " AFK Tokens (you have " + plugin.items().afkTokens(p) + ")."));
             p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f, 0.6f);
             return;
         }
-        d.setAfkTokens(d.afkTokens() - e.price());
         if (e.give() != null) {
             for (ItemStack left : p.getInventory().addItem(e.give().clone()).values()) {
                 p.getWorld().dropItemNaturally(p.getLocation(), left);
@@ -219,7 +218,7 @@ public final class AfkShop implements Listener {
         }
         plugin.data().save(d);
         p.playSound(p.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1f, 1.6f);
-        p.sendMessage(plugin.mm(plugin.prefix() + "<green>Purchased! <gray>You have <white>" + d.afkTokens() + " <gray>AFK tokens left."));
+        p.sendMessage(plugin.mm(plugin.prefix() + "<green>Purchased! <gray>You have <white>" + plugin.items().afkTokens(p) + " <gray>AFK Tokens left."));
         open(p);
     }
 
@@ -242,8 +241,15 @@ public final class AfkShop implements Listener {
             List<Component> lore = meta.lore() == null ? new ArrayList<>() : new ArrayList<>(meta.lore());
             lore.add(Component.empty());
             lore.add(plugin.mm("<!italic><gold>Price: <white>" + e.price() + " AFK tokens"));
-            lore.add(plugin.mm("<!italic><yellow>Left <gray>+1   <yellow>Right <gray>-1   <yellow>Shift-left <gray>+10"));
-            lore.add(plugin.mm("<!italic><red>Shift-right <gray>remove from the shop"));
+            boolean held = e.id().equals(moving.get(admin.getUniqueId()));
+            if (held) {
+                lore.add(plugin.mm("<!italic><aqua><bold>MOVING <gray>- click where it should go"));
+                meta.setEnchantmentGlintOverride(true);
+            } else {
+                lore.add(plugin.mm("<!italic><yellow>Left-click <gray>pick up to move it"));
+            }
+            lore.add(plugin.mm("<!italic><yellow>Right <gray>+1 price  <yellow>Shift-right <gray>-1  <yellow>Shift-left <gray>+10"));
+            lore.add(plugin.mm("<!italic><red>Q <gray>(drop key) remove from the shop"));
             if (!e.commands().isEmpty()) lore.add(plugin.mm("<!italic><dark_gray>Runs " + e.commands().size() + " command(s)"));
             meta.lore(lore);
             shown.setItemMeta(meta);
@@ -263,9 +269,10 @@ public final class AfkShop implements Listener {
                 "<white>Add: <gray>click any item in your own inventory",
                 "<gray>(the exact item, enchants and name are saved;",
                 "<gray>you keep yours). It goes in the first free spot.",
-                "<white>Price: <gray>left/right-click an entry.",
-                "<white>Remove: <gray>shift + right-click an entry.",
-                "<white>Move: <gray>press Q on an entry, then click an empty spot."));
+                "<white>Move: <gray>left-click an entry to pick it up, then click",
+                "<gray>any spot (an empty one moves it, another item swaps).",
+                "<white>Price: <gray>right-click +1, shift-right -1, shift-left +10.",
+                "<white>Remove: <gray>hover an entry and press Q."));
         inv.setItem(50, button(Material.EMERALD, "<green>Open the shop as a player"));
         inv.setItem(51, button(Material.AMETHYST_SHARD, "<light_purple>Add Cosmic Shard", "<gray>Price 2, change it after"));
         inv.setItem(52, button(Material.PAPER, "<light_purple>Add Upgrade Token", "<gray>Price 15, change it after"));
@@ -313,33 +320,38 @@ public final class AfkShop implements Listener {
             return;
         }
         String id = ed.slots.get(raw);
-        if (id == null) {
-            String mv = moving.remove(p.getUniqueId());
-            if (mv != null && yml.contains("items." + mv)) {
-                yml.set("items." + mv + ".slot", raw);
+        String held = moving.get(p.getUniqueId());
+        // moving: an entry is picked up, this click drops it here (empty spot = move, another entry = swap)
+        if (held != null && click == org.bukkit.event.inventory.ClickType.LEFT) {
+            moving.remove(p.getUniqueId());
+            if (!held.equals(id) && yml.contains("items." + held)) {
+                Entry from = entries.get(held);
+                if (id != null && from != null) yml.set("items." + id + ".slot", from.slot());
+                yml.set("items." + held + ".slot", raw);
                 save();
                 reload();
-                openEditor(p);
+                p.playSound(p.getLocation(), Sound.ENTITY_ITEM_FRAME_PLACE, 0.8f, 1.2f);
             }
+            openEditor(p);
             return;
         }
-        if (click == org.bukkit.event.inventory.ClickType.DROP || click == org.bukkit.event.inventory.ClickType.CONTROL_DROP) {
-            moving.put(p.getUniqueId(), id);
-            p.sendActionBar(plugin.mm("<yellow>Now click an empty spot to move <white>" + id));
-            return;
-        }
+        if (id == null) return;
         Entry e = entries.get(id);
         if (e == null) return;
-        if (click.isShiftClick() && click.isRightClick()) {
+        if (click == org.bukkit.event.inventory.ClickType.DROP || click == org.bukkit.event.inventory.ClickType.CONTROL_DROP) {
             remove(id);
             p.sendMessage(plugin.mm(plugin.prefix() + "<gray>Removed <white>" + id + " <gray>from the AFK shop."));
+        } else if (click == org.bukkit.event.inventory.ClickType.LEFT) {
+            moving.put(p.getUniqueId(), id);
+            p.sendActionBar(plugin.mm("<aqua>Picked up <white>" + id + "<aqua> - click where it should go"));
+            p.playSound(p.getLocation(), Sound.ENTITY_ITEM_FRAME_REMOVE_ITEM, 0.8f, 1.2f);
         } else {
-            int delta = click.isRightClick() ? -1 : click.isShiftClick() ? 10 : 1;
+            int delta = click == org.bukkit.event.inventory.ClickType.SHIFT_LEFT ? 10 : click.isShiftClick() ? -1 : 1;
             yml.set("items." + id + ".price", Math.max(0, e.price() + delta));
             save();
             reload();
+            p.playSound(p.getLocation(), Sound.UI_BUTTON_CLICK, 0.5f, 1.4f);
         }
-        p.playSound(p.getLocation(), Sound.UI_BUTTON_CLICK, 0.5f, 1.4f);
         openEditor(p);
     }
 

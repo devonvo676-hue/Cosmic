@@ -64,6 +64,9 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
     private com.cosmicabilities.discord.DiscordBridge discord;
     private com.cosmicabilities.item.CosmicItems items;
     private com.cosmicabilities.boss.BossRig bossRig;
+    private com.cosmicabilities.rank.Ranks ranks;
+    private com.cosmicabilities.hud.Sidebar sidebar;
+    private com.cosmicabilities.auction.AuctionHouse auctions;
 
     @Override
     public void onEnable() {
@@ -89,6 +92,11 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
             }
             getConfig().set("migrations.tools-cosmic-shards", true);
         }
+        // 2.6: no more daily login cash - players earn cash from kills instead
+        if (!getConfig().getBoolean("migrations.no-daily-cash", false)) {
+            getConfig().set("economy.daily-reward", 0);
+            getConfig().set("migrations.no-daily-cash", true);
+        }
         saveConfig();
         CosmicMaterial.init(this);
         Targets.init(this);
@@ -108,6 +116,9 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
         coinflip = new com.cosmicabilities.economy.Coinflip(this);
         discord = new com.cosmicabilities.discord.DiscordBridge(this);
         bossRig = new com.cosmicabilities.boss.BossRig(this);
+        sidebar = new com.cosmicabilities.hud.Sidebar(this);
+        ranks = new com.cosmicabilities.rank.Ranks(this);
+        auctions = new com.cosmicabilities.auction.AuctionHouse(this);
         com.cosmicabilities.admin.BanPistol.opOnly = getConfig().getBoolean("admin.op-only", true);
         tools = new com.cosmicabilities.item.CosmicTools(this);
         recipes = new com.cosmicabilities.recipe.RecipeManager(this);
@@ -127,7 +138,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
 
         for (Listener l : new Listener[]{playerListener, new BossListener(this), new StatusListener(this), combat,
                 new KeybindListener(this), bossFightPanel, holdersPanel, keybindPanel, orbs, configPanel,
-                banPistol, adminPanel, abilitiesPanel, cutscenes, afk, afkShop, tools, recipes, roll, adminHub, menu, items, economy, coinflip, discord}) {
+                banPistol, adminPanel, abilitiesPanel, cutscenes, afk, afkShop, tools, recipes, roll, adminHub, menu, items, economy, coinflip, discord, ranks, sidebar, auctions}) {
             getServer().getPluginManager().registerEvents(l, this);
         }
 
@@ -139,6 +150,10 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
         }
         for (String name : new String[]{"balance", "pay", "eco"}) bind(name, economy, economy);
         bind("cf", coinflip, coinflip);
+        bind("ah", auctions, auctions);
+        bind("cosmicrank", ranks, ranks);
+        PluginCommand sidebarCmd = getCommand("sidebar");
+        if (sidebarCmd != null) sidebarCmd.setExecutor(sidebar);
         bind("discordbridge", discord, discord);
         PluginCommand recipesCmd = getCommand("recipes");
         if (recipesCmd != null) recipesCmd.setExecutor((s, c, l, a) -> {
@@ -166,6 +181,9 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
         getServer().getScheduler().runTaskTimer(this, () -> Fx.sweep(false), 200L, 200L);
         getServer().getScheduler().runTaskTimer(this, status::tick, 1L, 1L);
         getServer().getScheduler().runTaskTimer(this, bossRig::tick, 1L, 1L);
+        getServer().getScheduler().runTaskTimer(this, sidebar::tick, 40L, 20L);
+        getServer().getScheduler().runTaskTimer(this, auctions::expire, 1200L, 1200L);
+        for (Player online : getServer().getOnlinePlayers()) rankTags.refresh(online);
         getServer().getScheduler().runTaskTimer(this, engine::tickHud, 20L, 10L);
         getServer().getScheduler().runTaskTimer(this, bossManager::tick, 20L, 20L);
         getServer().getScheduler().runTaskTimer(this, afk::tick, 20L, 20L);
@@ -178,6 +196,8 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
     public void onDisable() {
         if (roll != null) roll.shutdown();
         if (coinflip != null) coinflip.shutdown();
+        if (ranks != null) ranks.saveOpen();
+        if (auctions != null) auctions.save();
         if (cutscenes != null) cutscenes.shutdown();
         if (status != null) status.shutdown();
         if (bossManager != null) bossManager.shutdown();
@@ -238,6 +258,9 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
     public com.cosmicabilities.discord.DiscordBridge discord() { return discord; }
     public com.cosmicabilities.item.CosmicItems items() { return items; }
     public com.cosmicabilities.boss.BossRig bossRig() { return bossRig; }
+    public com.cosmicabilities.rank.Ranks ranks() { return ranks; }
+    public com.cosmicabilities.hud.Sidebar sidebar() { return sidebar; }
+    public com.cosmicabilities.auction.AuctionHouse auctions() { return auctions; }
 
     private void bind(String name, org.bukkit.command.CommandExecutor exec, org.bukkit.command.TabCompleter tab) {
         PluginCommand c = getCommand(name);

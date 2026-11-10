@@ -159,7 +159,7 @@ public class Coinflip implements Listener, CommandExecutor, TabCompleter {
         inv.setItem(CLOSE, Icons.button(plugin, Material.BARRIER, "<red>Close"));
         inv.setItem(CASH, coin("<gold><bold>Your cash: <yellow>" + $(cash),
                 "<gray>You can bet <yellow>" + $(min()) + " <gray>up to <yellow>" + $(maxBetFor(cash)),
-                "<gray>+<yellow>" + $(plugin.getConfig().getLong("economy.daily-reward", 20000)) + " <gray>every day you log in"));
+                "<gray>+<yellow>" + $(plugin.economy().killReward()) + " <gray>for every player kill"));
         p.openInventory(inv);
     }
 

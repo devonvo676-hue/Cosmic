@@ -56,7 +56,7 @@ public class MainMenu implements Listener {
         SkullMeta sm = (SkullMeta) head.getItemMeta();
         sm.setOwningPlayer(p);
         sm.displayName(plugin.mm("<!italic><yellow><bold>" + p.getName()));
-        sm.lore(List.of(plugin.mm("<!italic><gray>AFK tokens: <white>" + (d == null ? 0 : d.afkTokens())),
+        sm.lore(List.of(plugin.mm("<!italic><gray>AFK Tokens: <white>" + plugin.items().afkTokens(p)),
                 plugin.mm("<!italic><gray>Trusted players: <white>" + (d == null ? 0 : d.trusted().size()))));
         head.setItemMeta(sm);
         inv.setItem(13, head);
@@ -71,6 +71,9 @@ public class MainMenu implements Listener {
                 "<gray>Your abilities never hit them.", "<yellow>/trust <player> <gray>/ <yellow>/untrust <player>", "<gray>Click to list them in chat"));
         inv.setItem(34, Icons.button(plugin, Material.CRAFTING_TABLE, "<gold><bold>Cosmic Items",
                 "<gray>Everything you can craft: Reroll, Pickaxe,", "<gray>Axe, Cosmic Shard, Upgrade Token <dark_gray>(/recipes)"));
+        inv.setItem(39, Icons.button(plugin, Material.GOLD_INGOT, "<yellow><bold>Auction House", "<gray>Buy and sell items for cash <dark_gray>(/ah)"));
+        inv.setItem(41, Icons.button(plugin, Material.ITEM_FRAME, "<light_purple><bold>Sidebar: " + (d == null || d.sidebar() ? "<green>ON" : "<red>OFF"),
+                "<gray>The COSMIC panel on the right", "<gray>of your screen. Click to toggle."));
         inv.setItem(40, Icons.button(plugin, Material.SUNFLOWER, "<gold><bold>Coinflip", "<gray>Cash: <yellow>$" + plugin.economy().format(plugin.economy().balance(p.getUniqueId())), "<gray>Bet against other players <dark_gray>(/cf)"));
         if (BanPistol.isStaff(p) && p.isOp()) inv.setItem(49, Icons.button(plugin, Material.COMMAND_BLOCK, "<dark_red><bold>Admin Panel"));
         else inv.setItem(49, Icons.button(plugin, Material.BARRIER, "<red>Close"));
@@ -151,6 +154,8 @@ public class MainMenu implements Listener {
             case 33 -> { p.closeInventory(); p.performCommand("trust list"); }
             case 34 -> openItems(p);
             case 40 -> plugin.coinflip().open(p);
+            case 39 -> plugin.auctions().open(p, 0);
+            case 41 -> { p.performCommand("sidebar"); open(p); }
             case 49 -> {
                 if (BanPistol.isStaff(p)) plugin.adminHub().open(p); else p.closeInventory();
             }

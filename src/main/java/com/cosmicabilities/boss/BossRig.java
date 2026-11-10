@@ -28,7 +28,7 @@ import java.util.UUID;
  * The parts flash red when the boss is hit.
  */
 public class BossRig {
-    enum Anim { NONE, BOB, SWAY_X, SWAY_Y, ARM, FLAP, SPIN, SERPENT, JAW, WALK }
+    enum Anim { NONE, BOB, SWAY_X, SWAY_Y, ARM, FLAP, SPIN, SERPENT, JAW, WALK, ROLL }
 
     /** offsets are in blocks, in the parent joint's frame */
     record Part(String model, int parent, float ox, float oy, float oz, float scale, Anim anim, float amp, float freq, float phase, float bias) {}
@@ -52,60 +52,9 @@ public class BossRig {
         this.plugin = plugin;
     }
 
-    private static Part p(String model, int parent, float ox, float oy, float oz, float scale, Anim anim, float amp, float freq, float phase, float bias) {
-        return new Part(model, parent, ox, oy, oz, scale, anim, amp, freq, phase, bias);
-    }
-
-    /** The rig for each boss. k = size of one model pixel in blocks at that part's scale. */
+    /** The joints for each boss (generated with the models, see BossRigData). */
     static List<Part> design(BossType type) {
-        List<Part> l = new ArrayList<>();
-        switch (type) {
-            case VOID_EMPEROR -> {
-                float s = 2.2f, k = s / 16, arm = s * 1.2134f;
-                l.add(p("void_emperor_robe", -1, 0, 2.0f, 0, s, Anim.SWAY_X, 0.06f, 0.05f, 0, 0));
-                l.add(p("void_emperor_torso", -1, 0, 2.0f, 0, s, Anim.BOB, 0.12f, 0.06f, 0, 0));
-                l.add(p("void_emperor_head", 1, 0, 11 * k, 0, s, Anim.SWAY_Y, 0.3f, 0.03f, 0, 0));
-                l.add(p("void_emperor_arm_r", 1, -7.5f * k, 10.5f * k, 0, arm, Anim.ARM, 0.35f, 0.07f, 0, -0.25f));
-                l.add(p("void_emperor_arm_l", 1, 7.5f * k, 10.5f * k, 0, arm, Anim.ARM, 0.35f, 0.07f, 3.14f, 0.25f));
-                l.add(p("void_emperor_arm_r", 1, -5.8f * k, 4 * k, 1.5f * k, arm * 0.6f, Anim.ARM, 0.5f, 0.11f, 1f, -0.45f));
-                l.add(p("void_emperor_arm_l", 1, 5.8f * k, 4 * k, 1.5f * k, arm * 0.6f, Anim.ARM, 0.5f, 0.11f, 4.1f, 0.45f));
-            }
-            case SOLAR_TITAN -> {
-                float s = 2.6f, k = s / 16;
-                l.add(p("solar_titan_body", -1, 0, 2.6f, 0, s, Anim.BOB, 0.15f, 0.05f, 0, 0));
-                l.add(p("solar_titan_head", 0, 0, 9 * k, 0, s, Anim.SWAY_Y, 0.35f, 0.03f, 0, 0));
-                l.add(p("solar_titan_fist_r", 0, -12 * k, -1 * k, 3 * k, s, Anim.BOB, 0.25f, 0.08f, 0, 0));
-                l.add(p("solar_titan_fist_l", 0, 12 * k, -1 * k, 3 * k, s, Anim.BOB, 0.25f, 0.08f, 3.14f, 0));
-                l.add(p("solar_titan_ring", 0, 0, 0, 0, s * 1.1f, Anim.SPIN, 0.35f, 0.05f, 0, 0));
-            }
-            case FROST_LEVIATHAN -> {
-                float s = 2.4f, k = s / 16;
-                l.add(p("frost_leviathan_coil", -1, 0, 0, 0, s, Anim.NONE, 0, 0, 0, 0));
-                l.add(p("frost_leviathan_seg", -1, 0, 5 * k, 2 * k, s, Anim.SERPENT, 0.16f, 0.05f, 0, 0));
-                l.add(p("frost_leviathan_seg", 1, 0, 8 * k, 0, s * 0.92f, Anim.SERPENT, 0.18f, 0.05f, 0.9f, 0));
-                l.add(p("frost_leviathan_seg", 2, 0, 7.4f * k, 0, s * 0.85f, Anim.SERPENT, 0.2f, 0.05f, 1.8f, 0));
-                l.add(p("frost_leviathan_head", 3, 0, 6.8f * k, 0, s, Anim.SERPENT, 0.15f, 0.05f, 3.6f, 0.15f));
-                l.add(p("frost_leviathan_jaw", 4, 0, 2 * k, 4 * k, s, Anim.JAW, 0.45f, 0.08f, 0, 0));
-            }
-            case NEBULA_SERPENT -> {
-                float s = 2.0f, k = s / 16;
-                l.add(p("nebula_serpent_body", -1, 0, 1.4f, 0, s, Anim.BOB, 0.08f, 0.06f, 0, 0));
-                l.add(p("nebula_serpent_head", 0, 0, 3 * k, 8 * k, s, Anim.SWAY_Y, 0.2f, 0.04f, 0, 0));
-                l.add(p("nebula_serpent_wing_l", 0, 5 * k, 4 * k, 2 * k, s * 1.5f, Anim.FLAP, 0.55f, 0.12f, 0, 0.15f));
-                l.add(p("nebula_serpent_wing_r", 0, -5 * k, 4 * k, 2 * k, s * 1.5f, Anim.FLAP, -0.55f, 0.12f, 0, -0.15f));
-                l.add(p("nebula_serpent_tail", 0, 0, 0, -8 * k, s * 1.0042f, Anim.SWAY_Y, 0.3f, 0.05f, 0, 0));
-            }
-            case COSMIC_DESTROYER -> {
-                float s = 2.0f, k = s / 16;
-                l.add(p("cosmic_destroyer_body", -1, 0, 1.75f + 3 * k, 0, s, Anim.BOB, 0.04f, 0.1f, 0, 0));
-                l.add(p("cosmic_destroyer_head", 0, 0, 1 * k, 10 * k, s, Anim.SWAY_Y, 0.15f, 0.04f, 0, 0));
-                l.add(p("cosmic_destroyer_leg_fr", 0, -5 * k, -3 * k, 7 * k, s, Anim.WALK, 0.5f, 0, 0, 0));
-                l.add(p("cosmic_destroyer_leg_fl", 0, 5 * k, -3 * k, 7 * k, s, Anim.WALK, 0.5f, 0, 3.14f, 0));
-                l.add(p("cosmic_destroyer_leg_br", 0, -5 * k, -3 * k, -7 * k, s, Anim.WALK, 0.5f, 0, 3.14f, 0));
-                l.add(p("cosmic_destroyer_leg_bl", 0, 5 * k, -3 * k, -7 * k, s, Anim.WALK, 0.5f, 0, 0, 0));
-            }
-        }
-        return l;
+        return BossRigData.parts(type);
     }
 
     public boolean enabled() {
@@ -207,6 +156,7 @@ public class BossRig {
             case SERPENT -> m.rotateX(p.bias() + p.amp() * s).rotateZ(p.amp() * 0.6f * (float) Math.cos(t));
             case JAW -> m.rotateX(p.amp() * (0.5f + 0.5f * s));
             case WALK -> m.rotateX(p.amp() * (float) Math.sin(rig.walk + p.phase()));
+            case ROLL -> m.rotateZ((float) (tick * p.freq()));
         }
     }
 

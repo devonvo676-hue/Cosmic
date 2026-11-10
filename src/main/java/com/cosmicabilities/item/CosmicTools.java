@@ -43,7 +43,9 @@ public class CosmicTools implements Listener {
         PICKAXE("cosmic_pickaxe", Material.NETHERITE_PICKAXE, "<gradient:#7b2ff7:#f107a3:#00e5ff><bold>Cosmic Pickaxe",
                 "Mines a 3x3 area"),
         AXE("cosmic_axe", Material.NETHERITE_AXE, "<gradient:#00e5ff:#7b2ff7:#f107a3><bold>Cosmic Axe",
-                "Fells the whole tree at once");
+                "Fells the whole tree at once"),
+        SHOVEL("cosmic_shovel", Material.NETHERITE_SHOVEL, "<gradient:#f107a3:#7b2ff7:#00e5ff><bold>Cosmic Shovel",
+                "Digs a 3x3 area");
 
         public final String id;
         public final Material material;
@@ -117,7 +119,7 @@ public class CosmicTools implements Listener {
         ItemStack hand = p.getInventory().getItemInMainHand();
         Tool tool = toolOf(hand);
         if (tool == null) return;
-        if (event.getAction() == Action.RIGHT_CLICK_BLOCK && tool == Tool.AXE) event.setCancelled(true);  // no log stripping
+        if (event.getAction() == Action.RIGHT_CLICK_BLOCK && tool != Tool.PICKAXE) event.setCancelled(true);  // no log stripping or path making
         boolean on = !isOn(hand);
         ItemMeta meta = hand.getItemMeta();
         PersistentDataContainer pdc = meta.getPersistentDataContainer();
@@ -138,7 +140,7 @@ public class CosmicTools implements Listener {
         Tool tool = toolOf(hand);
         if (tool == null || !isOn(hand)) return;
         Block origin = event.getBlock();
-        List<Block> extra = tool == Tool.PICKAXE ? area(p, origin, hand) : tree(origin);
+        List<Block> extra = tool == Tool.AXE ? tree(origin) : area(p, origin, hand, tool);
         if (extra.isEmpty()) return;
         busy.add(p.getUniqueId());
         try {
@@ -153,54 +155,13 @@ public class CosmicTools implements Listener {
                 broken++;
                 if (p.getGameMode() != GameMode.CREATIVE && broken % 2 == 0) p.damageItemStack(EquipmentSlot.HAND, 1);
             }
-            if (broken > 0) effect(p, tool, origin, extra);
         } finally {
             busy.remove(p.getUniqueId());
         }
     }
 
-    /**
-     * The mining animation: a cosmic shockwave ring bursts off the face you mined and every extra block pops in a
-     * puff of starlight; the axe sends a wave of light racing up the trunk.
-     */
-    private void effect(Player p, Tool tool, Block origin, List<Block> extra) {
-        org.bukkit.World w = p.getWorld();
-        Location c = origin.getLocation().add(0.5, 0.5, 0.5);
-        if (tool == Tool.PICKAXE) {
-            BlockFace face = p.getTargetBlockFace(6);
-            org.bukkit.util.Vector n = face == null ? p.getLocation().getDirection().multiply(-1) : face.getDirection();
-            Location at = c.clone().add(n.clone().multiply(0.52));
-            org.bukkit.entity.ItemDisplay ring = com.cosmicabilities.fx.Fx.disc(at, "ring_purple", 0.4f, n);
-            com.cosmicabilities.fx.Fx.animate(ring, 5, com.cosmicabilities.fx.Fx.discShape(3.6f, n, 1.2f), 1);
-            com.cosmicabilities.fx.Fx.animate(ring, 3, com.cosmicabilities.fx.Fx.discShape(0.05f, n, 2f), 6);
-            com.cosmicabilities.fx.Fx.removeLater(ring, 11);
-            com.cosmicabilities.fx.Fx.flare(at, "flare_cyan", 1.6f, 6);
-            for (Block b : extra) {
-                Location bl = b.getLocation().add(0.5, 0.5, 0.5);
-                w.spawnParticle(Particle.DUST, bl, 4, 0.3, 0.3, 0.3, 0, new Particle.DustOptions(org.bukkit.Color.fromRGB(0xb15cff), 1.1f));
-                w.spawnParticle(Particle.END_ROD, bl, 1, 0.2, 0.2, 0.2, 0.03);
-            }
-            w.playSound(c, Sound.BLOCK_AMETHYST_BLOCK_RESONATE, 0.6f, 1.6f);
-        } else {
-            int i = 0;
-            for (Block b : extra) {
-                Location bl = b.getLocation().add(0.5, 0.5, 0.5);
-                int delay = Math.min(30, i++ / 2);
-                plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
-                    w.spawnParticle(Particle.DUST, bl, 5, 0.35, 0.35, 0.35, 0, new Particle.DustOptions(org.bukkit.Color.fromRGB(0x3ee8ff), 1.2f));
-                    w.spawnParticle(Particle.END_ROD, bl, 1, 0.2, 0.2, 0.2, 0.05);
-                }, delay);
-            }
-            org.bukkit.entity.ItemDisplay ring = com.cosmicabilities.fx.Fx.flat(origin.getLocation().add(0.5, 0.05, 0.5), "ring_cyan", 0.4f, 0);
-            com.cosmicabilities.fx.Fx.animate(ring, 6, com.cosmicabilities.fx.Fx.flatShape(4.5f, 1f), 1);
-            com.cosmicabilities.fx.Fx.removeLater(ring, 9);
-            w.playSound(c, Sound.BLOCK_WOOD_BREAK, 1f, 0.6f);
-            w.playSound(c, Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.8f, 1.4f);
-        }
-    }
-
     /** The 8 blocks around the mined one, in the plane facing the player, that this pickaxe could mine. */
-    private List<Block> area(Player p, Block origin, ItemStack hand) {
+    private List<Block> area(Player p, Block origin, ItemStack hand, Tool tool) {
         BlockFace face = p.getTargetBlockFace(6);
         if (face == null) face = Math.abs(p.getLocation().getPitch()) > 50 ? BlockFace.UP : BlockFace.NORTH;
         List<Block> out = new ArrayList<>();
@@ -212,17 +173,18 @@ public class CosmicTools implements Listener {
                     case EAST, WEST -> origin.getRelative(0, a, b);
                     default -> origin.getRelative(a, b, 0);
                 };
-                if (mineable(rel, hand)) out.add(rel);
+                if (mineable(rel, hand, tool)) out.add(rel);
             }
         }
         return out;
     }
 
-    private boolean mineable(Block b, ItemStack hand) {
+    private boolean mineable(Block b, ItemStack hand, Tool tool) {
         Material m = b.getType();
         if (m.isAir() || b.isLiquid() || m.getHardness() < 0) return false;   // bedrock, barriers, portals...
         if (m == Material.SPAWNER || m == Material.END_PORTAL_FRAME || m == Material.REINFORCED_DEEPSLATE) return false;
-        return Tag.MINEABLE_PICKAXE.isTagged(m) && b.isPreferredTool(hand);
+        Tag<Material> tag = tool == Tool.SHOVEL ? Tag.MINEABLE_SHOVEL : Tag.MINEABLE_PICKAXE;
+        return tag.isTagged(m) && b.isPreferredTool(hand);
     }
 
     /** Every log connected to the chopped one (including diagonals), up to cosmic-tools.max-tree-blocks. */

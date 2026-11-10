@@ -56,7 +56,8 @@ public class ConfigPanel implements Listener {
             new Setting("abilities.armor-piercing", "Abilities pierce armor (magic dmg)", Kind.BOOL, 0, 0, 0, Material.NETHERITE_CHESTPLATE, 1),
             new Setting("magnetosphere.caster-can-pass", "Caster can pass own forcefield", Kind.BOOL, 0, 0, 0, Material.LIGHT_BLUE_STAINED_GLASS, 1),
             new Setting("magnetosphere.radius", "Forcefield radius", Kind.INT, 1, 3, 15, Material.HEART_OF_THE_SEA, 6),
-            new Setting("cosmic-tools.max-tree-blocks", "Cosmic Axe max logs per tree", Kind.INT, 25, 10, 2000, Material.OAK_LOG, 200));
+            new Setting("cosmic-tools.max-tree-blocks", "Cosmic Axe max logs per tree", Kind.INT, 25, 10, 2000, Material.OAK_LOG, 200),
+            new Setting("economy.kill-reward", "Cash per player kill ($)", Kind.INT, 100, 0, 1000000, Material.GOLD_INGOT, 1000));
 
     /** The combat buffs an ability can give on cast (PvP-relevant only). */
     private static final String[] BUFFS = {"strength", "speed", "resistance", "regeneration", "absorption", "fire_resistance", "health_boost"};
@@ -91,7 +92,7 @@ public class ConfigPanel implements Listener {
     private void renderMain(Inventory inv) {
         fill(inv);
         for (int i = 0; i < GENERAL.size(); i++) inv.setItem(i, settingItem(GENERAL.get(i)));
-        inv.setItem(22, Icons.button(plugin, Material.WRITABLE_BOOK, "<aqua><bold>Abilities below",
+        inv.setItem(26, Icons.button(plugin, Material.WRITABLE_BOOK, "<aqua><bold>Abilities below",
                 "<gray>Click an ability to change its cooldown,", "<gray>damage and the effects it gives on cast."));
         AbilityType[] types = AbilityType.values();
         for (int i = 0; i < types.length; i++) {

@@ -113,7 +113,7 @@ public class CosmicCommand implements CommandExecutor, TabCompleter {
                 player.sendMessage(plugin.mm(line + " <dark_gray>(/cosmic upgrade " + i + ")"));
             }
         }
-        player.sendMessage(plugin.mm("<gray>AFK tokens: <aqua>" + d.afkTokens()));
+        player.sendMessage(plugin.mm("<gray>AFK Tokens: <aqua>" + plugin.items().afkTokens(player)));
         player.sendMessage(plugin.mm("<dark_gray>━━━━━━━━━━━━━━━━━━━━━━━━━━━━"));
     }
 
@@ -239,8 +239,10 @@ public class CosmicCommand implements CommandExecutor, TabCompleter {
             }
             case "tokens" -> {
                 int amt = a.length > 2 ? parse(a[2], 0) : 0;
-                pd.addAfkTokens(amt);
-                send(s, "<green>" + name + " now has " + pd.afkTokens() + " AFK tokens.");
+                if (online == null) { send(s, "<red>Player must be online."); return; }
+                if (amt >= 0) plugin.items().giveAfkTokens(online, amt);
+                else plugin.items().takeAfkTokens(online, Math.min(-amt, plugin.items().afkTokens(online)));
+                send(s, "<green>" + name + " now has " + plugin.items().afkTokens(online) + " AFK Tokens.");
             }
             case "resetcd" -> {
                 plugin.engine().resetCooldown(target.getUniqueId());

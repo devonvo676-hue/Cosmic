@@ -1,12 +1,12 @@
-# Cosmic Abilities 2.5 (Paper 1.21.11)
+# Cosmic Abilities 2.6 (Paper 1.21.11)
 
 ## Build the jar
 Upload this whole folder (including `.github`) to your GitHub repo. GitHub builds it automatically:
 **Actions** tab -> latest run -> **Artifacts** -> **CosmicAbilities** (jar + resource pack).
-Or on a PC with Java 21: `gradlew.bat build` -> `build/libs/CosmicAbilities-2.5.0.jar`.
+Or on a PC with Java 21: `gradlew.bat build` -> `build/libs/CosmicAbilities-2.6.0.jar`.
 
 ## Install
-1. Delete the old CosmicAbilities jar from `plugins/`, add `CosmicAbilities-2.5.0.jar`, restart.
+1. Delete the old CosmicAbilities jar from `plugins/`, add `CosmicAbilities-2.6.0.jar`, restart.
    Your existing config is kept and the new settings are added to it automatically. Player data carries over.
 2. Upload `CosmicAbilities-ResourcePack.zip` (direct download link, e.g. mc-packs.net), put the link and
    its SHA-1 in `config.yml` under `resource-pack`, then `/cosmic admin reload` and rejoin.
@@ -78,7 +78,7 @@ Any player the bullet hits is banned (staff can't be). Animals and mobs take dam
 `/unban <player>` lifts a ban. Settings under `ban-pistol` in config.
 
 ## Cash and coinflips
-Everyone starts with **$10,000** and gets **$20,000** the first time they log in each day.
+Everyone starts with **$10,000** and earns **$1,000 per player kill** (change it in `/adminpanel`).
 `/cf` opens the coinflip menu: click the sign to put up a bet (min $1,000, no max; the money is held until someone
 accepts or you cancel). Click someone's head to accept - the coin flips between both heads and lands on the winner,
 who takes the pot. `/balance`, `/pay <player> <amount>`; admins `/eco give|take|set <player> <amount>`.
@@ -96,3 +96,18 @@ Upgrading an ability uses an **Upgrade Token**: right-click it and pick the abil
 ## Bosses
 Every boss has its own animated 3D model (Void Emperor, Solar Titan, Frost Leviathan, Nebula Dragon, Cosmic
 Destroyer). `bosses.custom-models: false` brings back the plain mobs.
+
+## Ranks (Tebex)
+Starlight < Cosmos < Supernova. In each Tebex package add the command (run when the player is online):
+`cosmicrank give {username} supernova` - the buyer gets an enchanted rank box; placing it unlocks the rank.
+Ranks show `[SUPERNOVA] Name` and give a bigger ender chest (36 / 45 / 54 slots; normal players 27).
+Test them in `/adminpanel` -> Ranks. `/cosmicrank set <player> <rank|none>` sets one directly.
+
+## Auction house
+`/ah` to browse and buy, `/ah sell <price>` to list the item in your hand. Unsold items return after 48h (Collect).
+
+## Sidebar
+The COSMIC panel (name, kills, cash, ping, players online). `/sidebar` toggles it.
+
+## AFK Tokens
+AFK Tokens are now items (amethyst clusters) - spend them in `/afkshop`.

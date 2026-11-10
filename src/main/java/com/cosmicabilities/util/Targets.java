@@ -37,7 +37,7 @@ public final class Targets {
         if (caster.equals(other)) return true;
         if (trusts(caster, other)) return true;
         Team team = caster.getScoreboard().getEntryTeam(caster.getName());
-        return team != null && !RankTags.isTagTeam(team) && team.hasEntry(other.getName());
+        return team != null && !RankTags.isTagTeam(team) && !RankTags.isRankTeam(team) && team.hasEntry(other.getName());
     }
 
     public static boolean isEnemy(Player caster, Entity e) {

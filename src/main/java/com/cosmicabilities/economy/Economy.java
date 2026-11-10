@@ -3,7 +3,6 @@ package com.cosmicabilities.economy;
 import com.cosmicabilities.CosmicAbilitiesPlugin;
 import com.cosmicabilities.admin.BanPistol;
 import com.cosmicabilities.data.PlayerData;
-import net.kyori.adventure.title.Title;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.Sound;
@@ -19,7 +18,6 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.jetbrains.annotations.NotNull;
 
 import java.text.NumberFormat;
-import java.time.Duration;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -77,34 +75,45 @@ public class Economy implements Listener, CommandExecutor, TabCompleter {
         }
     }
 
-    /** Starting cash on the first ever join, and the daily login reward once per day. */
+    /** Starting cash on the first ever join (no messages, it just lands in their balance). */
     @EventHandler(priority = EventPriority.MONITOR)
     public void onJoin(PlayerJoinEvent event) {
         Player p = event.getPlayer();
         PlayerData d = plugin.data().get(p.getUniqueId());
         if (d == null) return;
-        boolean first = d.cash() < 0;
-        if (first) d.setCash(plugin.getConfig().getLong("economy.starting-cash", 10000));
+        if (d.cash() < 0) {
+            d.setCash(plugin.getConfig().getLong("economy.starting-cash", 10000));
+            plugin.data().save(d);
+        }
+        // optional daily login cash (off by default) - added silently
         String day = today().toString();
-        long reward = plugin.getConfig().getLong("economy.daily-reward", 20000);
-        boolean daily = reward > 0 && !day.equals(d.lastDaily());
-        if (daily) {
+        long reward = plugin.getConfig().getLong("economy.daily-reward", 0);
+        if (reward > 0 && !day.equals(d.lastDaily())) {
             d.setLastDaily(day);
             d.setCash(d.cash() + reward);
+            plugin.data().save(d);
         }
-        plugin.data().save(d);
-        if (!first && !daily) return;
-        long start = plugin.getConfig().getLong("economy.starting-cash", 10000);
-        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
-            if (!p.isOnline()) return;
-            if (first) msg(p, "<gold>Welcome! <gray>You start with <yellow>$" + format(start) + "<gray>.");
-            if (daily) {
-                msg(p, "<gold>Daily login reward: <yellow>+$" + format(reward) + " <gray>(balance <yellow>$" + format(d.cash()) + "<gray>)");
-                p.showTitle(Title.title(plugin.mm("<gold><bold>+$" + format(reward)), plugin.mm("<gray>daily login reward"),
-                        Title.Times.times(Duration.ofMillis(300), Duration.ofMillis(2000), Duration.ofMillis(500))));
-                p.playSound(p.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.7f, 1.6f);
-            }
-        }, 100L);
+    }
+
+    public long killReward() {
+        return Math.max(0, plugin.getConfig().getLong("economy.kill-reward", 1000));
+    }
+
+    public void setKillReward(long amount) {
+        plugin.getConfig().set("economy.kill-reward", Math.max(0, amount));
+        plugin.saveConfig();
+    }
+
+    /** Every player kill pays the killer economy.kill-reward. */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onKill(org.bukkit.event.entity.PlayerDeathEvent event) {
+        Player victim = event.getPlayer();
+        Player killer = victim.getKiller();
+        long reward = killReward();
+        if (killer == null || killer.equals(victim) || reward <= 0) return;
+        add(killer.getUniqueId(), reward);
+        killer.sendActionBar(plugin.mm("<gold>+$" + format(reward) + " <gray>for killing <white>" + victim.getName()));
+        killer.playSound(killer.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 0.8f, 1.4f);
     }
 
     private void msg(CommandSender to, String mini) {

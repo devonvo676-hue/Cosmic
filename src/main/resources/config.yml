@@ -1,5 +1,5 @@
 # =========================================================
-#  Cosmic Abilities 2.5 - configuration (Paper 1.21.11)
+#  Cosmic Abilities 2.6 - configuration (Paper 1.21.11)
 # =========================================================
 
 # Players can always cast with /ability 1 and /ability 2, and pick their own keys in /keybinds
@@ -100,6 +100,10 @@ recipes:
     enabled: true
     shape: ["BAB", "ANA", "BAB"]
     ingredients: {B: DIAMOND_BLOCK, A: "cosmic:cosmic_shard", N: NETHERITE_AXE}
+  cosmic_shovel:
+    enabled: true
+    shape: ["BAB", "ANA", "BAB"]
+    ingredients: {B: DIAMOND_BLOCK, A: "cosmic:cosmic_shard", N: NETHERITE_SHOVEL}
   cosmic_shard:            # makes `amount` shards
     enabled: true
     amount: 2
@@ -221,7 +225,8 @@ admin:
 # Cosmic cash and coinflips (/cf, /balance, /pay; admins: /eco give|take|set)
 economy:
   starting-cash: 10000
-  daily-reward: 20000      # given the first time each player logs in each day
+  kill-reward: 1000        # cash for every player kill (also in /adminpanel)
+  daily-reward: 0          # optional cash for the first login each day (0 = off)
   timezone: America/Denver # when the "day" rolls over
 coinflip:
   min-bet: 1000
@@ -238,3 +243,24 @@ discord:
   join-leave: true
   deaths: true
   server-name: "Minecraft"
+
+# Store ranks (sell them on Tebex: package command "cosmicrank give {username} supernova").
+# Each rank shows [RANK] beside the name and gets a bigger ender chest (rows of 9, max 6).
+ranks:
+  custom-ender-chest: true
+  none: {echest-rows: 3}
+  starlight: {echest-rows: 4}
+  cosmos: {echest-rows: 5}
+  supernova: {echest-rows: 6}
+
+# The COSMIC panel on the right of the screen (players toggle it with /sidebar)
+sidebar:
+  enabled: true
+
+# /ah auction house (uses the same cash as coinflips)
+auction:
+  expire-hours: 48
+  max-listings: 10
+  min-price: 1
+  tax: 0.0                 # 0.05 = 5% of each sale is removed from the economy
+  announce: true

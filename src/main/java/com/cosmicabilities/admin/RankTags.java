@@ -68,12 +68,55 @@ public class RankTags {
         return team;
     }
 
+    // ------------------------------------------------------------------ store ranks (Starlight / Cosmos / Supernova)
+
+    private Team rankTeam(com.cosmicabilities.rank.PlayerRank rank) {
+        String name = "cosmic_rank_" + rank.id;
+        Team team = board().getTeam(name);
+        if (team == null) team = board().registerNewTeam(name);
+        team.prefix(rank.prefix());
+        team.color(NamedTextColor.WHITE);
+        return team;
+    }
+
+    private Rank staffTag(Player p) {
+        for (Rank r : Rank.values()) {
+            Team t = board().getTeam(r.team);
+            if (t != null && t.hasEntry(p.getName())) return r;
+        }
+        return null;
+    }
+
+    /**
+     * Puts the right tag beside the player's name (above their head, in tab and in chat): a worn [ADMIN]/[OWNER] tag
+     * wins, otherwise their store rank, otherwise just their name.
+     */
+    public void refresh(Player p) {
+        Rank staff = staffTag(p);
+        com.cosmicabilities.rank.PlayerRank rank = plugin.ranks().rankOf(p.getUniqueId());
+        for (com.cosmicabilities.rank.PlayerRank r : com.cosmicabilities.rank.PlayerRank.values()) {
+            if (r == com.cosmicabilities.rank.PlayerRank.NONE) continue;
+            Team t = board().getTeam("cosmic_rank_" + r.id);
+            boolean want = staff == null && r == rank;
+            if (want) rankTeam(r).addEntry(p.getName());
+            else if (t != null && t.hasEntry(p.getName())) t.removeEntry(p.getName());
+        }
+        if (staff != null) p.displayName(prefix(staff).append(Component.text(p.getName(), NamedTextColor.WHITE)));
+        else if (rank != com.cosmicabilities.rank.PlayerRank.NONE) p.displayName(rank.prefix().append(Component.text(p.getName(), NamedTextColor.WHITE)));
+        else p.displayName(null);
+        p.playerListName(p.displayName());
+        plugin.sidebar().syncTeams();
+    }
+
     /** Applies a tag. Returns false if the player isn't allowed to wear it. */
     public boolean apply(Player p, Rank rank) {
         if (!canUse(p, rank)) return false;
-        clear(p);
+        for (Rank r : Rank.values()) {
+            Team t = board().getTeam(r.team);
+            if (t != null && t.hasEntry(p.getName())) t.removeEntry(p.getName());
+        }
         team(rank).addEntry(p.getName());
-        p.displayName(prefix(rank).append(Component.text(p.getName(), NamedTextColor.WHITE)));
+        refresh(p);
         return true;
     }
 
@@ -82,21 +125,21 @@ public class RankTags {
             Team t = board().getTeam(r.team);
             if (t != null && t.hasEntry(p.getName())) t.removeEntry(p.getName());
         }
-        p.displayName(null);
+        refresh(p);
     }
 
-    /** Called on join: strips a tag the player is no longer allowed to wear, and restores the chat name. */
+    /** Called on join: strips a tag the player is no longer allowed to wear, then shows the right tag. */
     public void validate(Player p) {
         for (Rank r : Rank.values()) {
             Team t = board().getTeam(r.team);
             if (t == null || !t.hasEntry(p.getName())) continue;
-            if (!canUse(p, r)) {
-                t.removeEntry(p.getName());
-                p.displayName(null);
-            } else {
-                team(r);
-                p.displayName(prefix(r).append(Component.text(p.getName(), NamedTextColor.WHITE)));
-            }
+            if (!canUse(p, r)) t.removeEntry(p.getName());
+            else team(r);
         }
+        refresh(p);
+    }
+
+    public static boolean isRankTeam(Team team) {
+        return team != null && team.getName().startsWith("cosmic_rank_");
     }
 }

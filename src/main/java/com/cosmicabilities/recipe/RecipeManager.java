@@ -40,10 +40,10 @@ import java.util.function.Supplier;
  */
 public class RecipeManager implements Listener {
     public static final String REROLL = "reroll", PICKAXE = "cosmic_pickaxe", AXE = "cosmic_axe",
-            SHARD = "cosmic_shard", TOKEN = "upgrade_token";
-    public static final List<String> IDS = List.of(REROLL, PICKAXE, AXE, SHARD, TOKEN);
+            SHARD = "cosmic_shard", TOKEN = "upgrade_token", SHOVEL = "cosmic_shovel";
+    public static final List<String> IDS = List.of(REROLL, PICKAXE, AXE, SHOVEL, SHARD, TOKEN);
     /** where each recipe sits in the 27-slot menus (picker and /recipes) */
-    public static final int[] MENU_SLOTS = {10, 12, 14, 16, 13};
+    public static final int[] MENU_SLOTS = {10, 11, 12, 14, 15, 16};
     private static final int[] GRID = {10, 11, 12, 19, 20, 21, 28, 29, 30};
     private static final int RESULT = 24, ARROW = 23;
 
@@ -80,6 +80,7 @@ public class RecipeManager implements Listener {
         results.put(REROLL, () -> plugin.orbs().reroll());
         results.put(PICKAXE, () -> plugin.tools().create(CosmicTools.Tool.PICKAXE));
         results.put(AXE, () -> plugin.tools().create(CosmicTools.Tool.AXE));
+        results.put(SHOVEL, () -> plugin.tools().create(CosmicTools.Tool.SHOVEL));
         results.put(SHARD, () -> plugin.items().shard(Math.max(1, plugin.getConfig().getInt("recipes.cosmic_shard.amount", 2))));
         results.put(TOKEN, () -> plugin.items().token(1));
         for (String id : IDS) keys.put(id, new NamespacedKey(plugin, id));
@@ -94,6 +95,7 @@ public class RecipeManager implements Listener {
             case REROLL -> "<gradient:#f72585:#4cc9f0><bold>Cosmic Reroll";
             case PICKAXE -> CosmicTools.Tool.PICKAXE.name;
             case SHARD -> "<gradient:#b15cff:#4cc9f0><bold>Cosmic Shard";
+            case SHOVEL -> CosmicTools.Tool.SHOVEL.name;
             case TOKEN -> "<gradient:#7b2ff7:#00e5ff><bold>Upgrade Token";
             default -> CosmicTools.Tool.AXE.name;
         };
@@ -337,7 +339,8 @@ public class RecipeManager implements Listener {
             case REROLL -> List.of("<gray>Right-click it to spin the wheel and", "<gray>swap the ability you joined with",
                     "<gray>(slot 1) for a new random one.", "<dark_gray>Announced to the whole server.");
             case PICKAXE -> List.of("<gray>Netherite pickaxe that mines a <white>3x3", "<gray>area. <yellow>Shift + right-click <gray>toggles it.");
-            case SHARD -> List.of("<gray>Crafting material for the Cosmic", "<gray>Pickaxe, Cosmic Axe and Upgrade Tokens.");
+            case SHARD -> List.of("<gray>Crafting material for the Cosmic", "<gray>tools and Upgrade Tokens.");
+            case SHOVEL -> List.of("<gray>Netherite shovel that digs a <white>3x3", "<gray>area. <yellow>Shift + right-click <gray>toggles it.");
             case TOKEN -> List.of("<gray>Right-click it and choose which of", "<gray>your abilities to upgrade", "<gray>(shorter cooldown).");
             default -> List.of("<gray>Netherite axe that chops down the", "<gray>whole tree. <yellow>Shift + right-click <gray>toggles it.");
         };

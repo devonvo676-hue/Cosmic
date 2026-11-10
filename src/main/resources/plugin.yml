@@ -85,6 +85,18 @@ commands:
     description: Everything you can craft and how
     usage: /recipes
     aliases: [crecipes]
+  ah:
+    description: Auction house - buy and sell items for cash
+    usage: /ah [sell <price>|mine|collect]
+    aliases: [auction, auctionhouse]
+  sidebar:
+    description: Toggle the COSMIC panel on the right of your screen
+    usage: /sidebar [on|off]
+    aliases: [board, scoreboard]
+  cosmicrank:
+    description: Give a rank box (Tebex) or set a player's rank
+    usage: /cosmicrank <give|set> <player> <rank>
+    permission: cosmicabilities.admin
   discordbridge:
     description: Link game chat to a Discord channel
     usage: /discordbridge set <webhook url>

@@ -81,14 +81,14 @@ public class AfkManager implements Listener {
             int progress = d.afkProgress() + 1;
             if (progress >= per) {
                 progress = 0;
-                d.addAfkTokens(1);
+                plugin.items().giveAfkTokens(p, 1);
                 p.playSound(p.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 1f, 1.2f);
-                p.sendMessage(plugin.mm(plugin.prefix() + "<aqua>+1 AFK token! <gray>You now have <white>" + d.afkTokens()
+                p.sendMessage(plugin.mm(plugin.prefix() + "<aqua>+1 AFK Token! <gray>You now have <white>" + plugin.items().afkTokens(p)
                         + "<gray>. Spend them in <yellow>/afkshop<gray>."));
             }
             d.setAfkProgress(progress);
             int left = per - progress;
-            p.sendActionBar(plugin.mm("<gray>AFK <dark_gray>| <aqua>" + d.afkTokens() + " tokens <dark_gray>| <gray>next in <white>"
+            p.sendActionBar(plugin.mm("<gray>AFK <dark_gray>| <aqua>" + plugin.items().afkTokens(p) + " tokens <dark_gray>| <gray>next in <white>"
                     + (left / 60) + "m " + (left % 60) + "s"));
         }
     }

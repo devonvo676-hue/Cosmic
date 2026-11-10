@@ -65,8 +65,20 @@ public class BanPistol implements Listener {
         return s instanceof Player p ? isStaff(p) : true;
     }
 
+    /**
+     * No arm swing when you left-click with the gun (the minecraft:swing_animation item component), so firing never
+     * looks like punching. Only the Ban Pistol gets this.
+     */
+    private static ItemStack noSwing(ItemStack item) {
+        try {
+            return Bukkit.getUnsafe().modifyItemStack(item, "[minecraft:swing_animation={type:\"none\"}]");
+        } catch (Throwable t) {
+            return item;
+        }
+    }
+
     public ItemStack create() {
-        ItemStack item = new ItemStack(Material.IRON_HORSE_ARMOR);
+        ItemStack item = noSwing(new ItemStack(Material.IRON_HORSE_ARMOR));
         ItemMeta meta = item.getItemMeta();
         meta.setItemModel(new NamespacedKey("cosmic", "ban_pistol"));
         meta.displayName(plugin.mm("<!italic><red><bold>Ban Pistol"));
@@ -199,6 +211,11 @@ public class BanPistol implements Listener {
         later(1, () -> reload(p));
     }
 
+    @EventHandler
+    public void onDeath(org.bukkit.event.entity.PlayerDeathEvent event) {
+        states.remove(event.getPlayer().getUniqueId());
+    }
+
     /** Lower the gun when you switch away from it. */
     @EventHandler
     public void onSwitch(org.bukkit.event.player.PlayerItemHeldEvent event) {
@@ -206,20 +223,18 @@ public class BanPistol implements Listener {
         GunState st = states.get(p.getUniqueId());
         if (st == null || !st.aiming) return;
         ItemStack old = p.getInventory().getItem(event.getPreviousSlot());
-        setAim(p, false, old);
+        setAim(p, false, old, event.getPreviousSlot());
     }
 
     @EventHandler
     public void onQuit(org.bukkit.event.player.PlayerQuitEvent event) {
         Player p = event.getPlayer();
-        GunState st = states.remove(p.getUniqueId());
-        if (st != null && st.aiming) p.removePotionEffect(PotionEffectType.SLOWNESS);
-        ItemStack hand = p.getInventory().getItemInMainHand();
-        if (isPistol(hand)) {
-            ItemMeta meta = hand.getItemMeta();
-            meta.setItemModel(new NamespacedKey("cosmic", "ban_pistol"));
-            hand.setItemMeta(meta);
+        GunState st = states.get(p.getUniqueId());
+        if (st != null && st.aiming) {
+            p.removePotionEffect(PotionEffectType.SLOWNESS);
+            setAim(p, false, p.getInventory().getItemInMainHand());
         }
+        states.remove(p.getUniqueId());
     }
 
     private void toggleAim(Player p) {
@@ -229,12 +244,26 @@ public class BanPistol implements Listener {
     }
 
     private void setAim(Player p, boolean aim, ItemStack gun) {
+        setAim(p, aim, gun, p.getInventory().getHeldItemSlot());
+    }
+
+    /**
+     * Aiming turns the gun into a loaded crossbow behind the scenes: that's what makes Minecraft show the
+     * two-handed aiming pose to everyone watching. Lowering it turns it back. The model stays the pistol.
+     */
+    private void setAim(Player p, boolean aim, ItemStack gun, int slot) {
         GunState st = state(p);
         st.aiming = aim;
         if (gun != null && isPistol(gun)) {
-            ItemMeta meta = gun.getItemMeta();
+            ItemStack swapped = gun.withType(aim ? Material.CROSSBOW : Material.IRON_HORSE_ARMOR);
+            ItemMeta meta = swapped.getItemMeta();
+            if (meta instanceof org.bukkit.inventory.meta.CrossbowMeta cm) {
+                cm.setChargedProjectiles(aim ? List.of(new ItemStack(Material.ARROW)) : List.of());
+            }
+            meta.addItemFlags(org.bukkit.inventory.ItemFlag.HIDE_ADDITIONAL_TOOLTIP);
             meta.setItemModel(new NamespacedKey("cosmic", aim ? "ban_pistol_aim" : "ban_pistol"));
-            gun.setItemMeta(meta);
+            swapped.setItemMeta(meta);
+            p.getInventory().setItem(slot, noSwing(swapped));
         }
         if (aim) {
             // slowness narrows the field of view a little: a light zoom while you aim

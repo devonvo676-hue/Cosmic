@@ -62,6 +62,8 @@ public class DataManager {
             data.setAfkProgress(yml.getInt("afk.progress", 0));
             data.setCash(yml.getLong("cash", -1));
             data.setLastDaily(yml.getString("daily.last", ""));
+            data.setRank(yml.getString("rank", "none"));
+            data.setSidebar(yml.getBoolean("sidebar", true));
             data.markClean();
         }
         cache.put(uuid, data);
@@ -104,6 +106,8 @@ public class DataManager {
         yml.set("afk.progress", data.afkProgress());
         yml.set("cash", data.cash());
         yml.set("daily.last", data.lastDaily());
+        yml.set("rank", data.rank());
+        yml.set("sidebar", data.sidebar());
         try {
             yml.save(file(data.uuid()));
             data.markClean();

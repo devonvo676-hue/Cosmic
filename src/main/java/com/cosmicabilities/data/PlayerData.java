@@ -25,6 +25,8 @@ public final class PlayerData {
     /** Cosmic cash; -1 = never set (gets the starting amount on first join). */
     private long cash = -1;
     private String lastDaily = "";
+    private String rank = "none";
+    private boolean sidebar = true;
 
     public PlayerData(UUID uuid) {
         this.uuid = uuid;
@@ -81,6 +83,10 @@ public final class PlayerData {
     public void markClean() { dirty = false; }
     public long cash() { return cash; }
     public void setCash(long amount) { cash = amount; dirty = true; }
+    public String rank() { return rank; }
+    public void setRank(String r) { rank = r == null ? "none" : r; dirty = true; }
+    public boolean sidebar() { return sidebar; }
+    public void setSidebar(boolean on) { sidebar = on; dirty = true; }
     public String lastDaily() { return lastDaily; }
     public void setLastDaily(String day) { lastDaily = day == null ? "" : day; dirty = true; }
 }

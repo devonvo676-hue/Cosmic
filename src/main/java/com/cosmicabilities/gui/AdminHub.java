@@ -45,7 +45,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * announce, reload, unban, name tags, cooldowns and clean-up.
  */
 public class AdminHub implements Listener {
-    enum Page { HUB, GIVE, PLAYERS, PLAYER, PICK, UNBAN }
+    enum Page { HUB, GIVE, PLAYERS, PLAYER, PICK, UNBAN, RANKS }
     enum PickMode { SLOT1, SLOT2, ORB }
 
     public static final class Holder implements InventoryHolder {
@@ -61,7 +61,7 @@ public class AdminHub implements Listener {
 
     private static final int H_ABILITIES = 10, H_BOSS = 11, H_CONFIG = 12, H_SHOP = 13, H_RECIPES = 14, H_PLAYERS = 15,
             H_GIVE = 16, H_ANNOUNCE = 28, H_RELOAD = 29, H_UNBAN = 30, H_TAG_ADMIN = 32, H_TAG_OWNER = 33, H_TAG_OFF = 34,
-            H_RESET = 37, H_SWEEP = 38, H_DESPAWN = 39, H_SPIN = 40, H_CLOSE = 49;
+            H_RESET = 37, H_SWEEP = 38, H_DESPAWN = 39, H_SPIN = 40, H_KILL = 41, H_RANKS = 42, H_AH = 43, H_CLOSE = 49;
 
     private final CosmicAbilitiesPlugin plugin;
     private final Set<UUID> announcing = ConcurrentHashMap.newKeySet();
@@ -113,6 +113,15 @@ public class AdminHub implements Listener {
         inv.setItem(H_SWEEP, Icons.button(plugin, Material.BRUSH, "<aqua>Clean up effects",
                 "<gray>Removes any stuck ability visuals."));
         inv.setItem(H_DESPAWN, Icons.button(plugin, Material.TNT, "<red>Despawn all bosses"));
+        long kr = plugin.economy().killReward();
+        inv.setItem(H_KILL, plugin.coinflip().coin("<gold><bold>Cash per kill: <yellow>$" + plugin.economy().format(kr),
+                "<gray>Every player kill pays the killer this.",
+                "<yellow>Left <gray>+$100  <yellow>Right <gray>-$100", "<yellow>Shift-left <gray>+$1,000  <yellow>Shift-right <gray>-$1,000"));
+        inv.setItem(H_RANKS, Icons.button(plugin, Material.ORANGE_SHULKER_BOX, "<#ffb703><bold>Ranks",
+                "<gray>Starlight, Cosmos, Supernova.", "<gray>Give yourself a rank or rank box to test,",
+                "<gray>and see how to hook up Tebex."));
+        inv.setItem(H_AH, Icons.button(plugin, Material.GOLD_INGOT, "<yellow><bold>Auction House",
+                "<gray>Open /ah. Admins can remove any", "<gray>listing with shift + right-click."));
         inv.setItem(H_SPIN, Icons.button(plugin, Material.ECHO_SHARD, "<light_purple>Test the spin wheel",
                 "<gray>Spins a new slot 1 ability for yourself."));
         inv.setItem(H_CLOSE, Icons.button(plugin, Material.BARRIER, "<red>Close"));
@@ -130,6 +139,8 @@ public class AdminHub implements Listener {
         put(h, 12, plugin.tools().create(CosmicTools.Tool.AXE), "axe");
         put(h, 13, plugin.banPistol().create(), "pistol");
         put(h, 14, plugin.items().shard(16), "shard");
+        put(h, 24, plugin.tools().create(CosmicTools.Tool.SHOVEL), "shovel");
+        put(h, 25, plugin.items().afkToken(1), "afk");
         put(h, 15, plugin.items().token(1), "token");
         put(h, 16, plugin.coinflip().coin("<gold><bold>+$100,000", "<gray>Click: give yourself $100,000", "<gray>Shift: $1,000,000"), "cash");
         CosmicMaterial[] mats = CosmicMaterial.values();
@@ -161,7 +172,7 @@ public class AdminHub implements Listener {
             List<Component> lore = new ArrayList<>();
             lore.add(plugin.mm("<!italic><gray>Slot 1: " + slotText(d, 1)));
             lore.add(plugin.mm("<!italic><gray>Slot 2: " + slotText(d, 2)));
-            lore.add(plugin.mm("<!italic><gray>AFK tokens: <white>" + (d == null ? 0 : d.afkTokens())));
+            lore.add(plugin.mm("<!italic><gray>AFK Tokens: <white>" + plugin.items().afkTokens(online)));
             meta.lore(lore);
             head.setItemMeta(meta);
             put(h, i++, head, online.getUniqueId());
@@ -188,7 +199,7 @@ public class AdminHub implements Listener {
         sm.setOwningPlayer(t);
         sm.displayName(plugin.mm("<!italic><yellow><bold>" + t.getName()));
         sm.lore(List.of(plugin.mm("<!italic><gray>Slot 1: " + slotText(d, 1)), plugin.mm("<!italic><gray>Slot 2: " + slotText(d, 2)),
-                plugin.mm("<!italic><gray>AFK tokens: <white>" + (d == null ? 0 : d.afkTokens()))));
+                plugin.mm("<!italic><gray>AFK Tokens: <white>" + plugin.items().afkTokens(t))));
         head.setItemMeta(sm);
         inv.setItem(4, head);
         inv.setItem(19, Icons.button(plugin, Material.ECHO_SHARD, "<light_purple><bold>Spin the wheel",
@@ -200,12 +211,14 @@ public class AdminHub implements Listener {
                 "<yellow>Left <gray>slot 1   <yellow>Right <gray>slot 2"));
         inv.setItem(24, Icons.button(plugin, Material.CLOCK, "<aqua>Reset their cooldowns"));
         inv.setItem(25, Icons.button(plugin, Material.ENDER_PEARL, "<green>Teleport to them"));
-        inv.setItem(29, Icons.button(plugin, Material.SUNFLOWER, "<gold>AFK tokens: <white>" + (d == null ? 0 : d.afkTokens()),
+        inv.setItem(29, Icons.button(plugin, Material.SUNFLOWER, "<gold>AFK Tokens: <white>" + plugin.items().afkTokens(t),
                 "<yellow>Left <gray>+1  <yellow>Right <gray>-1  <yellow>Shift <gray>x10"));
         inv.setItem(30, Icons.button(plugin, Material.ENDER_EYE, "<light_purple>Give an ability orb", "<gray>Pick which ability"));
         inv.setItem(31, Icons.button(plugin, Material.AMETHYST_SHARD, "<light_purple>Give a Cosmic Reroll"));
         inv.setItem(32, Icons.button(plugin, Material.NETHERITE_PICKAXE, "<light_purple>Give Cosmic Pickaxe"));
         inv.setItem(33, Icons.button(plugin, Material.NETHERITE_AXE, "<light_purple>Give Cosmic Axe"));
+        com.cosmicabilities.rank.PlayerRank pr = plugin.ranks().rankOf(target);
+        inv.setItem(34, Icons.button(plugin, pr.box, "<white>Rank: " + pr.mini(), "<yellow>Left <gray>next rank  <yellow>Right <gray>previous"));
         inv.setItem(49, Icons.button(plugin, Material.ARROW, "<yellow>Back"));
         admin.openInventory(inv);
     }
@@ -270,6 +283,7 @@ public class AdminHub implements Listener {
             }
             case PLAYER -> playerClick(admin, h, raw, click);
             case PICK -> pickClick(admin, h, raw);
+            case RANKS -> ranksClick(admin, raw);
             case UNBAN -> {
                 if (raw == 49) { open(admin); return; }
                 if (h.slots.get(raw) instanceof String name) {
@@ -317,6 +331,13 @@ public class AdminHub implements Listener {
             }
             case H_SWEEP -> admin.sendMessage(plugin.mm(plugin.prefix() + "<aqua>Removed " + Fx.sweep(true) + " effect entities."));
             case H_DESPAWN -> admin.sendMessage(plugin.mm(plugin.prefix() + "<red>Despawned " + plugin.bosses().despawnAll() + " bosses."));
+            case H_KILL -> {
+                long step = click.isShiftClick() ? 1000 : 100;
+                plugin.economy().setKillReward(plugin.economy().killReward() + (click.isRightClick() ? -step : step));
+                open(admin);
+            }
+            case H_RANKS -> openRanks(admin);
+            case H_AH -> plugin.auctions().open(admin, 0);
             case H_SPIN -> {
                 admin.closeInventory();
                 plugin.roll().spin(admin, RollPanel.Reason.ADMIN);
@@ -339,6 +360,8 @@ public class AdminHub implements Listener {
             case "pickaxe" -> plugin.tools().create(CosmicTools.Tool.PICKAXE);
             case "axe" -> plugin.tools().create(CosmicTools.Tool.AXE);
             case "shard" -> plugin.items().shard(click.isShiftClick() ? 64 : 16);
+            case "shovel" -> plugin.tools().create(CosmicTools.Tool.SHOVEL);
+            case "afk" -> plugin.items().afkToken(click.isShiftClick() ? 64 : 1);
             case "token" -> plugin.items().token(click.isShiftClick() ? 16 : 1);
             case "cash" -> {
                 long amt = click.isShiftClick() ? 1_000_000 : 100_000;
@@ -376,10 +399,19 @@ public class AdminHub implements Listener {
             }
             case 24 -> plugin.engine().resetCooldown(h.target);
             case 25 -> { admin.teleport(t); return; }
-            case 29 -> d.addAfkTokens((click.isRightClick() ? -1 : 1) * (click.isShiftClick() ? 10 : 1));
+            case 29 -> {
+                int n = click.isShiftClick() ? 10 : 1;
+                if (click.isRightClick()) plugin.items().takeAfkTokens(t, Math.min(n, plugin.items().afkTokens(t)));
+                else plugin.items().giveAfkTokens(t, n);
+            }
             case 31 -> t.getInventory().addItem(plugin.orbs().reroll());
             case 32 -> t.getInventory().addItem(plugin.tools().create(CosmicTools.Tool.PICKAXE));
             case 33 -> t.getInventory().addItem(plugin.tools().create(CosmicTools.Tool.AXE));
+            case 34 -> {
+                com.cosmicabilities.rank.PlayerRank[] all = com.cosmicabilities.rank.PlayerRank.values();
+                int i = plugin.ranks().rankOf(h.target).ordinal() + (click.isRightClick() ? -1 : 1);
+                plugin.ranks().setRank(h.target, all[(i + all.length) % all.length]);
+            }
             default -> { return; }
         }
         plugin.data().save(d);
@@ -410,6 +442,48 @@ public class AdminHub implements Listener {
             }
         }
         openPlayer(admin, h.target);
+    }
+
+    // ------------------------------------------------------------------ ranks
+
+    private static final int[] RANK_COLS = {11, 13, 15};
+
+    private void openRanks(Player admin) {
+        Holder h = new Holder(Page.RANKS);
+        Inventory inv = create(h, 54, "<dark_red>Ranks <dark_gray>- test them on yourself");
+        com.cosmicabilities.rank.PlayerRank mine = plugin.ranks().rankOf(admin.getUniqueId());
+        com.cosmicabilities.rank.PlayerRank[] ranks = {com.cosmicabilities.rank.PlayerRank.STARLIGHT,
+                com.cosmicabilities.rank.PlayerRank.COSMOS, com.cosmicabilities.rank.PlayerRank.SUPERNOVA};
+        for (int i = 0; i < 3; i++) {
+            com.cosmicabilities.rank.PlayerRank r = ranks[i];
+            inv.setItem(RANK_COLS[i], Icons.button(plugin, r.box, r.mini() + (mine == r ? " <green>(yours)" : ""),
+                    "<gray>[" + r.tag + "] beside the name", "<gray>Ender chest: <white>" + plugin.ranks().rows(r) * 9 + " slots",
+                    "", "<yellow>Click <gray>to give yourself this rank"));
+            inv.setItem(RANK_COLS[i] + 18, plugin.ranks().voucher(r));
+        }
+        inv.setItem(40, Icons.button(plugin, Material.BARRIER, "<red>Remove my rank"));
+        inv.setItem(4, Icons.button(plugin, Material.BOOK, "<gold><bold>Selling ranks on Tebex",
+                "<gray>For each rank package in your Tebex panel,",
+                "<gray>add a <white>command <gray>(run when the player is online):",
+                "<white>cosmicrank give {username} starlight",
+                "<gray>(or cosmos / supernova). They get an enchanted",
+                "<gray>rank box; placing it unlocks the rank.",
+                "<gray>Click a box below to get one yourself.",
+                "", "<dark_gray>A worn [OWNER]/[ADMIN] tag shows instead of a",
+                "<dark_gray>rank - take it off to see your rank tag."));
+        inv.setItem(49, Icons.button(plugin, Material.ARROW, "<yellow>Back"));
+        admin.openInventory(inv);
+    }
+
+    private void ranksClick(Player admin, int raw) {
+        com.cosmicabilities.rank.PlayerRank[] ranks = {com.cosmicabilities.rank.PlayerRank.STARLIGHT,
+                com.cosmicabilities.rank.PlayerRank.COSMOS, com.cosmicabilities.rank.PlayerRank.SUPERNOVA};
+        for (int i = 0; i < 3; i++) {
+            if (raw == RANK_COLS[i]) { plugin.ranks().setRank(admin.getUniqueId(), ranks[i]); openRanks(admin); return; }
+            if (raw == RANK_COLS[i] + 18) { admin.getInventory().addItem(plugin.ranks().voucher(ranks[i])); return; }
+        }
+        if (raw == 40) { plugin.ranks().setRank(admin.getUniqueId(), com.cosmicabilities.rank.PlayerRank.NONE); openRanks(admin); }
+        else if (raw == 49) open(admin);
     }
 
     private void tag(Player admin, RankTags.Rank rank) {
