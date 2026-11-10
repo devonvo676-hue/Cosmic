@@ -120,7 +120,7 @@ public class Sidebar implements Listener, CommandExecutor {
             t.prefix(src.prefix());
             t.suffix(src.suffix());
             try {
-                if (src.hasColor()) t.color(src.color());
+                if (src.hasColor() && src.color() instanceof net.kyori.adventure.text.format.NamedTextColor n) t.color(n);
             } catch (RuntimeException ignored) { }
             for (String e : t.getEntries()) if (!src.hasEntry(e)) t.removeEntry(e);
             for (String e : src.getEntries()) if (!t.hasEntry(e)) t.addEntry(e);
