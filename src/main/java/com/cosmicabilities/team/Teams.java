@@ -49,6 +49,8 @@ public class Teams implements Listener, CommandExecutor, TabCompleter {
         public UUID leader;
         public final Set<UUID> members = new LinkedHashSet<>();
         public long bank;
+        public int kills;
+        public boolean friendlyFire;
         Team(String name, UUID leader) { this.name = name; this.leader = leader; members.add(leader); }
     }
 
@@ -83,6 +85,8 @@ public class Teams implements Listener, CommandExecutor, TabCompleter {
                 Team t = new Team(s.getString("name", key), UUID.fromString(s.getString("leader")));
                 for (String m : s.getStringList("members")) t.members.add(UUID.fromString(m));
                 t.bank = s.getLong("bank");
+                t.kills = s.getInt("kills");
+                t.friendlyFire = s.getBoolean("friendly-fire", false);
                 teams.put(t.name.toLowerCase(Locale.ROOT), t);
                 for (UUID m : t.members) byPlayer.put(m, t);
             } catch (RuntimeException e) {
@@ -105,6 +109,8 @@ public class Teams implements Listener, CommandExecutor, TabCompleter {
             for (UUID u : t.members) m.add(u.toString());
             yml.set(b + "members", m);
             yml.set(b + "bank", t.bank);
+            yml.set(b + "kills", t.kills);
+            yml.set(b + "friendly-fire", t.friendlyFire);
         }
         for (Map.Entry<UUID, List<String>> e : pendingRewards.entrySet()) yml.set("pending-rewards." + e.getKey(), e.getValue());
         try {
@@ -141,8 +147,28 @@ public class Teams implements Listener, CommandExecutor, TabCompleter {
         return d > 0 ? d + "d " + h + "h" : h + "h " + m + "m";
     }
 
+    public void addKill(Team t) {
+        t.kills++;
+        save();
+    }
+
+    /** Teammates protect each other unless their team turned friendly fire on. */
+    public boolean protects(UUID a, UUID b) {
+        Team t = teamOf(a);
+        return t != null && t.members.contains(b) && !t.friendlyFire;
+    }
+
+    /** When someone joins a team, their cash moves into the team bank. */
+    private void mergeCash(Player p, Team t) {
+        long cash = plugin.economy().balance(p.getUniqueId());
+        if (cash <= 0) return;
+        if (!plugin.economy().take(p.getUniqueId(), cash)) return;
+        addToBank(t, cash);
+        teamMsg(t, "<white>" + p.getName() + "<gray>'s <yellow>$" + plugin.economy().format(cash) + " <gray>was added to the team bank.");
+    }
+
     public void resetBanks() {
-        for (Team t : teams.values()) t.bank = 0;
+        for (Team t : teams.values()) { t.bank = 0; t.kills = 0; }
         save();
     }
 
@@ -173,7 +199,7 @@ public class Teams implements Listener, CommandExecutor, TabCompleter {
         Entity d = event.getDamager();
         Player attacker = d instanceof Player p ? p : d instanceof Projectile pr && pr.getShooter() instanceof Player p2 ? p2 : null;
         if (attacker == null || attacker.equals(victim)) return;
-        if (sameTeam(attacker.getUniqueId(), victim.getUniqueId())) event.setCancelled(true);
+        if (protects(attacker.getUniqueId(), victim.getUniqueId())) event.setCancelled(true);
     }
 
     // ------------------------------------------------------------------ seasons
@@ -205,7 +231,7 @@ public class Teams implements Listener, CommandExecutor, TabCompleter {
         } else {
             Bukkit.broadcast(plugin.mm(plugin.prefix() + "<gold>Season " + season + " is over - no team had any money, so nobody wins."));
         }
-        for (Team t : teams.values()) t.bank = 0;
+        for (Team t : teams.values()) { t.bank = 0; t.kills = 0; }
         season++;
         seasonStart = System.currentTimeMillis();
         save();
@@ -243,11 +269,19 @@ public class Teams implements Listener, CommandExecutor, TabCompleter {
 
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
-        String sub = args.length == 0 ? "info" : args[0].toLowerCase(Locale.ROOT);
-        if (sub.equals("endseason")) {
-            if (BanPistol.isAdmin(sender)) endSeason(sender);
+        String cmd = command.getName().toLowerCase(Locale.ROOT);
+        if (cmd.equals("endseason")) {
+            if (!BanPistol.isAdmin(sender)) return true;
+            if (args.length == 0 || !args[0].equalsIgnoreCase("confirm")) {
+                sender.sendMessage(plugin.mm(plugin.prefix() + "<gray>This ends season " + season + " now: the richest team wins and every bank resets."
+                        + " <click:run_command:'/endseason confirm'><red><bold>[CONFIRM]</bold></click> <gray>or <yellow>/endseason confirm"));
+                return true;
+            }
+            endSeason(sender);
             return true;
         }
+        if (cmd.equals("leaderboard")) { top(sender); return true; }
+        String sub = args.length == 0 ? "info" : args[0].toLowerCase(Locale.ROOT);
         if (sub.equals("top") || sub.equals("list")) { top(sender); return true; }
         if (!(sender instanceof Player p)) return true;
         Team mine = teamOf(p.getUniqueId());
@@ -261,6 +295,7 @@ public class Teams implements Listener, CommandExecutor, TabCompleter {
                 byPlayer.put(p.getUniqueId(), t);
                 save();
                 msg(p, "<green>Team <aqua><bold>" + t.name + "</bold> <green>created! <gray>Invite people with <yellow>/team invite <player>");
+                mergeCash(p, t);
             }
             case "invite" -> {
                 if (mine == null) { msg(p, "<red>Create a team first: /team create <name>"); return true; }
@@ -286,6 +321,7 @@ public class Teams implements Listener, CommandExecutor, TabCompleter {
                 byPlayer.put(p.getUniqueId(), t);
                 save();
                 teamMsg(t, "<white>" + p.getName() + " <green>joined the team!");
+                mergeCash(p, t);
             }
             case "leave" -> {
                 if (mine == null) { msg(p, "<red>You're not in a team."); return true; }
@@ -322,6 +358,13 @@ public class Teams implements Listener, CommandExecutor, TabCompleter {
                 addToBank(mine, amt);
                 teamMsg(mine, "<white>" + p.getName() + " <gray>deposited <yellow>$" + plugin.economy().format(amt) + " <gray>into the team bank.");
             }
+            case "ff", "friendlyfire" -> {
+                if (mine == null) { msg(p, "<red>You're not in a team."); return true; }
+                if (!mine.leader.equals(p.getUniqueId())) { msg(p, "<red>Only the team leader can change friendly fire."); return true; }
+                mine.friendlyFire = args.length > 1 ? args[1].equalsIgnoreCase("on") : !mine.friendlyFire;
+                save();
+                teamMsg(mine, "<gray>Friendly fire is now " + (mine.friendlyFire ? "<red><bold>ON</bold> <gray>(teammates can hurt each other)" : "<green><bold>OFF"));
+            }
             default -> info(p, mine);
         }
         return true;
@@ -342,29 +385,42 @@ public class Teams implements Listener, CommandExecutor, TabCompleter {
         }
         int place = ranking().indexOf(t) + 1;
         p.sendMessage(plugin.mm("<aqua><bold>" + t.name + "</bold> <gray>- #" + place + " this season"));
-        p.sendMessage(plugin.mm("<gray>Bank: <yellow>$" + plugin.economy().format(t.bank) + "   <gray>Season " + season + " ends in <white>" + timeLeft()));
+        p.sendMessage(plugin.mm("<gray>Bank: <yellow>$" + plugin.economy().format(t.bank) + "   <gray>Kills: <white>" + t.kills
+                + "   <gray>Friendly fire: " + (t.friendlyFire ? "<red>ON" : "<green>OFF")));
+        p.sendMessage(plugin.mm("<gray>Season " + season + " ends in <white>" + timeLeft()));
         List<String> names = new ArrayList<>();
         for (UUID u : t.members) names.add((u.equals(t.leader) ? "<gold>★" : "<white>") + name(u));
         p.sendMessage(plugin.mm("<gray>Members: " + String.join("<gray>, ", names)));
     }
 
     private void top(CommandSender s) {
-        s.sendMessage(plugin.mm("<gold><bold>Season " + season + " leaderboard</bold> <gray>(ends in " + timeLeft() + ")"));
+        s.sendMessage(plugin.mm(""));
+        s.sendMessage(plugin.mm("<gradient:#ffd166:#f15bb5><bold>✦ RICHEST TEAMS ✦</bold></gradient> <gray>Season " + season + " - ends in <white>" + timeLeft()));
         List<Team> r = ranking();
+        String[] medal = {"<#ffd700>①", "<#c0c0c0>②", "<#cd7f32>③"};
         for (int i = 0; i < Math.min(10, r.size()); i++) {
             Team t = r.get(i);
-            s.sendMessage(plugin.mm("<gray>" + (i + 1) + ". <aqua>" + t.name + " <yellow>$" + plugin.economy().format(t.bank)
-                    + " <dark_gray>(" + t.members.size() + " members)"));
+            String place = i < 3 ? medal[i] : "<gray>" + (i + 1) + ".";
+            s.sendMessage(plugin.mm(" " + place + " <aqua><bold>" + t.name + "</bold> <dark_gray>- <yellow>$" + plugin.economy().format(t.bank)
+                    + " <dark_gray>| <white>" + t.kills + " kills <dark_gray>| <gray>" + t.members.size() + " members"));
         }
         if (r.isEmpty()) s.sendMessage(plugin.mm("<gray>No teams yet. <yellow>/team create <name>"));
+        if (s instanceof Player p) {
+            Team mine = teamOf(p.getUniqueId());
+            if (mine != null && r.indexOf(mine) >= 10) s.sendMessage(plugin.mm(" <gray>...  " + (r.indexOf(mine) + 1) + ". <aqua>" + mine.name
+                    + " <yellow>$" + plugin.economy().format(mine.bank) + " <gray>(your team)"));
+        }
+        s.sendMessage(plugin.mm("<dark_gray>The richest team when the season ends wins a rare cosmic ability."));
     }
 
     @Override
     public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String alias, @NotNull String[] args) {
         List<String> out = new ArrayList<>();
         if (args.length == 1) {
-            out.addAll(List.of("create", "invite", "accept", "leave", "kick", "disband", "deposit", "info", "top"));
-            if (BanPistol.isAdmin(sender)) out.add("endseason");
+            if (command.getName().equalsIgnoreCase("team")) out.addAll(List.of("create", "invite", "accept", "leave", "kick", "disband", "deposit", "ff", "info", "top"));
+            else if (command.getName().equalsIgnoreCase("endseason")) out.add("confirm");
+        } else if (args.length == 2 && args[0].equalsIgnoreCase("ff")) {
+            out.addAll(List.of("on", "off"));
         } else if (args.length == 2 && (args[0].equalsIgnoreCase("invite") || args[0].equalsIgnoreCase("kick"))) {
             for (Player p : Bukkit.getOnlinePlayers()) out.add(p.getName());
         }

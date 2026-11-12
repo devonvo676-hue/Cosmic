@@ -72,6 +72,8 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
     private com.cosmicabilities.supply.SupplyDrops supplyDrops;
     private com.cosmicabilities.admin.AdminRpg rpg;
     private com.cosmicabilities.admin.Cocaine cocaine;
+    private com.cosmicabilities.stats.KillLog killLog;
+    private com.cosmicabilities.command.SpawnCommands spawnCommands;
 
     @Override
     public void onEnable() {
@@ -128,6 +130,15 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
             if ("<gray>Money SMP with cosmic abilities".equals(getConfig().getString("tablist.header-line"))) getConfig().set("tablist.header-line", "");
             getConfig().set("migrations.boss-size-29", true);
         }
+        // 3.0: no upgrade tokens in supply drops; combo limit off by default (explained in /cconfig)
+        if (!getConfig().getBoolean("migrations.v30", false)) {
+            java.util.List<String> loot = new java.util.ArrayList<>(getConfig().getStringList("supply-drops.loot"));
+            loot.removeIf(l -> l.toLowerCase(java.util.Locale.ROOT).contains("upgrade_token"));
+            getConfig().set("supply-drops.loot", loot);
+            getConfig().set("abilities.combo-damage-cap", 0);
+            if (getConfig().getStringList("owner-items.players").isEmpty()) getConfig().set("owner-items.players", java.util.List.of("v2tou"));
+            getConfig().set("migrations.v30", true);
+        }
         // 2.6: no more daily login cash - players earn cash from kills instead
         if (!getConfig().getBoolean("migrations.no-daily-cash", false)) {
             getConfig().set("economy.daily-reward", 0);
@@ -144,6 +155,8 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
         supplyDrops = new com.cosmicabilities.supply.SupplyDrops(this);
         rpg = new com.cosmicabilities.admin.AdminRpg(this);
         cocaine = new com.cosmicabilities.admin.Cocaine(this);
+        killLog = new com.cosmicabilities.stats.KillLog(this);
+        spawnCommands = new com.cosmicabilities.command.SpawnCommands(this);
         status = new StatusManager(this);
         combat = new CombatTracker();
         engine = new AbilityEngine(this);
@@ -179,7 +192,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
 
         for (Listener l : new Listener[]{playerListener, new BossListener(this), new StatusListener(this), combat,
                 new KeybindListener(this), bossFightPanel, holdersPanel, keybindPanel, orbs, configPanel,
-                banPistol, adminPanel, abilitiesPanel, cutscenes, afk, afkShop, tools, recipes, roll, adminHub, menu, items, economy, coinflip, discord, ranks, sidebar, auctions, teams, rpg, cocaine, supplyDrops}) {
+                banPistol, adminPanel, abilitiesPanel, cutscenes, afk, afkShop, tools, recipes, roll, adminHub, menu, items, economy, coinflip, discord, ranks, sidebar, auctions, teams, rpg, cocaine, supplyDrops, killLog}) {
             getServer().getPluginManager().registerEvents(l, this);
         }
 
@@ -189,10 +202,18 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
             cosmic.setExecutor(cmd);
             cosmic.setTabCompleter(cmd);
         }
-        for (String name : new String[]{"balance", "pay", "eco"}) bind(name, economy, economy);
+        for (String name : new String[]{"balance", "eco"}) bind(name, economy, economy);
         bind("cf", coinflip, coinflip);
         bind("ah", auctions, auctions);
         bind("team", teams, teams);
+        bind("leaderboard", teams, teams);
+        bind("endseason", teams, teams);
+        for (String c : new String[]{"spawn", "setspawn", "resetcooldown"}) {
+            PluginCommand pc = getCommand(c);
+            if (pc != null) pc.setExecutor(spawnCommands);
+        }
+        PluginCommand klc = getCommand("killlog");
+        if (klc != null) klc.setExecutor(killLog);
         PluginCommand supplyCmd = getCommand("supplydrop");
         if (supplyCmd != null) supplyCmd.setExecutor(supplyDrops);
         bind("cosmicrank", ranks, ranks);
@@ -245,6 +266,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
         if (ranks != null) ranks.saveOpen();
         if (auctions != null) auctions.save();
         if (teams != null) teams.save();
+        if (killLog != null) killLog.save();
         if (events != null) events.shutdown();
         if (cocaine != null) cocaine.shutdown();
         if (cutscenes != null) cutscenes.shutdown();
@@ -315,6 +337,8 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
     public com.cosmicabilities.supply.SupplyDrops supplyDrops() { return supplyDrops; }
     public com.cosmicabilities.admin.AdminRpg rpg() { return rpg; }
     public com.cosmicabilities.admin.Cocaine cocaine() { return cocaine; }
+    public com.cosmicabilities.stats.KillLog killLog() { return killLog; }
+    public com.cosmicabilities.command.SpawnCommands spawnCommands() { return spawnCommands; }
 
     private void bind(String name, org.bukkit.command.CommandExecutor exec, org.bukkit.command.TabCompleter tab) {
         PluginCommand c = getCommand(name);

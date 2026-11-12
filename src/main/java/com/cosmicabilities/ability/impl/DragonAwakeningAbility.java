@@ -36,8 +36,8 @@ import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * Ender Dragon drop: a massive spectral Ender Dragon bursts out behind you and charges wherever you're looking
- * (up, down, diagonal), biting everything in its path, leaving dragon breath behind. (10 hearts by default)
+ * Ender Dragon drop: a massive spectral Ender Dragon tears out of your back, rises over your shoulders and dashes
+ * at whoever you're aiming at (homing in on them), biting everything in its way. (10 hearts by default)
  */
 public class DragonAwakeningAbility extends CosmicAbility implements org.bukkit.event.Listener {
     public static final String TAG = "cosmic_spectral_dragon";
@@ -50,13 +50,17 @@ public class DragonAwakeningAbility extends CosmicAbility implements org.bukkit.
     @Override
     public boolean cast(Player player, AbilitySlot slot) {
         World w = player.getWorld();
-        Vector dir = player.getEyeLocation().getDirection().normalize();
-        double range = plugin.getConfig().getDouble("ability-settings." + type.id() + ".range", 34);
-        double bite = plugin.getConfig().getDouble("ability-settings." + type.id() + ".hearts", 10);
-        Location start = player.getEyeLocation().subtract(dir.clone().multiply(6)).add(0, 1.5, 0);
+        double range = plugin.getConfig().getDouble("ability-settings." + type.id() + ".range", 40);
+        double bite = 10;
+        // the target: whoever you're aiming at (generous aim), else the closest enemy in front of you
+        LivingEntity target = aimed(player, range);
+        Vector look = player.getEyeLocation().getDirection().normalize();
+        Vector flat = Targets.flatDirection(player);
+        // 1) the dragon tears out of your back: it starts inside you and rises up and back over your shoulders
+        Location back = player.getLocation().add(0, 1.2, 0).subtract(flat.clone().multiply(0.6));
         org.bukkit.entity.EnderDragon dragon;
         try {
-            dragon = w.spawn(start, org.bukkit.entity.EnderDragon.class, d -> {
+            dragon = w.spawn(back, org.bukkit.entity.EnderDragon.class, d -> {
                 d.addScoreboardTag(TAG);
                 d.addScoreboardTag(Fx.TAG);
                 d.setPersistent(false);
@@ -65,60 +69,75 @@ public class DragonAwakeningAbility extends CosmicAbility implements org.bukkit.
                 d.setSilent(true);
                 d.setGlowing(true);
                 d.setCollidable(false);
-                d.setRemoveWhenFarAway(false);
                 d.setPhase(org.bukkit.entity.EnderDragon.Phase.HOVER);
-                d.setRotation(yawOf(dir) + 180f, 0);
+                d.setRotation(yawOf(look) + 180f, 0);
             });
         } catch (RuntimeException e) {
             return false;
         }
         Set<UUID> bitten = new HashSet<>();
-        w.playSound(start, Sound.ENTITY_ENDER_DRAGON_GROWL, 3f, 0.9f);
-        for (Player p : w.getPlayers()) if (p.getLocation().distanceSquared(start) < 80 * 80) p.playSound(p.getLocation(), Sound.ENTITY_ENDER_DRAGON_AMBIENT, 1.2f, 0.8f);
-        int ticks = 28;
-        List<Location> trail = new ArrayList<>();
-        every(ticks + 30, t -> {
-            if (!dragon.isValid()) return false;
-            if (t <= ticks) {
-                double prog = t / (double) ticks;
-                double ease = prog < 0.15 ? prog * prog / 0.15 : prog;          // a short wind-up, then full speed
-                Location at = start.clone().add(dir.clone().multiply((range + 6) * ease));
-                // stay above the ground
-                double floor = w.getHighestBlockYAt(at) + 1.5;
-                if (at.getY() < floor && dir.getY() < 0.3) at.setY(floor);
-                at.setYaw(yawOf(dir) + 180f);
-                at.setPitch(0);
-                dragon.teleport(at);
-                trail.add(at.clone());
-                Location head = at.clone().add(dir.clone().multiply(6.5));
-                w.spawnParticle(Particle.DUST, head, 12, 1.5, 1.2, 1.5, 0, Fx.dust(type.rgb(), 2.4f));
-                w.spawnParticle(Particle.PORTAL, at, 30, 3, 1.2, 3, 0.4);
-                Fx.safe(w, Particle.DRAGON_BREATH, at.clone().subtract(dir.clone().multiply(3)), 14, 1.2, 0.6, 1.2, 0.01, 1.0f);
-                if (t % 4 == 0) w.playSound(at, Sound.ENTITY_ENDER_DRAGON_FLAP, 2f, 0.9f);
-                for (LivingEntity e : Targets.enemies(player, head, 4.5)) bite(player, e, bite, dir, bitten);
-                for (LivingEntity e : Targets.enemies(player, at, 4.0)) bite(player, e, bite, dir, bitten);
-                if (t == ticks) w.playSound(at, Sound.ENTITY_ENDER_DRAGON_GROWL, 3f, 0.6f);
+        w.playSound(back, Sound.ENTITY_ENDER_DRAGON_GROWL, 3f, 1.0f);
+        w.playSound(back, Sound.ENTITY_WARDEN_EMERGE, 1.5f, 1.4f);
+        int emerge = 14, dashMax = 30;
+        Location[] pos = {back.clone()};
+        every(emerge + dashMax + 2, t -> {
+            if (!dragon.isValid() || !player.isOnline()) { dragon.remove(); return false; }
+            if (t <= emerge) {
+                // rising out of the player's back
+                double k = t / (double) emerge;
+                Vector f = Targets.flatDirection(player);
+                Location p = player.getLocation().add(0, 1.2 + k * 5.5, 0).subtract(f.clone().multiply(0.6 + k * 4.5));
+                Location aimAt = target != null && target.isValid() ? target.getLocation().add(0, 1, 0) : player.getEyeLocation().add(player.getEyeLocation().getDirection().multiply(20));
+                Vector face = aimAt.toVector().subtract(p.toVector());
+                p.setYaw(yawOf(face) + 180f);
+                p.setPitch(0);
+                dragon.teleport(p);
+                pos[0] = p;
+                Location spine = player.getLocation().add(0, 1.3, 0).subtract(f.clone().multiply(0.3));
+                w.spawnParticle(Particle.DUST, spine, 14, 0.25, 0.35, 0.25, 0, Fx.dust(type.rgb(), 2f));
+                w.spawnParticle(Particle.REVERSE_PORTAL, spine, 20, 0.3, 0.4, 0.3, 0.15);
+                Fx.safe(w, Particle.DRAGON_BREATH, p, 10, 2, 1, 2, 0.02, 1.0f);
+                if (t % 4 == 0) w.playSound(p, Sound.ENTITY_ENDER_DRAGON_FLAP, 2f, 1.1f);
+                if (t == emerge) {
+                    w.playSound(p, Sound.ENTITY_ENDER_DRAGON_GROWL, 3f, 0.7f);
+                    w.playSound(p, Sound.ENTITY_ENDER_DRAGON_SHOOT, 2f, 0.6f);
+                }
                 return true;
             }
-            // vanish into purple smoke
-            if (t == ticks + 1) {
-                Location at = dragon.getLocation();
-                w.spawnParticle(Particle.REVERSE_PORTAL, at, 200, 4, 2, 4, 0.2);
-                w.spawnParticle(Particle.DUST, at, 80, 4, 2, 4, 0, Fx.dust(type.rgb(), 3f));
-                dragon.remove();
-                if (bonus(slot)) {   // lingering dragon breath along its path
-                    for (int i = 0; i < trail.size(); i += 4) {
-                        Location c = trail.get(i).clone();
-                        c.setY(w.getHighestBlockYAt(c) + 1);
-                        if (c.distanceSquared(trail.get(i)) > 36) continue;
-                        every(100, k -> {
-                            if (k % 3 == 0) Fx.safe(w, Particle.DRAGON_BREATH, c, 8, 1.4, 0.15, 1.4, 0.005, 1.0f);
-                            if (k % 5 == 0) w.spawnParticle(Particle.DUST, c, 4, 1.4, 0.2, 1.4, 0, Fx.dust(type.rgb(), 1.4f));
-                            if (k % 20 == 10) for (LivingEntity e : Targets.enemies(player, c, 2.4)) hearts(player, e, 1);
-                            return true;
-                        });
+            // 2) the dash: homes in on the target (or straight where you looked) at high speed
+            Location cur = pos[0];
+            Location goal;
+            if (target != null && target.isValid() && !target.isDead()) goal = target.getLocation().add(0, target.getHeight() * 0.5, 0);
+            else goal = cur.clone().add(look.clone().multiply(3));
+            Vector step = goal.toVector().subtract(cur.toVector());
+            double dist = step.length();
+            if (dist > 0.01) step.normalize().multiply(Math.min(dist, 2.6));
+            Location next = cur.clone().add(step);
+            Vector heading = step.lengthSquared() > 1e-4 ? step.clone().normalize() : look;
+            // the dragon's head sticks out ~6 blocks ahead of its body: lead with the head
+            Location body = next.clone().subtract(heading.clone().multiply(5.5));
+            body.setYaw(yawOf(heading) + 180f);
+            body.setPitch(0);
+            dragon.teleport(body);
+            pos[0] = next;
+            w.spawnParticle(Particle.DUST, next, 14, 1.5, 1, 1.5, 0, Fx.dust(type.rgb(), 2.6f));
+            w.spawnParticle(Particle.PORTAL, body, 30, 3, 1.2, 3, 0.4);
+            Fx.safe(w, Particle.DRAGON_BREATH, body, 14, 1.4, 0.6, 1.4, 0.01, 1.0f);
+            if (t % 3 == 0) w.playSound(next, Sound.ENTITY_ENDER_DRAGON_FLAP, 2.5f, 1.2f);
+            for (LivingEntity e : Targets.enemies(player, next, 4.5)) biteHit(player, e, bite, heading, bitten);
+            boolean reached = target == null ? (t - emerge) * 2.6 >= range : (target.isDead() || bitten.contains(target.getUniqueId()));
+            if (reached || t >= emerge + dashMax) {
+                w.playSound(next, Sound.ENTITY_ENDER_DRAGON_GROWL, 3f, 0.6f);
+                w.spawnParticle(Particle.REVERSE_PORTAL, body, 220, 4, 2, 4, 0.25);
+                w.spawnParticle(Particle.DUST, next, 80, 3, 2, 3, 0, Fx.dust(type.rgb(), 3f));
+                Fx.wave(next.clone().subtract(0, 1, 0), "ring_purple", 1f, 9f, 10);
+                if (bonus(slot)) {
+                    for (LivingEntity e : Targets.enemies(player, next, 6)) {
+                        e.addPotionEffect(new PotionEffect(PotionEffectType.WEAKNESS, 100, 0, false, true, true));
+                        Targets.knockAway(next, e, 1.0, 0.6);
                     }
                 }
+                dragon.remove();
                 return false;
             }
             return true;
@@ -126,7 +145,25 @@ public class DragonAwakeningAbility extends CosmicAbility implements org.bukkit.
         return true;
     }
 
-    private void bite(Player player, LivingEntity e, double hearts, Vector dir, Set<UUID> bitten) {
+    /** Whoever the player is aiming at (2-block wide aim), else the closest enemy in a cone in front of them. */
+    private LivingEntity aimed(Player player, double range) {
+        var ray = player.getWorld().rayTraceEntities(player.getEyeLocation(), player.getEyeLocation().getDirection(), range, 2.0,
+                e -> e instanceof LivingEntity && Targets.isEnemy(player, e));
+        if (ray != null && ray.getHitEntity() instanceof LivingEntity le) return le;
+        Vector look = player.getEyeLocation().getDirection().normalize();
+        LivingEntity best = null;
+        double bestScore = -1;
+        for (LivingEntity e : Targets.enemies(player, player.getLocation(), range)) {
+            Vector to = e.getLocation().add(0, 1, 0).toVector().subtract(player.getEyeLocation().toVector());
+            double dot = to.clone().normalize().dot(look);
+            if (dot < 0.8) continue;
+            double score = dot - to.length() / (range * 4);
+            if (score > bestScore) { bestScore = score; best = e; }
+        }
+        return best;
+    }
+
+    private void biteHit(Player player, LivingEntity e, double hearts, Vector dir, Set<UUID> bitten) {
         if (!bitten.add(e.getUniqueId())) return;
         hearts(player, e, hearts);
         e.setVelocity(dir.clone().multiply(1.4).setY(Math.max(0.7, dir.getY() + 0.5)));

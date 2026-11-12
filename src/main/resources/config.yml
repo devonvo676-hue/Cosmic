@@ -13,7 +13,7 @@ abilities:
   hit-passive-mobs: false
   # Anti one-shot: a player can only take this much ability damage (before armour) from abilities in any
   # combo-window-seconds window. Stops stacking several abilities into an instant kill.
-  combo-damage-cap: 14
+  combo-damage-cap: 0      # combo limit: max ability damage (HP) one player can take in combo-window-seconds. 0 = off
   combo-window-seconds: 4
   bonus-mechanics: true      # each ability's signature extra (Event Horizon, Quasar, ...). false = simpler abilities
   # Abilities deal magic damage: armor points don't block it, but Protection enchants still do. Tuned so a full
@@ -295,8 +295,11 @@ messages:
 admin:
   op-only: true
 
-# Cosmic cash and coinflips (/cf, /balance, /pay; admins: /eco give|take|set)
+# Cosmic cash and coinflips (/cf, /balance; admins: /eco give|take|set)
 economy:
+  max-kills-per-victim: 3   # kill farming: after this many kills of the SAME player inside farm-window-minutes, kills pay $0
+  farm-window-minutes: 30
+  # death-values: per-player "worth when killed" (set in /adminpanel -> Players -> player)
   starting-cash: 10000
   kill-reward: 1000        # cash for every player kill (also in /adminpanel)
   daily-reward: 0          # optional cash for the first login each day (0 = off)
@@ -359,7 +362,7 @@ supply-drops:
   random-min-radius: 100
   item-chance: 0.7         # each item in the loot chest (/adminpanel -> Supply Drops -> Edit the loot) has this chance
   # used only while the loot chest is empty:
-  # ITEM:min-max:chance   or   cosmic:<cosmic_shard|upgrade_token|afk_token|reroll>:min-max:chance
+  # ITEM:min-max:chance   or   cosmic:<cosmic_shard|afk_token|reroll>:min-max:chance  (upgrade tokens are never in drops)
   loot:
     - "DIAMOND:3-8:0.9"
     - "NETHERITE_INGOT:1-2:0.35"
@@ -369,7 +372,6 @@ supply-drops:
     - "EXPERIENCE_BOTTLE:16-32:0.6"
     - "TOTEM_OF_UNDYING:1:0.15"
     - "cosmic:cosmic_shard:4-12:0.8"
-    - "cosmic:upgrade_token:1:0.15"
     - "cosmic:reroll:1:0.08"
 
 rpg:
@@ -397,3 +399,19 @@ cocaine:
   slam-damage: 14          # 7 hearts
   slam-depth: 4            # blocks they're driven into the ground
   break-blocks: true
+
+# ---------------------------------------------------------------- owner-only items (cocaine, RPG Mk II)
+owner-items:
+  players: [v2tou]
+
+rpg-mk2:
+  explosion-power: 16
+  crater-radius: 15
+  break-blocks: true
+  fire: true
+  speed: 2.6
+
+# ---------------------------------------------------------------- /spawn (set it with /setspawn)
+spawn:
+  warmup-seconds: 3
+  combat-seconds: 10       # can't /spawn this soon after a fight

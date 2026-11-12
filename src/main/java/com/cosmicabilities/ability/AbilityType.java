@@ -28,8 +28,8 @@ public enum AbilityType {
             "Blink forward. A void rift is left behind and detonates on anyone near it.",
             "Dimensional Rift", "A second rift detonates where you land and you briefly resist damage."),
     PULSAR("Pulsar", "Ranged Damage", "#4cc9f0", CosmicMaterial.ASTRAL_FRAGMENT, 12,
-            "Fire an instant energy beam that pierces through two enemies.",
-            "Quasar", "Fires three beams in a spread."),
+            "Hurl a spinning neutron star. It locks onto the first enemy or wall, sweeps twin lighthouse beams around it while pulsing shockwaves, then collapses in a blinding detonation.",
+            "Quasar", "Longer beams that drag enemies toward the star."),
     NEBULA("Nebula", "Support / Zone", "#f72585", CosmicMaterial.NEBULA_ESSENCE, 22,
             "Creates a nebula cloud. Allies inside get Speed and Regeneration; enemies glow and are weakened.",
             "Cosmic Veil", "Allies inside also resist damage, and mobs lose track of them."),
@@ -54,8 +54,8 @@ public enum AbilityType {
 
     // ---- exclusive abilities: never rolled. The Ender Dragon / each boss gives its own to the top damage dealer ----
     DRAGON_AWAKENING("Dragon's Awakening", "Legendary - Ender Dragon", "#c77dff", CosmicMaterial.VOID_SHARD, 50,
-            "Summons a massive spectral Ender Dragon that charges forward and bites everything in its path. (8 hearts)",
-            "Draconic Roar", "The dragon's roar at the end knocks back and weakens everyone it passed."),
+            "A massive spectral Ender Dragon tears out of your back and dashes at whoever you aim at, biting everything in its way. (10 hearts)",
+            "Draconic Roar", "Its final roar knocks back and weakens everyone near the target."),
     RIFTBREAKER("Riftbreaker", "Boss - Void Emperor", "#9d4edd", CosmicMaterial.VOID_SHARD, 35,
             "Tears open a massive dimensional crack that travels across the ground in a straight line. Enemies over it take damage as the ground fractures, then it erupts into purple cosmic energy. (6 hearts)",
             "Void Eruption", "The final eruption also lifts enemies into the air."),
@@ -71,6 +71,19 @@ public enum AbilityType {
     APOCALYPSE("Apocalypse", "Boss - Cosmic Destroyer", "#00e5ff", CosmicMaterial.ASTRAL_FRAGMENT, 50,
             "Marks a large circle on the ground. Cosmic energy gathers above it and after 2 seconds a gigantic celestial object crashes down, damaging everyone inside. (7 hearts)",
             "Extinction", "Leaves a burning crater for a few seconds.");
+
+    /** Total hearts the boss / dragon abilities do by default (0 = normal ability: damage varies per hit). */
+    public double defaultHearts() {
+        return switch (this) {
+            case DRAGON_AWAKENING -> 10;
+            case RIFTBREAKER -> 6;
+            case STARPIERCER -> 5;
+            case SHATTERFALL -> 6;
+            case SERPENTS_WRATH -> 5;
+            case APOCALYPSE -> 7;
+            default -> 0;
+        };
+    }
 
     public enum Source { NORMAL, DRAGON, BOSS }
 

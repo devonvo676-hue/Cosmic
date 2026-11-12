@@ -39,13 +39,14 @@ import java.util.concurrent.ThreadLocalRandom;
  */
 public class AdminRpg implements Listener {
     private final CosmicAbilitiesPlugin plugin;
-    private final NamespacedKey key, rocketKey;
+    private final NamespacedKey key, rocketKey, mk2Key;
     private final Map<UUID, Long> lastShot = new HashMap<>();
 
     public AdminRpg(CosmicAbilitiesPlugin plugin) {
         this.plugin = plugin;
         this.key = new NamespacedKey(plugin, "admin_rpg");
         this.rocketKey = new NamespacedKey(plugin, "rpg_rocket");
+        this.mk2Key = new NamespacedKey(plugin, "admin_rpg_mk2");
     }
 
     public ItemStack create() {
@@ -61,6 +62,25 @@ public class AdminRpg implements Listener {
         return it;
     }
 
+    /** The Mk II: bigger crater, much louder blast. Owner only (owner-items.players). */
+    public ItemStack createMk2() {
+        ItemStack it = new ItemStack(Material.CARROT_ON_A_STICK);
+        ItemMeta m = it.getItemMeta();
+        m.displayName(plugin.mm("<!italic><gradient:#ffd166:#e5383b><bold>RPG MK II"));
+        m.lore(java.util.List.of(plugin.mm("<!italic><gray>Right click: fire a heavy rocket"), plugin.mm("<!italic><gray>Leaves an enormous crater"),
+                plugin.mm("<!italic><dark_red>Owner only")));
+        m.setItemModel(new NamespacedKey("cosmic", "admin_rpg_mk2"));
+        m.setUnbreakable(true);
+        m.getPersistentDataContainer().set(key, PersistentDataType.BYTE, (byte) 1);
+        m.getPersistentDataContainer().set(mk2Key, PersistentDataType.BYTE, (byte) 1);
+        it.setItemMeta(m);
+        return it;
+    }
+
+    public boolean isMk2(ItemStack it) {
+        return it != null && it.hasItemMeta() && it.getItemMeta().getPersistentDataContainer().has(mk2Key, PersistentDataType.BYTE);
+    }
+
     public boolean isRpg(ItemStack it) {
         return it != null && it.hasItemMeta() && it.getItemMeta().getPersistentDataContainer().has(key, PersistentDataType.BYTE);
     }
@@ -73,24 +93,26 @@ public class AdminRpg implements Listener {
         if (!isRpg(hand)) return;
         event.setCancelled(true);
         if (event.getAction() != Action.RIGHT_CLICK_AIR && event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
-        if (!BanPistol.isAdmin(p)) {
+        boolean mk2 = isMk2(hand);
+        if (mk2 ? !Owner.allowed(plugin, p) : !BanPistol.isAdmin(p)) {
             p.getInventory().setItemInMainHand(null);
-            p.sendMessage(plugin.mm(plugin.prefix() + "<red>Only admins can use the RPG."));
+            p.sendMessage(plugin.mm(plugin.prefix() + "<red>You can't use that."));
             return;
         }
         long now = System.currentTimeMillis();
         long cd = (long) (plugin.getConfig().getDouble("rpg.cooldown-seconds", 1.5) * 1000);
         if (now - lastShot.getOrDefault(p.getUniqueId(), 0L) < cd) return;
         lastShot.put(p.getUniqueId(), now);
-        fire(p);
+        fire(p, mk2);
     }
 
-    private void fire(Player p) {
+    private void fire(Player p, boolean mk2) {
+        String cfg = mk2 ? "rpg-mk2." : "rpg.";
         World w = p.getWorld();
         Location eye = p.getEyeLocation();
         Vector dir = eye.getDirection().normalize();
         Location muzzle = eye.clone().add(dir.clone().multiply(1.2)).add(0, -0.15, 0);
-        double speed = plugin.getConfig().getDouble("rpg.speed", 2.2);
+        double speed = plugin.getConfig().getDouble(cfg + "speed", mk2 ? 2.6 : 2.2);
         Snowball carrier = w.spawn(muzzle, Snowball.class, s -> {
             s.setShooter(p);
             s.setGravity(false);
@@ -100,7 +122,7 @@ public class AdminRpg implements Listener {
             hm.setItemModel(new NamespacedKey("cosmic", "empty"));
             hidden.setItemMeta(hm);
             s.setItem(hidden);
-            s.getPersistentDataContainer().set(rocketKey, PersistentDataType.BYTE, (byte) 1);
+            s.getPersistentDataContainer().set(rocketKey, PersistentDataType.BYTE, (byte) (mk2 ? 2 : 1));
             s.setPersistent(false);
         });
         ItemStack rocketItem = new ItemStack(Material.PAPER);
@@ -118,7 +140,8 @@ public class AdminRpg implements Listener {
             d.setTeleportDuration(1);
             // point the rocket's nose (+Z in the model) along the flight direction
             Quaternionf rot = new Quaternionf().rotationTo(new Vector3f(0, 0, 1), new Vector3f((float) dir.getX(), (float) dir.getY(), (float) dir.getZ()));
-            d.setTransformation(new Transformation(new Vector3f(), rot, new Vector3f(1.2f, 1.2f, 1.2f), new Quaternionf()));
+            float sc = mk2 ? 2.2f : 1.2f;
+            d.setTransformation(new Transformation(new Vector3f(), rot, new Vector3f(sc, sc, sc), new Quaternionf()));
         });
         carrier.addPassenger(rocket);
         w.playSound(muzzle, Sound.ENTITY_FIREWORK_ROCKET_LAUNCH, 2f, 0.5f);
@@ -138,7 +161,7 @@ public class AdminRpg implements Listener {
                 if (t > 120) {   // out of range: explode in the air
                     carrier.remove();
                     rocket.remove();
-                    crater(at, p);
+                    crater(at, p, mk2);
                     cancel();
                 }
             }
@@ -156,16 +179,33 @@ public class AdminRpg implements Listener {
             at = event.getHitEntity().getLocation();
         }
         Player shooter = s.getShooter() instanceof Player pl ? pl : null;
+        Byte kind = s.getPersistentDataContainer().get(rocketKey, PersistentDataType.BYTE);
         s.getPassengers().forEach(org.bukkit.entity.Entity::remove);
         s.remove();
-        crater(at, shooter);
+        crater(at, shooter, kind != null && kind == 2);
     }
 
-    private void crater(Location at, Player by) {
+    private void crater(Location at, Player by, boolean mk2) {
         World w = at.getWorld();
-        float power = (float) plugin.getConfig().getDouble("rpg.explosion-power", 8);
-        double radius = plugin.getConfig().getDouble("rpg.crater-radius", 8);
-        boolean breakBlocks = plugin.getConfig().getBoolean("rpg.break-blocks", true);
+        String cfg = mk2 ? "rpg-mk2." : "rpg.";
+        float power = (float) plugin.getConfig().getDouble(cfg + "explosion-power", mk2 ? 16 : 8);
+        double radius = plugin.getConfig().getDouble(cfg + "crater-radius", mk2 ? 15 : 8);
+        boolean breakBlocks = plugin.getConfig().getBoolean(cfg + "break-blocks", true);
+        if (mk2) {
+            // heard (and felt) by everyone within 400 blocks
+            for (Player pl : w.getPlayers()) {
+                double d = pl.getLocation().distance(at);
+                if (d > 400) continue;
+                float vol = (float) Math.max(0.4, 3.0 - d / 120);
+                pl.playSound(pl.getLocation(), org.bukkit.Sound.ENTITY_GENERIC_EXPLODE, vol, 0.4f);
+                pl.playSound(pl.getLocation(), org.bukkit.Sound.ENTITY_LIGHTNING_BOLT_THUNDER, vol, 0.5f);
+                pl.playSound(pl.getLocation(), org.bukkit.Sound.ENTITY_WARDEN_SONIC_BOOM, vol, 0.4f);
+                if (d < 120) for (int i = 0; i < 4; i++) plugin.getServer().getScheduler().runTaskLater(plugin, () -> pl.sendHurtAnimation((float) Math.random() * 360), i * 3L);
+            }
+            Fx.safe(w, Particle.FLASH, at, 3, 2, 2, 2, 0, org.bukkit.Color.WHITE);
+            w.spawnParticle(Particle.EXPLOSION_EMITTER, at, 12, radius / 2, radius / 3, radius / 2, 0);
+            w.spawnParticle(Particle.CAMPFIRE_SIGNAL_SMOKE, at, 80, radius / 2, 2, radius / 2, 0.08);
+        }
         w.spawnParticle(Particle.EXPLOSION_EMITTER, at, 4, 1.5, 1.5, 1.5, 0);
         w.spawnParticle(Particle.FLAME, at, 150, radius / 2, radius / 3, radius / 2, 0.15);
         w.spawnParticle(Particle.LARGE_SMOKE, at, 120, radius / 2, radius / 3, radius / 2, 0.08);

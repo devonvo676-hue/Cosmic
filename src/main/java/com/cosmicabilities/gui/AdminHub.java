@@ -45,7 +45,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * announce, reload, unban, name tags, cooldowns and clean-up.
  */
 public class AdminHub implements Listener {
-    enum Page { HUB, GIVE, PLAYERS, PLAYER, PICK, UNBAN, RANKS, EVENTS, STATS, BOSSES, BOSS_EDIT, TEAMS, SUPPLY }
+    enum Page { HUB, GIVE, PLAYERS, PLAYER, PICK, UNBAN, RANKS, EVENTS, STATS, BOSSES, BOSS_EDIT, TEAMS, SUPPLY, TOOLS, ECONOMY }
     enum PickMode { SLOT1, SLOT2, ORB }
 
     public static final class Holder implements InventoryHolder {
@@ -60,11 +60,17 @@ public class AdminHub implements Listener {
         public @NotNull Inventory getInventory() { return inventory; }
     }
 
-    // layout: one row per section, the section's label on the left
-    private static final int H_ABILITIES = 11, H_BOSS = 12, H_BOSSES = 13, H_EVENTS = 14, H_SUPPLY = 15, H_TEAMS = 16, H_COOLDOWNS = 17,
-            H_PLAYERS = 20, H_STATS = 21, H_RANKS = 22, H_GIVE = 23, H_UNBAN = 24, H_ANNOUNCE = 25, H_SPIN = 26,
-            H_KILL = 29, H_AH = 30, H_SHOP = 31, H_RECIPES = 32, H_RPG = 33, H_CONFIG = 34, H_RESET = 35,
-            H_RELOAD = 38, H_SWEEP = 39, H_DESPAWN = 40, H_TAG_ADMIN = 42, H_TAG_OWNER = 43, H_TAG_OFF = 44, H_CLOSE = 49;
+    // hub layout: 3 buttons per row (columns 0, 3, 6); the resource pack draws each button's name next to it
+    private static final int H_EVENTS = 9, H_BOSS = 12, H_BOSSES = 15,
+            H_SUPPLY = 18, H_TEAMS = 21, H_PLAYERS = 24,
+            H_COOLDOWNS = 27, H_CONFIG = 30, H_GIVE = 33,
+            H_ECONOMY = 36, H_RANKS = 39, H_STATS = 42,
+            H_TOOLS = 45, H_SPAWN = 48, H_CLOSE = 51;
+    // tools page
+    private static final int T_RELOAD = 10, T_SWEEP = 11, T_DESPAWN = 12, T_RESET = 13, T_SPIN = 14, T_ANNOUNCE = 15, T_UNBAN = 16,
+            T_TEST = 20, T_TAG_ADMIN = 22, T_TAG_OWNER = 23, T_TAG_OFF = 24;
+    // economy page
+    private static final int E_KILL = 11, E_AH = 12, E_SHOP = 13, E_RECIPES = 14, E_AFK = 15;
 
     private final CosmicAbilitiesPlugin plugin;
     private final Set<UUID> announcing = ConcurrentHashMap.newKeySet();
@@ -84,57 +90,144 @@ public class AdminHub implements Listener {
 
     // ------------------------------------------------------------------ hub
 
+    /** The resource-pack background (with the button names written on it) used as the hub's title. */
+    private net.kyori.adventure.text.Component hubTitle() {
+        return net.kyori.adventure.text.Component.text("\uF801\uE300")
+                .font(net.kyori.adventure.key.Key.key("cosmic", "gui"))
+                .color(net.kyori.adventure.text.format.NamedTextColor.WHITE);
+    }
+
     public void open(Player admin) {
         Holder h = new Holder(Page.HUB);
-        Inventory inv = create(h, 54, "<dark_gray>✦ <gradient:#9b5de5:#00bbf9><bold>Cosmic Admin</bold></gradient>");
-        ItemStack row = Icons.button(plugin, Material.GRAY_STAINED_GLASS_PANE, " ");
-        for (int r = 1; r <= 4; r++) for (int c = 1; c <= 8; c++) inv.setItem(r * 9 + c, row);
-        inv.setItem(4, Icons.gui(plugin, "logo", "<gradient:#9b5de5:#00bbf9><bold>Cosmic Abilities " + plugin.getPluginMeta().getVersion(),
-                "<gray>Online: <white>" + Bukkit.getOnlinePlayers().size() + "  <gray>Bosses alive: <white>" + plugin.bosses().aliveCount(),
-                "<gray>Season <white>" + plugin.teams().season() + " <gray>ends in <white>" + plugin.teams().timeLeft(),
-                "<gray>Events on: <white>" + plugin.events().activeEvents().size()));
-        inv.setItem(9, Icons.gui(plugin, "sec_game", "<#c77dff><bold>GAME", "<gray>Abilities, bosses, events, seasons"));
-        inv.setItem(18, Icons.gui(plugin, "sec_players", "<#48cae4><bold>PLAYERS", "<gray>Players, stats, ranks, items"));
-        inv.setItem(27, Icons.gui(plugin, "sec_eco", "<#ffb703><bold>ECONOMY & ITEMS", "<gray>Cash, auction house, shop, recipes"));
-        inv.setItem(36, Icons.gui(plugin, "sec_server", "<#9a9ab0><bold>SERVER", "<gray>Reload, clean up, name tags"));
-
-        inv.setItem(H_ABILITIES, Icons.gui(plugin, "abilities", "<#c77dff><bold>Abilities", "<gray>Equip any ability on yourself,", "<gray>test-cast, materials, Ban Pistol.", "", "<yellow>Click to open"));
-        inv.setItem(H_BOSS, Icons.gui(plugin, "boss_fight", "<red><bold>Start a Boss Fight", "<gray>Pick a boss, a countdown and how", "<gray>many players must be there.", "", "<yellow>Click to open"));
-        inv.setItem(H_BOSSES, Icons.gui(plugin, "boss_settings", "<red><bold>Boss Settings", "<gray>Health, damage, special attacks, speed,", "<gray>size, armor, drops, spawn cutscene.", "", "<yellow>Click to open"));
-        inv.setItem(H_EVENTS, Icons.gui(plugin, "events", "<yellow><bold>Daily Events", "<gray>2x kill money, 2x AFK tokens, ability", "<gray>frenzy, supply rain, boss fights.",
-                "<gray>Running now: <white>" + plugin.events().activeEvents().size(), "", "<yellow>Click to open"));
-        inv.setItem(H_SUPPLY, Icons.gui(plugin, "supply", "<green><bold>Supply Drops", "<gray>Spawn one at a random spot, edit the", "<gray>loot and where they can land.", "", "<yellow>Click to open"));
-        inv.setItem(H_TEAMS, Icons.gui(plugin, "teams", "<aqua><bold>Teams & Season", "<gray>Bank leaderboard, season length,", "<gray>end the season and give rewards.", "", "<yellow>Click to open"));
-        inv.setItem(H_COOLDOWNS, Icons.gui(plugin, "cooldowns", "<aqua><bold>Ability Cooldowns & Damage", "<gray>Every ability's cooldown, damage", "<gray>and cast effects, one by one or all.", "", "<yellow>Click to open"));
-
-        inv.setItem(H_PLAYERS, Icons.gui(plugin, "players", "<#48cae4><bold>Players", "<gray>Set or spin abilities, upgrades,", "<gray>orbs, AFK tokens, ranks, teleport.", "", "<yellow>Click to open"));
-        inv.setItem(H_STATS, Icons.gui(plugin, "stats", "<#48cae4><bold>Player Stats", "<gray>Refresh everyone's sidebar and tab,", "<gray>or reset kills / cash.", "", "<yellow>Click to open"));
-        inv.setItem(H_RANKS, Icons.gui(plugin, "ranks", "<#ffb703><bold>Ranks", "<gray>Starlight, Cosmos, Supernova.", "<gray>Test them, get rank boxes, Tebex help.", "", "<yellow>Click to open"));
-        inv.setItem(H_GIVE, Icons.gui(plugin, "give", "<white><bold>Give Items", "<gray>Rerolls, tools, shards, tokens, orbs,", "<gray>cash, Ban Pistol, RPG and more.", "", "<yellow>Click to open"));
-        inv.setItem(H_UNBAN, Icons.gui(plugin, "unban", "<red><bold>Banned Players", "<gray>Click someone to unban them.", "", "<yellow>Click to open"));
-        inv.setItem(H_ANNOUNCE, Icons.gui(plugin, "announce", "<gold><bold>Announce", "<gray>Type your message in chat next.", "<gray>Use <white>title | subtitle <gray>for two lines."));
-        inv.setItem(H_SPIN, Icons.gui(plugin, "spin", "<light_purple><bold>Test the Spin Wheel", "<gray>Spins a new slot 1 ability for yourself."));
-
-        long kr = plugin.economy().killReward();
-        inv.setItem(H_KILL, Icons.gui(plugin, "kill_reward", "<gold><bold>Cash per Kill: <yellow>$" + plugin.economy().format(kr),
-                "<gray>Goes into the killer's team bank", "<gray>(or their own cash with no team).", "",
-                "<yellow>Left <gray>+$100   <yellow>Right <gray>-$100", "<yellow>Shift <gray>+/- $1,000"));
-        inv.setItem(H_AH, Icons.gui(plugin, "auction", "<yellow><bold>Auction House", "<gray>Open /ah. Shift + right-click a", "<gray>listing to remove it.", "", "<yellow>Click to open"));
-        inv.setItem(H_SHOP, Icons.gui(plugin, "shop", "<green><bold>AFK Shop Editor", "<gray>Add items, set prices, move them.", "", "<yellow>Click to open"));
-        inv.setItem(H_RECIPES, Icons.gui(plugin, "recipes", "<gold><bold>Recipes", "<gray>Change how cosmic items are crafted.", "", "<yellow>Click to open"));
-        inv.setItem(H_RPG, Icons.gui(plugin, "rpg", "<red><bold>Admin RPG", "<gray>Rocket launcher that leaves a crater.", "", "<yellow>Click to get one"));
-        inv.setItem(H_CONFIG, Icons.gui(plugin, "config", "<gray><bold>All Settings", "<gray>Every other setting, grouped.", "", "<yellow>Click to open"));
-        inv.setItem(H_RESET, Icons.gui(plugin, "reset", "<aqua><bold>Reset Cooldowns", "<yellow>Click <gray>yours", "<yellow>Shift-click <gray>everyone's"));
-
-        inv.setItem(H_RELOAD, Icons.gui(plugin, "reload", "<green><bold>Reload Config", "<gray>Re-read config.yml + afkshop.yml now."));
-        inv.setItem(H_SWEEP, Icons.gui(plugin, "sweep", "<aqua><bold>Clean Up Effects", "<gray>Removes any stuck ability visuals."));
-        inv.setItem(H_DESPAWN, Icons.gui(plugin, "despawn", "<red><bold>Despawn All Bosses", "<gray>No drops."));
-        inv.setItem(H_TAG_ADMIN, Icons.gui(plugin, "tag_admin", "<red><bold>Wear [ADMIN]", "<gray>Needs admin or OP"));
-        inv.setItem(H_TAG_OWNER, Icons.gui(plugin, "tag_owner", "<gold><bold>Wear [OWNER]", "<gray>Needs OP"));
-        inv.setItem(H_TAG_OFF, Icons.gui(plugin, "tag_off", "<gray><bold>Remove My Tag"));
+        Inventory inv = Bukkit.createInventory(h, 54, hubTitle());
+        h.inventory = inv;
+        inv.setItem(H_EVENTS, Icons.gui(plugin, "events", "<yellow><bold>Daily Events", "<gray>Turn on 2x kill money, 2x AFK tokens,",
+                "<gray>ability frenzy, supply rain or a boss fight.", "<gray>Running now: <white>" + plugin.events().activeEvents().size(), "", "<yellow>Click to open"));
+        inv.setItem(H_BOSS, Icons.gui(plugin, "boss_fight", "<red><bold>Start a Boss Fight", "<gray>Pick a boss and spawn it.",
+                "<gray>Bosses alive: <white>" + plugin.bosses().aliveCount(), "", "<yellow>Click to open"));
+        inv.setItem(H_BOSSES, Icons.gui(plugin, "boss_settings", "<red><bold>Boss Settings", "<gray>Health, damage, special attacks, speed,",
+                "<gray>size, armor, drops, spawn cutscene.", "", "<yellow>Click to open"));
+        inv.setItem(H_SUPPLY, Icons.gui(plugin, "supply", "<green><bold>Supply Drops", "<gray>Drop one, edit the loot,", "<gray>choose where they can land.", "", "<yellow>Click to open"));
+        inv.setItem(H_TEAMS, Icons.gui(plugin, "teams", "<aqua><bold>Teams & Season", "<gray>Season " + plugin.teams().season() + " ends in <white>" + plugin.teams().timeLeft(),
+                "<gray>Leaderboard, season length, end season.", "", "<yellow>Click to open"));
+        inv.setItem(H_PLAYERS, Icons.gui(plugin, "players", "<#48cae4><bold>Players", "<gray>Abilities, items, rank, kill log", "<gray>and what each player is worth when killed.", "", "<yellow>Click to open"));
+        inv.setItem(H_COOLDOWNS, Icons.gui(plugin, "abilities", "<#c77dff><bold>Ability Settings", "<gray>Cooldown, damage (in hearts) and cast", "<gray>effects for every ability.", "", "<yellow>Click to open"));
+        inv.setItem(H_CONFIG, Icons.gui(plugin, "config", "<gray><bold>All Settings", "<gray>Everything else, grouped:", "<gray>abilities, effects, drops, players.", "", "<yellow>Click to open"));
+        inv.setItem(H_GIVE, Icons.gui(plugin, "give", "<white><bold>Give Items", "<gray>Rerolls, tools, shards, tokens, orbs,", "<gray>cash, Ban Pistol, RPG...", "", "<yellow>Click to open"));
+        inv.setItem(H_ECONOMY, Icons.gui(plugin, "kill_reward", "<gold><bold>Economy", "<gray>Kill money, auction house, AFK shop,", "<gray>AFK token speed, recipes.", "", "<yellow>Click to open"));
+        inv.setItem(H_RANKS, Icons.gui(plugin, "ranks", "<#ffb703><bold>Ranks", "<gray>Starlight, Cosmos, Supernova.", "", "<yellow>Click to open"));
+        inv.setItem(H_STATS, Icons.gui(plugin, "stats", "<#48cae4><bold>Player Stats", "<gray>Refresh or reset kills and cash.", "", "<yellow>Click to open"));
+        inv.setItem(H_TOOLS, Icons.gui(plugin, "reload", "<green><bold>Tools", "<gray>Reload, clean up, despawn bosses, reset", "<gray>cooldowns, announce, unban, name tags.", "", "<yellow>Click to open"));
+        inv.setItem(H_SPAWN, Icons.gui(plugin, "radius", "<aqua><bold>Set Spawn Here", "<gray>/spawn will bring players to", "<gray>where you're standing now."));
         inv.setItem(H_CLOSE, Icons.gui(plugin, "close", "<red>Close"));
         admin.openInventory(inv);
         admin.playSound(admin.getLocation(), Sound.BLOCK_ENDER_CHEST_OPEN, 0.6f, 1.3f);
+    }
+
+    private void openTools(Player admin) {
+        Holder h = new Holder(Page.TOOLS);
+        Inventory inv = create(h, 36, "<dark_gray>✦ <green><bold>Tools");
+        inv.setItem(T_RELOAD, Icons.gui(plugin, "reload", "<green><bold>Reload Config", "<gray>Re-read config.yml + afkshop.yml now."));
+        inv.setItem(T_SWEEP, Icons.gui(plugin, "sweep", "<aqua><bold>Clean Up Effects", "<gray>Removes any stuck ability visuals."));
+        inv.setItem(T_DESPAWN, Icons.gui(plugin, "despawn", "<red><bold>Despawn All Bosses", "<gray>No drops."));
+        inv.setItem(T_RESET, Icons.gui(plugin, "reset", "<aqua><bold>Reset Cooldowns", "<yellow>Click <gray>yours  <yellow>Shift <gray>everyone's", "<dark_gray>(also /resetcooldown)"));
+        inv.setItem(T_SPIN, Icons.gui(plugin, "spin", "<light_purple><bold>Test the Spin Wheel", "<gray>Spins a new slot 1 ability for you."));
+        inv.setItem(T_ANNOUNCE, Icons.gui(plugin, "announce", "<gold><bold>Announce", "<gray>Type your message in chat next.", "<gray>Use <white>title | subtitle <gray>for two lines."));
+        inv.setItem(T_UNBAN, Icons.gui(plugin, "unban", "<red><bold>Banned Players", "<gray>Click someone to unban them."));
+        inv.setItem(T_TEST, Icons.gui(plugin, "abilities", "<#c77dff><bold>Test Abilities", "<gray>Equip any ability on yourself."));
+        inv.setItem(T_TAG_ADMIN, Icons.gui(plugin, "tag_admin", "<red><bold>Wear [ADMIN]"));
+        inv.setItem(T_TAG_OWNER, Icons.gui(plugin, "tag_owner", "<gold><bold>Wear [OWNER]", "<gray>Needs OP"));
+        inv.setItem(T_TAG_OFF, Icons.gui(plugin, "tag_off", "<gray><bold>Remove My Tag"));
+        inv.setItem(31, Icons.gui(plugin, "back", "<yellow>Back"));
+        admin.openInventory(inv);
+    }
+
+    private void toolsClick(Player admin, int raw, ClickType click) {
+        switch (raw) {
+            case T_RELOAD -> {
+                plugin.reloadAll();
+                admin.sendMessage(plugin.mm(plugin.prefix() + "<green>Config, AFK shop and recipes reloaded - changes are live."));
+            }
+            case T_SWEEP -> admin.sendMessage(plugin.mm(plugin.prefix() + "<aqua>Removed " + Fx.sweep(true) + " effect entities."));
+            case T_DESPAWN -> admin.sendMessage(plugin.mm(plugin.prefix() + "<red>Despawned " + plugin.bosses().despawnAll() + " bosses."));
+            case T_RESET -> {
+                if (click.isShiftClick()) {
+                    for (Player p : Bukkit.getOnlinePlayers()) plugin.engine().resetCooldown(p.getUniqueId());
+                    admin.sendMessage(plugin.mm(plugin.prefix() + "<aqua>Everyone's cooldowns were reset."));
+                } else {
+                    plugin.engine().resetCooldown(admin.getUniqueId());
+                    admin.sendMessage(plugin.mm(plugin.prefix() + "<aqua>Your cooldowns were reset."));
+                }
+            }
+            case T_SPIN -> { admin.closeInventory(); plugin.roll().spin(admin, RollPanel.Reason.ADMIN); }
+            case T_ANNOUNCE -> {
+                admin.closeInventory();
+                announcing.add(admin.getUniqueId());
+                admin.sendMessage(plugin.mm(plugin.prefix() + "<gold>Type your announcement in chat <gray>(or <white>cancel<gray>)."
+                        + " Use <white>title | subtitle <gray>for two lines."));
+            }
+            case T_UNBAN -> openUnban(admin);
+            case T_TEST -> plugin.adminPanel().open(admin);
+            case T_TAG_ADMIN -> tag(admin, RankTags.Rank.ADMIN);
+            case T_TAG_OWNER -> tag(admin, RankTags.Rank.OWNER);
+            case T_TAG_OFF -> { plugin.tags().clear(admin); admin.sendMessage(plugin.mm(plugin.prefix() + "<gray>Tag removed.")); }
+            case 31 -> open(admin);
+            default -> { }
+        }
+    }
+
+    private void openEconomy(Player admin) {
+        Holder h = new Holder(Page.ECONOMY);
+        Inventory inv = create(h, 36, "<dark_gray>✦ <gold><bold>Economy");
+        long kr = plugin.economy().killReward();
+        inv.setItem(E_KILL, Icons.gui(plugin, "kill_reward", "<gold><bold>Cash per Kill: <yellow>$" + plugin.economy().format(kr),
+                "<gray>Default for everyone. Goes to the killer's", "<gray>team bank (or their cash with no team).",
+                "<gray>Set a player's own worth in Players.", "",
+                "<yellow>Left <gray>+$100   <yellow>Right <gray>-$100", "<yellow>Shift <gray>+/- $1,000"));
+        inv.setItem(E_AH, Icons.gui(plugin, "auction", "<yellow><bold>Auction House", "<gray>Open /ah. Shift + right-click a", "<gray>listing to remove it."));
+        inv.setItem(E_SHOP, Icons.gui(plugin, "shop", "<green><bold>AFK Shop Editor", "<gray>Add items, set prices, move them."));
+        inv.setItem(E_RECIPES, Icons.gui(plugin, "recipes", "<gold><bold>Recipes", "<gray>Change how cosmic items are crafted."));
+        int mins = plugin.getConfig().getInt("afk.minutes-per-token", 30);
+        inv.setItem(E_AFK, Icons.gui(plugin, "cooldowns", "<light_purple><bold>1 AFK Token every <white>" + mins + " min",
+                "<gray>How long someone has to be in /afk", "<gray>to earn one token.", "", "<yellow>Left <gray>+5 min   <yellow>Right <gray>-5 min", "<yellow>Shift <gray>+/- 30 min"));
+        int max = plugin.getConfig().getInt("economy.max-kills-per-victim", 3);
+        int win = plugin.getConfig().getInt("economy.farm-window-minutes", 30);
+        inv.setItem(22, Icons.gui(plugin, "kill_log", "<red><bold>Kill farming limit: " + (max <= 0 ? "<gray>off" : "<white>" + max + " per " + win + " min"),
+                "<gray>Killing the SAME player more than this", "<gray>within the time pays $0 (still logged).",
+                "", "<yellow>Left <gray>+1  <yellow>Right <gray>-1 (0 = off)", "<yellow>Shift-left <gray>+10 min  <yellow>Shift-right <gray>-10 min"));
+        inv.setItem(31, Icons.gui(plugin, "back", "<yellow>Back"));
+        admin.openInventory(inv);
+    }
+
+    private void economyClick(Player admin, int raw, ClickType click) {
+        switch (raw) {
+            case E_KILL -> {
+                long step = click.isShiftClick() ? 1000 : 100;
+                plugin.economy().setKillReward(plugin.economy().killReward() + (click.isRightClick() ? -step : step));
+            }
+            case E_AH -> { plugin.auctions().open(admin, 0); return; }
+            case E_SHOP -> { plugin.afkShop().openEditor(admin); return; }
+            case E_RECIPES -> { plugin.recipes().openPicker(admin); return; }
+            case E_AFK -> {
+                int step = click.isShiftClick() ? 30 : 5;
+                int v = plugin.getConfig().getInt("afk.minutes-per-token", 30) + (click.isRightClick() ? -step : step);
+                plugin.getConfig().set("afk.minutes-per-token", Math.max(1, Math.min(1440, v)));
+                plugin.saveConfig();
+            }
+            case 22 -> {
+                if (click.isShiftClick()) {
+                    int v = plugin.getConfig().getInt("economy.farm-window-minutes", 30) + (click.isRightClick() ? -10 : 10);
+                    plugin.getConfig().set("economy.farm-window-minutes", Math.max(5, Math.min(1440, v)));
+                } else {
+                    int v = plugin.getConfig().getInt("economy.max-kills-per-victim", 3) + (click.isRightClick() ? -1 : 1);
+                    plugin.getConfig().set("economy.max-kills-per-victim", Math.max(0, Math.min(100, v)));
+                }
+                plugin.saveConfig();
+            }
+            case 31 -> { open(admin); return; }
+            default -> { return; }
+        }
+        openEconomy(admin);
     }
 
     // ------------------------------------------------------------------ give items
@@ -151,7 +244,10 @@ public class AdminHub implements Listener {
         put(h, 25, plugin.items().afkToken(1), "afk");
         put(h, 15, plugin.items().token(1), "token");
         put(h, 17, plugin.rpg().create(), "rpg");
-        put(h, 9, plugin.cocaine().create(), "cocaine");
+        if (com.cosmicabilities.admin.Owner.allowed(plugin, admin)) {
+            put(h, 9, plugin.cocaine().create(), "cocaine");
+            put(h, 18, plugin.rpg().createMk2(), "rpg_mk2");
+        }
         put(h, 16, plugin.coinflip().coin("<gold><bold>+$100,000", "<gray>Click: give yourself $100,000", "<gray>Shift: $1,000,000"), "cash");
         CosmicMaterial[] mats = CosmicMaterial.values();
         for (int i = 0; i < mats.length; i++) put(h, 19 + i, mats[i].create(16), mats[i]);
@@ -198,7 +294,7 @@ public class AdminHub implements Listener {
         return s.ability().colored() + " <gray>(" + AbilityType.tierName(s.tier()) + ")";
     }
 
-    private void openPlayer(Player admin, UUID target) {
+    public void openPlayer(Player admin, UUID target) {
         Player t = Bukkit.getPlayer(target);
         if (t == null) { openPlayers(admin); return; }
         PlayerData d = plugin.data().get(target);
@@ -230,6 +326,20 @@ public class AdminHub implements Listener {
         inv.setItem(33, Icons.button(plugin, Material.NETHERITE_AXE, "<light_purple>Give Cosmic Axe"));
         com.cosmicabilities.rank.PlayerRank pr = plugin.ranks().rankOf(target);
         inv.setItem(34, Icons.button(plugin, pr.box, "<white>Rank: " + pr.mini(), "<yellow>Left <gray>next rank  <yellow>Right <gray>previous"));
+        java.util.List<com.cosmicabilities.stats.KillLog.Entry> kl = plugin.killLog().kills(target);
+        inv.setItem(38, Icons.gui(plugin, "kill_log", "<red><bold>Kill Log",
+                "<gray>Who they killed, how often and", "<gray>how much it paid. Spot kill farming.",
+                "<gray>Kills logged: <white>" + kl.size(), "", "<yellow>Click to open"));
+        long value = plugin.economy().deathValue(target);
+        boolean custom = plugin.economy().hasCustomDeathValue(target);
+        inv.setItem(40, Icons.gui(plugin, "kill_reward", "<gold><bold>Worth when killed: <yellow>$" + plugin.economy().format(value),
+                custom ? "<gray>Custom for this player" : "<gray>Server default (" + "$" + plugin.economy().format(plugin.economy().killReward()) + ")",
+                "<gray>Whoever kills " + t.getName() + " gets this much.", "",
+                "<yellow>Left <gray>+$100  <yellow>Right <gray>-$100", "<yellow>Shift <gray>+/- $1,000", "<yellow>Middle / Q <gray>back to default"));
+        com.cosmicabilities.team.Teams.Team team = plugin.teams().teamOf(target);
+        inv.setItem(42, Icons.gui(plugin, "teams", "<aqua><bold>Team: <white>" + (team == null ? "none" : team.name),
+                team == null ? "<gray>Not in a team" : "<gray>Bank: <yellow>$" + plugin.economy().format(team.bank),
+                team == null ? "" : "<gray>Team kills: <white>" + team.kills));
         inv.setItem(49, Icons.gui(plugin, "back", "<yellow>Back"));
         admin.openInventory(inv);
     }
@@ -300,9 +410,11 @@ public class AdminHub implements Listener {
             case BOSSES -> bossesClick(admin, raw, click);
             case BOSS_EDIT -> bossEditClick(admin, h, raw, click);
             case SUPPLY -> supplyClick(admin, raw, click);
+            case TOOLS -> toolsClick(admin, raw, click);
+            case ECONOMY -> economyClick(admin, raw, click);
             case TEAMS -> teamsClick(admin, raw, click);
             case UNBAN -> {
-                if (raw == 49) { open(admin); return; }
+                if (raw == 49) { openTools(admin); return; }
                 if (h.slots.get(raw) instanceof String name) {
                     plugin.miscCommands().unban(admin, new String[]{name});
                     openUnban(admin);
@@ -313,59 +425,20 @@ public class AdminHub implements Listener {
 
     private void hubClick(Player admin, int raw, ClickType click) {
         switch (raw) {
-            case H_ABILITIES -> plugin.adminPanel().open(admin);
-            case H_BOSS -> plugin.bossFightPanel().open(admin);
-            case H_CONFIG -> plugin.configPanel().open(admin);
-            case H_SHOP -> plugin.afkShop().openEditor(admin);
-            case H_RECIPES -> plugin.recipes().openPicker(admin);
-            case H_PLAYERS -> openPlayers(admin);
-            case H_GIVE -> openGive(admin);
-            case H_ANNOUNCE -> {
-                admin.closeInventory();
-                announcing.add(admin.getUniqueId());
-                admin.sendMessage(plugin.mm(plugin.prefix() + "<gold>Type your announcement in chat <gray>(or <white>cancel<gray>)."
-                        + " Use <white>title | subtitle <gray>for two lines."));
-            }
-            case H_RELOAD -> {
-                plugin.reloadAll();
-                admin.sendMessage(plugin.mm(plugin.prefix() + "<green>Config, AFK shop and recipes reloaded - changes are live."));
-            }
-            case H_UNBAN -> openUnban(admin);
-            case H_TAG_ADMIN -> tag(admin, RankTags.Rank.ADMIN);
-            case H_TAG_OWNER -> tag(admin, RankTags.Rank.OWNER);
-            case H_TAG_OFF -> {
-                plugin.tags().clear(admin);
-                admin.sendMessage(plugin.mm(plugin.prefix() + "<gray>Tag removed."));
-            }
-            case H_RESET -> {
-                if (click.isShiftClick()) {
-                    for (Player p : Bukkit.getOnlinePlayers()) plugin.engine().resetCooldown(p.getUniqueId());
-                    admin.sendMessage(plugin.mm(plugin.prefix() + "<aqua>Everyone's cooldowns were reset."));
-                } else {
-                    plugin.engine().resetCooldown(admin.getUniqueId());
-                    admin.sendMessage(plugin.mm(plugin.prefix() + "<aqua>Your cooldowns were reset."));
-                }
-            }
-            case H_SWEEP -> admin.sendMessage(plugin.mm(plugin.prefix() + "<aqua>Removed " + Fx.sweep(true) + " effect entities."));
-            case H_DESPAWN -> admin.sendMessage(plugin.mm(plugin.prefix() + "<red>Despawned " + plugin.bosses().despawnAll() + " bosses."));
-            case H_KILL -> {
-                long step = click.isShiftClick() ? 1000 : 100;
-                plugin.economy().setKillReward(plugin.economy().killReward() + (click.isRightClick() ? -step : step));
-                open(admin);
-            }
-            case H_RANKS -> openRanks(admin);
-            case H_AH -> plugin.auctions().open(admin, 0);
-            case H_SPIN -> {
-                admin.closeInventory();
-                plugin.roll().spin(admin, RollPanel.Reason.ADMIN);
-            }
             case H_EVENTS -> openEvents(admin);
+            case H_BOSS -> plugin.bossFightPanel().open(admin);
+            case H_BOSSES -> openBosses(admin);
             case H_SUPPLY -> openSupply(admin);
             case H_TEAMS -> openTeams(admin);
-            case H_STATS -> openStats(admin);
-            case H_BOSSES -> openBosses(admin);
-            case H_RPG -> admin.getInventory().addItem(plugin.rpg().create());
+            case H_PLAYERS -> openPlayers(admin);
             case H_COOLDOWNS -> plugin.configPanel().openAbilities(admin);
+            case H_CONFIG -> plugin.configPanel().open(admin);
+            case H_GIVE -> openGive(admin);
+            case H_ECONOMY -> openEconomy(admin);
+            case H_RANKS -> openRanks(admin);
+            case H_STATS -> openStats(admin);
+            case H_TOOLS -> openTools(admin);
+            case H_SPAWN -> { admin.closeInventory(); admin.performCommand("setspawn"); }
             case H_CLOSE -> admin.closeInventory();
             default -> { }
         }
@@ -394,7 +467,8 @@ public class AdminHub implements Listener {
                 yield null;
             }
             case "rpg" -> plugin.rpg().create();
-            case "cocaine" -> plugin.cocaine().create();
+            case "cocaine" -> com.cosmicabilities.admin.Owner.allowed(plugin, admin) ? plugin.cocaine().create() : null;
+            case "rpg_mk2" -> com.cosmicabilities.admin.Owner.allowed(plugin, admin) ? plugin.rpg().createMk2() : null;
             default -> plugin.banPistol().create();
         };
         if (it != null) for (ItemStack left : admin.getInventory().addItem(it).values()) admin.getWorld().dropItemNaturally(admin.getLocation(), left);
@@ -417,6 +491,15 @@ public class AdminHub implements Listener {
             }
             case 20 -> { openPick(admin, h.target, PickMode.SLOT1); return; }
             case 21 -> { openPick(admin, h.target, PickMode.SLOT2); return; }
+            case 38 -> { plugin.killLog().open(admin, t, h.target); return; }
+            case 40 -> {
+                if (click == ClickType.MIDDLE || click == ClickType.DROP || click == ClickType.CONTROL_DROP) {
+                    plugin.economy().setDeathValue(h.target, -1);
+                } else {
+                    long step = click.isShiftClick() ? 1000 : 100;
+                    plugin.economy().setDeathValue(h.target, Math.max(0, plugin.economy().deathValue(h.target) + (click.isRightClick() ? -step : step)));
+                }
+            }
             case 30 -> { openPick(admin, h.target, PickMode.ORB); return; }
             case 22 -> d.gained().clear();
             case 23 -> {

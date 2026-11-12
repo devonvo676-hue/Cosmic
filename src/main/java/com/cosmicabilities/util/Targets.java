@@ -36,7 +36,7 @@ public final class Targets {
     public static boolean isAlly(Player caster, Player other) {
         if (caster.equals(other)) return true;
         if (trusts(caster, other)) return true;
-        if (plugin.teams() != null && plugin.teams().sameTeam(caster.getUniqueId(), other.getUniqueId())) return true;
+        if (plugin.teams() != null && plugin.teams().protects(caster.getUniqueId(), other.getUniqueId())) return true;
         Team team = caster.getScoreboard().getEntryTeam(caster.getName());
         return team != null && !RankTags.isTagTeam(team) && !RankTags.isRankTeam(team) && team.hasEntry(other.getName());
     }
@@ -121,9 +121,10 @@ public final class Targets {
         if (ability != null) lastHits.put(target.getUniqueId(), new AbilityHit(caster.getName(), ability, System.currentTimeMillis()));
         double mult = exact ? 1.0 : plugin.getConfig().getDouble("abilities.damage-multiplier", 1.0);
         double raw = amount * mult;
+        java.util.Deque<double[]> comboLog = null;
         if (target instanceof Player && !exact) {
             // anti one-shot: cap how much ability damage one player can take inside a short window
-            double cap = plugin.getConfig().getDouble("abilities.combo-damage-cap", 14);
+            double cap = plugin.getConfig().getDouble("abilities.combo-damage-cap", 0);
             long window = (long) (plugin.getConfig().getDouble("abilities.combo-window-seconds", 4) * 1000);
             if (cap > 0) {
                 long now = System.currentTimeMillis();
@@ -133,7 +134,7 @@ public final class Targets {
                 for (double[] e : log) taken += e[1];
                 raw = Math.min(raw, Math.max(0, cap - taken));
                 if (raw <= 0.01) return 0;
-                log.addLast(new double[]{now, raw});
+                comboLog = log;
             }
         }
         double before = target.getHealth() + target.getAbsorptionAmount();
@@ -148,6 +149,8 @@ public final class Targets {
         }
         double after = target.isDead() ? 0 : target.getHealth() + target.getAbsorptionAmount();
         double dealt = Math.max(0, before - after);
+        // the combo limit counts the damage that actually landed (after Protection), not the raw number
+        if (comboLog != null && dealt > 0) comboLog.addLast(new double[]{System.currentTimeMillis(), dealt});
         if (dealt > 0.05) {
             Fx.damageNumber(target, dealt, rgb);
             Fx.hitmarker(caster, target);

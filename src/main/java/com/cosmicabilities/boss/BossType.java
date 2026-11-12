@@ -10,7 +10,7 @@ public enum BossType {
     VOID_EMPEROR("Void Emperor", "#9d4edd", EntityType.WITHER_SKELETON, 2.45, CosmicMaterial.VOID_SHARD, BarColor.PURPLE),
     SOLAR_TITAN("Solar Titan", "#ffb703", EntityType.ZOGLIN, 4.2, CosmicMaterial.SOLAR_CORE, BarColor.YELLOW),
     FROST_LEVIATHAN("Frost Leviathan", "#8ecae6", EntityType.IRON_GOLEM, 2.0, CosmicMaterial.FROZEN_STARDUST, BarColor.BLUE),
-    NEBULA_SERPENT("Nebula Drake", "#f72585", EntityType.HOGLIN, 2.5, CosmicMaterial.NEBULA_ESSENCE, BarColor.PINK),
+    NEBULA_SERPENT("Nebula Drake", "#f72585", EntityType.HOGLIN, 5.5, CosmicMaterial.NEBULA_ESSENCE, BarColor.PINK),
     COSMIC_DESTROYER("Cosmic Destroyer", "#e0e1dd", EntityType.RAVAGER, 1.55, CosmicMaterial.ASTRAL_FRAGMENT, BarColor.WHITE);
 
     public final String displayName;

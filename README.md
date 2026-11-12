@@ -1,15 +1,30 @@
-# Cosmic Abilities 2.9 (Paper 1.21.11)
+# Cosmic Abilities 3.0 (Paper 1.21.11)
 
 ## Build the jar
 Upload this whole folder (including `.github`) to your GitHub repo. GitHub builds it automatically:
 **Actions** tab -> latest run -> **Artifacts** -> **CosmicAbilities** (jar + resource pack).
-Or on a PC with Java 21: `gradlew.bat build` -> `build/libs/CosmicAbilities-2.9.0.jar`.
+Or on a PC with Java 21: `gradlew.bat build` -> `build/libs/CosmicAbilities-3.0.0.jar`.
 
 ## Install
-1. Delete the old CosmicAbilities jar from `plugins/`, add `CosmicAbilities-2.9.0.jar`, restart.
+1. Delete the old CosmicAbilities jar from `plugins/`, add `CosmicAbilities-3.0.0.jar`, restart.
    Your existing config is kept and the new settings are added to it automatically. Player data carries over.
 2. Upload `CosmicAbilities-ResourcePack.zip` (direct download link, e.g. mc-packs.net), put the link and
    its SHA-1 in `config.yml` under `resource-pack`, then `/cosmic admin reload` and rejoin.
+
+## New in 3.0
+- `/leaderboard` (richest teams), `/endseason` (admins), `/spawn` + `/setspawn`, `/resetcooldown` (admins), `/killlog <player>`.
+  `/pay` was removed.
+- Teams: joining (or creating) a team moves your cash into the team bank; team kills are tracked (sidebar, tab, /team info);
+  leaders can turn friendly fire on/off with `/team ff`.
+- Kill money only for real kills (the killer has to land the killing blow), never for teammates, and killing the same
+  person more than `economy.max-kills-per-victim` times in `economy.farm-window-minutes` pays nothing. Every kill is logged.
+- Per-player "worth when killed" (Admin panel -> Players -> player).
+- Admin panel rebuilt: 15 labelled buttons on a custom background (needs the resource pack), plus Economy and Tools pages.
+- Ability damage can be set in hearts per ability; multipliers now always mean "higher = more damage". The combo limit
+  is off by default (explained in All Settings).
+- Every boss has its own entrance cutscene and everyone online watches it. The Nebula Drake is Ender-Dragon sized.
+- Dragon's Awakening tears out of your back and homes in on your target. Pulsar reworked into a spinning neutron star.
+- Owner-only items (`owner-items.players`, v2tou): cocaine and the RPG Mk II. Upgrade tokens never come from supply drops.
 
 ## New in 2.9
 - Cleaner admin panel and settings with custom icons, grouped into sections (Game / Players / Economy / Server).
@@ -120,7 +135,7 @@ Any player the bullet hits is banned (staff can't be). Animals and mobs take dam
 Everyone starts with **$10,000** and earns **$1,000 per player kill** (change it in `/adminpanel`).
 `/cf` opens the coinflip menu: click the sign to put up a bet (min $1,000, no max; the money is held until someone
 accepts or you cancel). Click someone's head to accept - the coin flips between both heads and lands on the winner,
-who takes the pot. `/balance`, `/pay <player> <amount>`; admins `/eco give|take|set <player> <amount>`.
+who takes the pot. `/balance`; admins `/eco give|take|set <player> <amount>`.
 
 ## Discord chat
 Discord: channel settings -> Integrations -> Webhooks -> New Webhook -> Copy Webhook URL.

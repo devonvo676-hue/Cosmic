@@ -74,9 +74,6 @@ commands:
     description: See your cash
     usage: /balance [player]
     aliases: [bal, money, cash]
-  pay:
-    description: Send cash to another player
-    usage: /pay <player> <amount>
   eco:
     description: Give, take or set a player's cash
     usage: /eco <give|take|set> <player> <amount>
@@ -105,6 +102,25 @@ commands:
     description: Teams - share a bank, no friendly fire, win the season
     usage: /team <create|invite|accept|leave|kick|disband|deposit|info|top>
     aliases: [teams, t]
+  leaderboard:
+    description: The richest teams this season
+    aliases: [lb]
+  endseason:
+    description: End the season now (admins)
+    permission: cosmicabilities.admin
+  killlog:
+    description: See who a player has been killing (admins)
+    usage: /killlog <player>
+    permission: cosmicabilities.admin
+  spawn:
+    description: Teleport to spawn
+  setspawn:
+    description: Set the server spawn where you stand (admins)
+    permission: cosmicabilities.admin
+  resetcooldown:
+    description: Reset your own ability cooldowns (admins)
+    aliases: [resetcd, rcd]
+    permission: cosmicabilities.admin
   supplydrop:
     description: Call a supply drop
     usage: /supplydrop [here | <x> <y> <z> | random <radius>]

@@ -82,7 +82,8 @@ public class Sidebar implements Listener, CommandExecutor {
         Component header = plugin.mm("\n<gradient:#9b5de5:#f15bb5:#00bbf9><bold>✦ C O S M I C ✦</bold></gradient>\n"
                 + (head == null || head.isBlank() ? "" : head + "\n") + "<dark_gray>▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n");
         String footer = "\n<dark_gray>▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬"
-                + "\n<#f15bb5>Team: <white>" + (team == null ? "<gray>none <dark_gray>(/team create)" : team.name + " <gray>| Bank <gold>$" + plugin.economy().format(team.bank))
+                + "\n<#f15bb5>Team: <white>" + (team == null ? "<gray>none <dark_gray>(/team create)" : team.name + " <gray>| Bank <gold>$" + plugin.economy().format(team.bank)
+                        + " <gray>| Kills <white>" + team.kills)
                 + "\n<#f15bb5>Cash: <gold>$" + plugin.economy().format(plugin.economy().balance(p.getUniqueId()))
                 + "  <#f15bb5>Ping: <white>" + p.getPing() + "ms  <#f15bb5>Online: <white>" + Bukkit.getOnlinePlayers().size()
                 + "\n<#00bbf9>Season " + plugin.teams().season() + " <gray>ends in <white>" + plugin.teams().timeLeft()
@@ -128,6 +129,7 @@ public class Sidebar implements Listener, CommandExecutor {
                 plugin.mm(accent + "<bold>Team"),
                 icon("cosmic", "item/team_shield", false).append(plugin.mm(" <white>" + (team == null ? "<gray>None" : team.name))),
                 icon("minecraft", "item/gold_ingot", false).append(plugin.mm(" <white>Bank: " + value + (team == null ? "-" : "$" + plugin.economy().format(team.bank)))),
+                icon("minecraft", "item/iron_sword", false).append(plugin.mm(" <white>Team kills: " + value + (team == null ? "-" : team.kills))),
                 icon("minecraft", "item/clock_00", false).append(plugin.mm(" <white>Season " + plugin.teams().season() + ": " + value + plugin.teams().timeLeft())),
                 Component.text("   "),
                 plugin.mm(accent + "<bold>Server"),

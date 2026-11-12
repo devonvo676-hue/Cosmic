@@ -37,12 +37,18 @@ public abstract class CosmicAbility {
     /** Deals this ability's damage, scaled by its own ability-settings.<id>.damage-multiplier. */
     protected double hit(Player caster, LivingEntity target, double amount) {
         double mult = plugin.getConfig().getDouble("ability-settings." + type.id() + ".damage-multiplier", 1.0);
+        // ability-settings.<id>.hearts > 0: every hit of this ability does exactly that many hearts
+        double hearts = plugin.getConfig().getDouble("ability-settings." + type.id() + ".hearts", 0);
+        if (hearts > 0) return Targets.damage(caster, target, hearts * 2 * mult, type.rgb(), type.colored(), true);
         return Targets.damage(caster, target, amount * mult, type.rgb(), type.colored());
     }
 
     /** Boss / dragon abilities: deals exactly this many hearts (times the ability's own damage-multiplier). */
     protected double hearts(Player caster, LivingEntity target, double hearts) {
         double mult = plugin.getConfig().getDouble("ability-settings." + type.id() + ".damage-multiplier", 1.0);
+        // ability-settings.<id>.hearts > 0 = the ability's TOTAL damage in hearts; its parts are scaled to match
+        double total = plugin.getConfig().getDouble("ability-settings." + type.id() + ".hearts", 0);
+        if (total > 0 && type.defaultHearts() > 0) mult *= total / type.defaultHearts();
         return Targets.damage(caster, target, hearts * 2 * mult, type.rgb(), type.colored(), true);
     }
 

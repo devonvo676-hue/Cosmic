@@ -8,150 +8,161 @@ import com.cosmicabilities.fx.Fx;
 import com.cosmicabilities.util.Targets;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.World;
-import org.bukkit.entity.Entity;
-import org.bukkit.entity.LivingEntity;
-import org.bukkit.entity.ItemDisplay;
 import org.bukkit.entity.Display;
+import org.bukkit.entity.ItemDisplay;
+import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.util.Transformation;
 import org.bukkit.util.Vector;
+import org.joml.Quaternionf;
+import org.joml.Vector3f;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
-/** Instant beam: charge rings at your hand, a white-hot core wrapped in a cyan helix, sparks on impact. */
+/**
+ * Pulsar: hurl a spinning neutron star. It flies until it reaches an enemy or a wall, then hangs there spinning,
+ * sweeping two lighthouse beams around while pulsing out shockwaves, and finally collapses in a big detonation.
+ */
 public class PulsarAbility extends CosmicAbility {
-    private static final int CHARGE = 6;
-    private static final double RANGE = 40;
+    private static final double RANGE = 30, SPEED = 1.1;
+    private static final int SPIN_TICKS = 50;
 
     public PulsarAbility(CosmicAbilitiesPlugin plugin) { super(plugin, AbilityType.PULSAR); }
 
     @Override
     public boolean cast(Player player, AbilitySlot slot) {
         World w = player.getWorld();
-        w.playSound(player.getLocation(), Sound.BLOCK_BEACON_POWER_SELECT, 0.9f, 2f);
-        w.playSound(player.getLocation(), Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.8f, 1.6f);
-        // charge: a tiny spinning neutron star forms in front of you while rings of energy collapse into it
-        Location first = muzzle(player);
-        ItemDisplay star = Fx.sprite(first, "pulsar", 0.05f, Display.Billboard.CENTER);
+        Vector dir = player.getEyeLocation().getDirection().normalize();
+        Location start = player.getEyeLocation().add(dir.clone().multiply(1.2)).subtract(0, 0.2, 0);
+        boolean quasar = bonus(slot);
+        double beamLen = quasar ? 9 : 6.5;
+        ItemDisplay star = Fx.sprite(start, "pulsar", 0.05f, Display.Billboard.CENTER);
         star.setTeleportDuration(1);
-        Fx.animate(star, CHARGE, Fx.sized(1.1f, 1.1f, 6f), 1);
-        every(CHARGE, t -> {
-            if (!player.isOnline()) { star.remove(); return false; }
-            Location hand = muzzle(player);
-            Vector dir = player.getEyeLocation().getDirection().normalize();
-            hand.setYaw(0);
-            hand.setPitch(0);
-            star.teleport(hand);
-            if (t % 2 == 0) {
-                ItemDisplay ring = Fx.disc(hand.clone().add(dir.clone().multiply(0.15)), t % 4 == 0 ? "ring_cyan" : "ring_white", 2.4f, dir);
-                Fx.animate(ring, 4, Fx.discShape(0.05f, dir, 1.5f), 1);
-                Fx.removeLater(ring, 6);
-            }
-            w.spawnParticle(Particle.ELECTRIC_SPARK, hand, 3, 0.25, 0.25, 0.25, 0.02);
-            w.playSound(hand, Sound.BLOCK_NOTE_BLOCK_CHIME, 0.5f, 0.8f + t * 0.15f);
-            if (t == CHARGE) {
-                star.remove();
-                double damage = dmg(14, slot);
-                if (bonus(slot)) {
-                    for (double yaw : new double[]{-10, 0, 10}) fire(player, rotateY(dir.clone(), Math.toRadians(yaw)), damage * 0.8);
-                } else {
-                    fire(player, dir, damage);
+        Fx.animate(star, 4, Fx.sized(1.4f, 1.4f, 3f), 1);
+        ItemDisplay halo = Fx.sprite(start, "flare_cyan", 0.05f, Display.Billboard.CENTER);
+        halo.setTeleportDuration(1);
+        Fx.animate(halo, 4, Fx.sized(2.6f, 2.6f, 0), 1);
+        ItemDisplay[] beams = {beam(start), beam(start)};
+        w.playSound(start, Sound.BLOCK_BEACON_POWER_SELECT, 1f, 2f);
+        w.playSound(start, Sound.ITEM_TRIDENT_THROW, 1.2f, 0.6f);
+        Map<UUID, Integer> lastBeamHit = new HashMap<>();
+        Location[] anchor = new Location[1];
+        int[] anchoredAt = new int[1];
+        every((int) (RANGE / SPEED) + SPIN_TICKS + 10, t -> {
+            if (!player.isOnline()) { star.remove(); halo.remove(); for (ItemDisplay b : beams) b.remove(); return false; }
+            Location at;
+            if (anchor[0] == null) {
+                // flying: stop at the first enemy or wall
+                at = start.clone().add(dir.clone().multiply(Math.min(RANGE, t * SPEED)));
+                boolean stop = t * SPEED >= RANGE || at.getBlock().getType().isSolid() || !Targets.enemies(player, at, 1.6).isEmpty();
+                if (at.getBlock().getType().isSolid()) at.subtract(dir.clone().multiply(0.8));
+                if (t % 2 == 0) w.spawnParticle(Particle.END_ROD, at, 2, 0.1, 0.1, 0.1, 0.01);
+                w.spawnParticle(Particle.DUST, at, 3, 0.15, 0.15, 0.15, 0, Fx.dust(type.rgb(), 1.3f));
+                if (stop) {
+                    anchor[0] = at.clone();
+                    anchoredAt[0] = t;
+                    w.playSound(at, Sound.BLOCK_BEACON_ACTIVATE, 1.5f, 1.8f);
+                    w.playSound(at, Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 1.2f, 1.4f);
                 }
-                // recoil
-                player.setVelocity(player.getVelocity().add(dir.clone().multiply(-0.35).setY(0.05)));
-                w.playSound(player.getLocation(), Sound.ENTITY_WARDEN_SONIC_BOOM, 0.7f, 1.8f);
-                w.playSound(player.getLocation(), Sound.ENTITY_FIREWORK_ROCKET_BLAST, 1.2f, 0.7f);
-                w.playSound(player.getLocation(), Sound.ITEM_TRIDENT_THUNDER, 0.5f, 2f);
+            } else {
+                at = anchor[0];
+            }
+            Location spot = at.clone(); spot.setYaw(0); spot.setPitch(0);
+            star.teleport(spot);
+            halo.teleport(spot);
+            if (anchor[0] == null) return true;
+            int k = t - anchoredAt[0];
+            // the two lighthouse beams: tilted, sweeping round (they speed up as it goes)
+            double angle = k * (0.18 + k * 0.004);
+            float len = (float) Math.min(beamLen * 2, beamLen * 2 * (k + 1) / 6.0);
+            for (int i = 0; i < 2; i++) {
+                double a = angle + i * Math.PI / 2;
+                Quaternionf rot = new Quaternionf().rotateY((float) a).rotateZ((float) Math.toRadians(i == 0 ? 75 : 105));
+                ItemDisplay b = beams[i];
+                b.teleport(spot);
+                b.setInterpolationDelay(0);
+                b.setInterpolationDuration(1);
+                b.setTransformation(new Transformation(new Vector3f(), rot, new Vector3f(i == 0 ? 0.7f : 0.45f, len, i == 0 ? 0.7f : 0.45f), new Quaternionf()));
+                // damage enemies the beam sweeps over (each at most every 10 ticks)
+                Vector3f axis = rot.transform(new Vector3f(0, 1, 0));
+                Vector ax = new Vector(axis.x, axis.y, axis.z);
+                for (LivingEntity e : Targets.enemies(player, at, len / 2 + 1)) {
+                    Vector to = e.getLocation().add(0, e.getHeight() / 2, 0).toVector().subtract(at.toVector());
+                    double along = to.dot(ax);
+                    double off = to.clone().subtract(ax.clone().multiply(along)).length();
+                    if (off > 1.1 || Math.abs(along) > len / 2) continue;
+                    Integer last = lastBeamHit.get(e.getUniqueId());
+                    if (last != null && t - last < 10) continue;
+                    lastBeamHit.put(e.getUniqueId(), t);
+                    hit(player, e, 2.5);
+                    w.spawnParticle(Particle.ELECTRIC_SPARK, e.getLocation().add(0, 1, 0), 12, 0.3, 0.4, 0.3, 0.2);
+                    if (quasar) {
+                        Vector pull = at.toVector().subtract(e.getLocation().toVector());
+                        if (pull.lengthSquared() > 1) e.setVelocity(e.getVelocity().add(pull.normalize().multiply(0.35)));
+                    }
+                }
+            }
+            if (k % 3 == 0) w.playSound(at, Sound.BLOCK_NOTE_BLOCK_CHIME, 0.6f, 0.6f + k * 0.03f);
+            // pulses: a ring of light every 12 ticks
+            if (k > 0 && k % 12 == 0) {
+                Fx.wave(at.clone().subtract(0, 0.4, 0), "ring_cyan", 0.5f, 8f, 8);
+                ItemDisplay ring = Fx.disc(at, "ring_white", 0.3f, new Vector(0, 1, 0).add(dir.clone().multiply(0.3)));
+                Fx.animate(ring, 6, Fx.discShape(6f, new Vector(0, 1, 0), 1f), 1);
+                Fx.removeLater(ring, 8);
+                w.playSound(at, Sound.ENTITY_WARDEN_HEARTBEAT, 1.5f, 1.8f);
+                for (LivingEntity e : Targets.enemies(player, at, 4)) {
+                    hit(player, e, 2);
+                    e.setVelocity(e.getVelocity().add(new Vector(0, 0.15, 0)));
+                }
+            }
+            if (k >= SPIN_TICKS) {
+                // collapse and detonate
+                Fx.animate(star, 3, Fx.sized(0.2f, 0.2f, 6f), 0);
+                star.remove(); halo.remove();
+                for (ItemDisplay b : beams) b.remove();
+                Fx.flare(at, "flare_white", 7f, 10);
+                Fx.flare(at, "flare_cyan", 10f, 14);
+                Fx.wave(at.clone().subtract(0, 0.5, 0), "ring_white", 1f, 11f, 10);
+                Fx.wave(at.clone().subtract(0, 0.3, 0), "ring_cyan", 1f, 9f, 8);
+                w.spawnParticle(Particle.END_ROD, at, 60, 0.2, 0.2, 0.2, 0.5);
+                w.spawnParticle(Particle.ELECTRIC_SPARK, at, 60, 1.5, 1.5, 1.5, 0.4);
+                w.playSound(at, Sound.ENTITY_WARDEN_SONIC_BOOM, 1.6f, 1.6f);
+                w.playSound(at, Sound.ENTITY_FIREWORK_ROCKET_LARGE_BLAST, 2f, 0.6f);
+                for (LivingEntity e : Targets.enemies(player, at, 5)) {
+                    hit(player, e, 6);
+                    Targets.knockAway(at, e, 1.1, 0.6);
+                }
+                return false;
             }
             return true;
         });
         return true;
     }
 
-    private static Location muzzle(Player p) {
-        Location eye = p.getEyeLocation();
-        return eye.add(eye.getDirection().multiply(1.0)).add(0, -0.25, 0);
-    }
-
-    private static Vector rotateY(Vector v, double angle) {
-        double cos = Math.cos(angle), sin = Math.sin(angle);
-        return new Vector(v.getX() * cos - v.getZ() * sin, v.getY(), v.getX() * sin + v.getZ() * cos).normalize();
-    }
-
-    private void fire(Player player, Vector dir, double damage) {
-        World w = player.getWorld();
-        Location start = player.getEyeLocation().add(dir.clone().multiply(0.6)).add(0, -0.2, 0);
-        List<Location> path = new ArrayList<>();
-        Set<UUID> hitSet = new HashSet<>();
-        int pierced = 0;
-        Location pos = start.clone();
-        for (double d = 0; d < RANGE; d += 0.3) {
-            pos = start.clone().add(dir.clone().multiply(d));
-            if (pos.getBlock().getType().isSolid()) break;
-            path.add(pos);
-            for (Entity e : w.getNearbyEntities(pos, 0.6, 0.9, 0.6)) {
-                if (!Targets.isEnemy(player, e) || !hitSet.add(e.getUniqueId())) continue;
-                hit(player, (LivingEntity) e, pierced == 0 ? damage : damage * 0.6);
-                w.spawnParticle(Particle.ELECTRIC_SPARK, e.getLocation().add(0, 1, 0), 20, 0.3, 0.4, 0.3, 0.3);
-                Fx.flare(e.getLocation().add(0, e.getHeight() * 0.6, 0), "flare_white", 1.8f, 7);
-                w.spawnParticle(Particle.END_ROD, e.getLocation().add(0, 1, 0), 10, 0.1, 0.1, 0.1, 0.15);
-                pierced++;
-            }
-            if (pierced >= 2) break;
-        }
-        final Location end = pos;
-        double length = start.distance(end);
-        // the beam: a thick cyan glow with a white-hot core that flashes wider once, then thins out
-        ItemDisplay outer = Fx.ray(start, end, "beam_cyan", 1.5f, 9);
-        Fx.ray(start, end, "beam_white", 0.5f, 7);
-        Fx.ray(start, end, "beam_purple", 0.9f, 5);
-        Fx.flare(start, "flare_cyan", 2.2f, 7);
-        Fx.flare(end, "flare_white", 3f, 9);
-        // railgun shock rings ripple down the beam from you to the target
-        for (double d = 1.2; d < length; d += 2.2) {
-            Location at = start.clone().add(dir.clone().multiply(d));
-            int delay = 1 + (int) (d / 6);
-            ItemDisplay ring = Fx.disc(at, ((int) d) % 2 == 0 ? "ring_cyan" : "ring_white", 0.3f, dir);
-            Fx.animate(ring, 4, Fx.discShape(1.9f, dir, 0.8f), delay);
-            Fx.animate(ring, 4, Fx.discShape(0.05f, dir, 1.6f), delay + 4);
-            Fx.removeLater(ring, delay + 10);
-        }
-        // impact: a shockwave disc facing back down the beam
-        ItemDisplay shock = Fx.disc(end.clone().subtract(dir.clone().multiply(0.2)), "ring_cyan", 0.4f, dir);
-        Fx.animate(shock, 6, Fx.discShape(4.5f, dir, 1f), 1);
-        Fx.removeLater(shock, 8);
-        w.playSound(end, Sound.ENTITY_GENERIC_EXPLODE, 0.6f, 1.8f);
-        // a double helix of light spirals around the beam
-        every(3, t -> {
-            for (int i = 0; i < path.size(); i++) {
-                Location p = path.get(i);
-                double a = i * 0.7 + t * 1.2;
-                for (int strand = 0; strand < 2; strand++) {
-                    Vector perp = perpendicular(dir, a + strand * Math.PI).multiply(0.45 - t * 0.08);
-                    w.spawnParticle(Particle.DUST, p.clone().add(perp), 1, 0, 0, 0, 0,
-                            Fx.dust(strand == 0 ? 0x4cc9f0 : 0xc77dff, 1.0f - t * 0.2f));
-                }
-                if (t == 0 && i % 3 == 0) w.spawnParticle(Particle.END_ROD, p, 1, 0.05, 0.05, 0.05, 0.02);
-            }
-            if (t == 0) {
-                Fx.burst(w, end, Particle.ELECTRIC_SPARK, 30, 0.5);
-                w.spawnParticle(Particle.END_ROD, end, 14, 0.1, 0.1, 0.1, 0.18);
-            }
-            return true;
+    private ItemDisplay beam(Location at) {
+        ItemStack item = new ItemStack(Material.PAPER);
+        ItemMeta m = item.getItemMeta();
+        m.setItemModel(new NamespacedKey("cosmic", "fxbeam_beam_cyan"));
+        item.setItemMeta(m);
+        Location spot = at.clone(); spot.setYaw(0); spot.setPitch(0);
+        return at.getWorld().spawn(spot, ItemDisplay.class, d -> {
+            d.setItemStack(item);
+            d.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.FIXED);
+            d.setBrightness(new Display.Brightness(15, 15));
+            d.setPersistent(false);
+            d.addScoreboardTag(Fx.TAG);
+            d.setTeleportDuration(1);
+            d.setDisplayWidth(24);
+            d.setDisplayHeight(24);
+            d.setTransformation(new Transformation(new Vector3f(), new Quaternionf(), new Vector3f(0.01f, 0.01f, 0.01f), new Quaternionf()));
         });
-    }
-
-    /** A unit vector perpendicular to dir, rotated by angle around it (for the helix). */
-    private static Vector perpendicular(Vector dir, double angle) {
-        Vector up = Math.abs(dir.getY()) > 0.95 ? new Vector(1, 0, 0) : new Vector(0, 1, 0);
-        Vector a = dir.clone().crossProduct(up).normalize();
-        Vector b = dir.clone().crossProduct(a).normalize();
-        return a.multiply(Math.cos(angle)).add(b.multiply(Math.sin(angle)));
     }
 }

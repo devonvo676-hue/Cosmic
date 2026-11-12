@@ -109,10 +109,25 @@ public class Economy implements Listener, CommandExecutor, TabCompleter {
     public void onKill(org.bukkit.event.entity.PlayerDeathEvent event) {
         Player victim = event.getPlayer();
         Player killer = victim.getKiller();
-        long reward = killReward();
-        if (killer == null || killer.equals(victim) || reward <= 0) return;
-        reward = Math.round(reward * plugin.events().killMultiplier());
+        if (killer == null || killer.equals(victim)) return;
+        // only real kills: whatever finished them off must have come from the killer (no falling / suicide after a hit)
+        org.bukkit.entity.Entity cause = event.getDamageSource().getCausingEntity();
+        if (cause == null || !cause.getUniqueId().equals(killer.getUniqueId())) return;
+        long reward = deathValue(victim.getUniqueId());
         com.cosmicabilities.team.Teams.Team team = plugin.teams().teamOf(killer.getUniqueId());
+        if (team != null && team.members.contains(victim.getUniqueId())) reward = 0;   // teammates (friendly fire on) pay nothing
+        // farming the same person: after economy.max-kills-per-victim in economy.farm-window-minutes, kills pay nothing
+        int max = plugin.getConfig().getInt("economy.max-kills-per-victim", 3);
+        double window = plugin.getConfig().getDouble("economy.farm-window-minutes", 30);
+        boolean farmed = max > 0 && plugin.killLog().recentKills(killer.getUniqueId(), victim.getUniqueId(), window) >= max;
+        if (farmed) reward = 0;
+        reward = Math.round(reward * plugin.events().killMultiplier());
+        plugin.killLog().record(killer, victim, reward);
+        if (team != null && !team.members.contains(victim.getUniqueId())) plugin.teams().addKill(team);
+        if (reward <= 0) {
+            if (farmed) killer.sendActionBar(plugin.mm("<red>No cash: you've killed " + victim.getName() + " " + max + "x in the last " + (int) window + " min"));
+            return;
+        }
         if (team != null) {
             plugin.teams().addToBank(team, reward);
             killer.sendActionBar(plugin.mm("<gold>+$" + format(reward) + " <gray>to <white>" + team.name + "<gray>'s bank for killing <white>" + victim.getName()));
@@ -122,6 +137,22 @@ public class Economy implements Listener, CommandExecutor, TabCompleter {
         }
         killer.playSound(killer.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 0.8f, 1.4f);
     }
+
+    /** What killing this player pays: economy.death-values.<uuid> if an admin set one, else the server kill reward. */
+    public long deathValue(UUID player) {
+        long v = plugin.getConfig().getLong("economy.death-values." + player, -1);
+        return v >= 0 ? v : killReward();
+    }
+
+    public boolean hasCustomDeathValue(UUID player) {
+        return plugin.getConfig().getLong("economy.death-values." + player, -1) >= 0;
+    }
+
+    public void setDeathValue(UUID player, long value) {
+        plugin.getConfig().set("economy.death-values." + player, value < 0 ? null : value);
+        plugin.saveConfig();
+    }
+
 
     private void msg(CommandSender to, String mini) {
         to.sendMessage(plugin.mm(plugin.prefix() + mini));

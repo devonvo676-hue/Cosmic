@@ -79,6 +79,10 @@ public class SupplyDrops implements CommandExecutor, org.bukkit.event.Listener {
 
     public int lootCount() { return loot.size(); }
 
+    private boolean isToken(ItemStack it) {
+        return plugin.items().isToken(it);
+    }
+
     public void openEditor(Player admin) {
         LootHolder h = new LootHolder();
         Inventory inv = Bukkit.createInventory(h, 54, plugin.mm("<dark_green>Supply drop loot <dark_gray>- close to save"));
@@ -224,8 +228,9 @@ public class SupplyDrops implements CommandExecutor, org.bukkit.event.Listener {
         if (!loot.isEmpty()) {
             double chance = plugin.getConfig().getDouble("supply-drops.item-chance", 0.7);
             List<ItemStack> out = new ArrayList<>();
-            for (ItemStack it : loot) if (r.nextDouble() < chance) out.add(it.clone());
-            if (out.isEmpty()) out.add(loot.get(r.nextInt(loot.size())).clone());
+            for (ItemStack it : loot) if (!isToken(it) && r.nextDouble() < chance) out.add(it.clone());
+            out.removeIf(this::isToken);
+            if (out.isEmpty()) for (ItemStack it : loot) if (!isToken(it)) { out.add(it.clone()); break; }
             return out;
         }
         return rollConfigLoot();
@@ -250,7 +255,7 @@ public class SupplyDrops implements CommandExecutor, org.bukkit.event.Listener {
                 if (cosmic) {
                     it = switch (id.toLowerCase(Locale.ROOT)) {
                         case "cosmic_shard" -> plugin.items().shard(n);
-                        case "upgrade_token" -> plugin.items().token(n);
+                        case "upgrade_token" -> null;   // upgrade tokens never come from supply drops
                         case "afk_token" -> plugin.items().afkToken(n);
                         case "reroll" -> { ItemStack x = plugin.orbs().reroll(); x.setAmount(n); yield x; }
                         default -> null;

@@ -44,8 +44,8 @@ public class ConfigPanel implements Listener {
     private static final List<List<Setting>> GROUPS = List.of(
             List.of(new Setting("abilities.damage-multiplier", "All ability damage", Kind.DOUBLE, 0.1, 0.1, 5, Material.IRON_SWORD, 0.8),
                     new Setting("abilities.cooldown-multiplier", "All ability cooldowns", Kind.DOUBLE, 0.1, 0.1, 5, Material.CLOCK, 1),
-                    new Setting("abilities.combo-damage-cap", "Anti one-shot damage cap (HP)", Kind.INT, 1, 0, 100, Material.SHIELD, 14),
-                    new Setting("upgrades.cooldown-reduction", "Upgrade cooldown cut", Kind.DOUBLE, 0.05, 0, 0.9, Material.EXPERIENCE_BOTTLE, 0.3),
+                    new Setting("abilities.combo-damage-cap", "Combo limit (0 = off)", Kind.INT, 2, 0, 100, Material.SHIELD, 0),
+                    new Setting("upgrades.cooldown-reduction", "Upgrade Token cooldown cut", Kind.DOUBLE, 0.05, 0, 0.9, Material.EXPERIENCE_BOTTLE, 0.3),
                     new Setting("abilities.bonus-mechanics", "Signature bonus mechanics", Kind.BOOL, 0, 0, 0, Material.NETHER_STAR, 1),
                     new Setting("abilities.hit-players", "Abilities hit players", Kind.BOOL, 0, 0, 0, Material.PLAYER_HEAD, 1),
                     new Setting("abilities.armor-piercing", "Abilities pierce armor", Kind.BOOL, 0, 0, 0, Material.NETHERITE_CHESTPLATE, 1)),
@@ -70,6 +70,18 @@ public class ConfigPanel implements Listener {
                     new Setting("teams.max-size", "Max team size", Kind.INT, 1, 1, 20, Material.WHITE_BANNER, 4),
                     new Setting("ban-pistol.duration-minutes", "Ban Pistol length (0 = forever)", Kind.INT, 10, 0, 525600, Material.IRON_HORSE_ARMOR, 0),
                     new Setting("tablist.enabled", "Custom tab list", Kind.BOOL, 0, 0, 0, Material.OAK_SIGN, 1)));
+
+    /** Plain-English explanations shown on a setting. */
+    private static final Map<String, String[]> HELP = Map.of(
+            "abilities.combo-damage-cap", new String[]{"<gray>The most ability damage (in HP, 2 = 1 heart)",
+                    "<gray>one player can take from abilities in 4", "<gray>seconds. Stops chaining abilities into a",
+                    "<gray>one-shot. Hits past the limit do nothing.", "<gray>0 = off: abilities always do full damage."},
+            "abilities.damage-multiplier", new String[]{"<gray>Multiplies every normal ability's damage.", "<gray>1.0 = normal, 2.0 = double."},
+            "upgrades.cooldown-reduction", new String[]{"<gray>How much shorter cooldowns get with an", "<gray>Upgrade Token. 0.30 = 30% shorter."},
+            "afk.minutes-per-token", new String[]{"<gray>How long someone has to be in /afk", "<gray>to earn 1 AFK token."},
+            "economy.kill-reward", new String[]{"<gray>Default cash for a kill. Set a different", "<gray>amount per player in Players -> player."});
+
+    private static String pct(double v) { return Math.round(v * 100) + "%"; }
 
     /** The combat buffs an ability can give on cast (PvP-relevant only). */
     private static final String[] BUFFS = {"strength", "speed", "resistance", "regeneration", "absorption", "fire_resistance", "health_boost"};
@@ -166,6 +178,9 @@ public class ConfigPanel implements Listener {
             lore.add("<yellow>Left-click <gray>+" + fmt(s.step()) + "   <yellow>Right-click <gray>-" + fmt(s.step()));
             lore.add("<yellow>Shift-click <gray>for x5 steps");
         }
+        String[] help = HELP.get(s.path());
+        if (help != null) { lore.add(""); java.util.Collections.addAll(lore, help); }
+        if (s.path().equals("upgrades.cooldown-reduction")) lore.add(1, "<gray>= <white>" + pct(plugin.getConfig().getDouble(s.path(), s.def())) + " shorter cooldowns");
         lore.add("<dark_gray>" + s.path());
         if (s.kind() == Kind.BOOL) {
             boolean v = plugin.getConfig().getBoolean(s.path(), s.def() != 0);
@@ -189,11 +204,17 @@ public class ConfigPanel implements Listener {
         fill(inv);
         inv.setItem(4, Icons.ability(plugin, t, List.of()));
         inv.setItem(20, Icons.button(plugin, Material.CLOCK, "<white>Cooldown: <aqua>" + fmt(cooldown(t)) + "s <gray>(" + mins(cooldown(t)) + ")",
+                "<gray>Upgrade Token makes it " + pct(plugin.getConfig().getDouble("upgrades.cooldown-reduction", 0.3)) + " shorter",
                 "<gray>Default " + fmt(t.baseCooldown) + "s (before upgrade / global multiplier)", "",
                 "<yellow>Left <gray>+5s  <yellow>Right <gray>-5s  <yellow>Shift <gray>±1 minute"));
-        inv.setItem(24, Icons.button(plugin, Material.IRON_SWORD, "<white>Damage: <red>x" + fmt(damage(t)),
-                "<gray>Multiplies only this ability's damage", "",
+        inv.setItem(22, Icons.button(plugin, Material.IRON_SWORD, "<white>Damage multiplier: <red>x" + fmt(damage(t)),
+                "<gray>Higher = more damage. 1.0 = normal,", "<gray>2.0 = double, 0.5 = half.", "",
                 "<yellow>Left <gray>+0.1  <yellow>Right <gray>-0.1  <yellow>Shift <gray>x5"));
+        double hearts = plugin.getConfig().getDouble("ability-settings." + t.id() + ".hearts", 0);
+        inv.setItem(24, Icons.button(plugin, Material.RED_DYE, "<white>Damage in hearts: " + (hearts > 0 ? "<red>" + fmt(hearts) + " ❤" : "<gray>default"),
+                t.defaultHearts() > 0 ? "<gray>Total hearts this ability does" : "<gray>Hearts EVERY hit of this ability does",
+                t.defaultHearts() > 0 ? "<gray>(default " + fmt(t.defaultHearts()) + " ❤). 0 = default." : "<gray>(ignores the multipliers). 0 = default.", "",
+                "<yellow>Left <gray>+0.5❤  <yellow>Right <gray>-0.5❤  <yellow>Shift <gray>±2❤"));
         inv.setItem(31, Icons.button(plugin, Material.POTION, "<green><bold>Effects given on cast",
                 "<gray>Set the level and length of each buff below.", "<gray>Level 0 = not given."));
         Map<String, int[]> buffs = buffs(t);
@@ -291,9 +312,14 @@ public class ConfigPanel implements Listener {
                 double v = Math.max(1, Math.min(3600, cooldown(t) + (click.isRightClick() ? -1 : 1) * (click.isShiftClick() ? 60 : 5)));
                 set(base + ".cooldown", v);
             }
-            case 24 -> {
+            case 22 -> {
                 double v = Math.max(0, Math.min(10, Math.round((damage(t) + (click.isRightClick() ? -0.1 : 0.1) * mult) * 100) / 100.0));
                 set(base + ".damage-multiplier", v);
+            }
+            case 24 -> {
+                double cur = plugin.getConfig().getDouble(base + ".hearts", 0);
+                double step = click.isShiftClick() ? 2 : 0.5;
+                set(base + ".hearts", Math.max(0, Math.min(100, cur + (click.isRightClick() ? -step : step))));
             }
             case 45 -> { openAbilities(p); return; }
             case 49 -> {

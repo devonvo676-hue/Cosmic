@@ -79,7 +79,7 @@ public class Cocaine implements Listener {
         m.lore(java.util.List.of(plugin.mm("<!italic><gray>Right click: sniff it and get huge"),
                 plugin.mm("<!italic><gray>Then right click someone to grab them,"),
                 plugin.mm("<!italic><gray>shake them and slam them through the ground."),
-                plugin.mm("<!italic><dark_red>Admins only")));
+                plugin.mm("<!italic><dark_red>Owner only")));
         m.setItemModel(new NamespacedKey("cosmic", "cocaine"));
         m.getPersistentDataContainer().set(key, PersistentDataType.BYTE, (byte) 1);
         it.setItemMeta(m);
@@ -105,9 +105,9 @@ public class Cocaine implements Listener {
         ItemStack hand = p.getInventory().getItemInMainHand();
         if (!isCocaine(hand)) return;
         event.setCancelled(true);
-        if (!BanPistol.isAdmin(p)) {
+        if (!Owner.allowed(plugin, p)) {
             p.getInventory().setItemInMainHand(null);
-            p.sendMessage(plugin.mm(plugin.prefix() + "<red>Only admins can use that."));
+            p.sendMessage(plugin.mm(plugin.prefix() + "<red>You can't use that."));
             return;
         }
         if (isRaging(p.getUniqueId())) return;
