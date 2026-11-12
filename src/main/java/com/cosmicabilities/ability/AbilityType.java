@@ -66,7 +66,7 @@ public enum AbilityType {
             "Summons a cluster of enormous crystals above the target area that crash down one after another. Each impact sends out a shockwave. (2 hearts per impact, max 6)",
             "Permafrost", "Each impact also slows enemies."),
     SERPENTS_WRATH("Serpent's Wrath", "Boss - Nebula Drake", "#f72585", CosmicMaterial.NEBULA_ESSENCE, 40,
-            "Summons a massive spectral cosmic serpent that winds across the battlefield. Enemies touched by its body take damage; at the end it coils and bursts. (5 hearts)",
+            "Summons a massive spectral cosmic serpent that slithers toward the enemy you aim at, circles around them biting anyone it touches, then coils and bursts. (5 hearts)",
             "Venom Nebula", "The final burst poisons enemies."),
     APOCALYPSE("Apocalypse", "Boss - Cosmic Destroyer", "#00e5ff", CosmicMaterial.ASTRAL_FRAGMENT, 50,
             "Marks a large circle on the ground. Cosmic energy gathers above it and after 2 seconds a gigantic celestial object crashes down, damaging everyone inside. (7 hearts)",

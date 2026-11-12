@@ -73,6 +73,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
     private com.cosmicabilities.admin.AdminRpg rpg;
     private com.cosmicabilities.admin.Cocaine cocaine;
     private com.cosmicabilities.stats.KillLog killLog;
+    private com.cosmicabilities.gui.ConfigBrowser configBrowser;
     private com.cosmicabilities.command.SpawnCommands spawnCommands;
 
     @Override
@@ -156,6 +157,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
         rpg = new com.cosmicabilities.admin.AdminRpg(this);
         cocaine = new com.cosmicabilities.admin.Cocaine(this);
         killLog = new com.cosmicabilities.stats.KillLog(this);
+        configBrowser = new com.cosmicabilities.gui.ConfigBrowser(this);
         spawnCommands = new com.cosmicabilities.command.SpawnCommands(this);
         status = new StatusManager(this);
         combat = new CombatTracker();
@@ -192,7 +194,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
 
         for (Listener l : new Listener[]{playerListener, new BossListener(this), new StatusListener(this), combat,
                 new KeybindListener(this), bossFightPanel, holdersPanel, keybindPanel, orbs, configPanel,
-                banPistol, adminPanel, abilitiesPanel, cutscenes, afk, afkShop, tools, recipes, roll, adminHub, menu, items, economy, coinflip, discord, ranks, sidebar, auctions, teams, rpg, cocaine, supplyDrops, killLog}) {
+                banPistol, adminPanel, abilitiesPanel, cutscenes, afk, afkShop, tools, recipes, roll, adminHub, menu, items, economy, coinflip, discord, ranks, sidebar, auctions, teams, rpg, cocaine, supplyDrops, killLog, configBrowser}) {
             getServer().getPluginManager().registerEvents(l, this);
         }
 
@@ -338,6 +340,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
     public com.cosmicabilities.admin.AdminRpg rpg() { return rpg; }
     public com.cosmicabilities.admin.Cocaine cocaine() { return cocaine; }
     public com.cosmicabilities.stats.KillLog killLog() { return killLog; }
+    public com.cosmicabilities.gui.ConfigBrowser configBrowser() { return configBrowser; }
     public com.cosmicabilities.command.SpawnCommands spawnCommands() { return spawnCommands; }
 
     private void bind(String name, org.bukkit.command.CommandExecutor exec, org.bukkit.command.TabCompleter tab) {

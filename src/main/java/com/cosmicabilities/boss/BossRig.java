@@ -42,6 +42,8 @@ public class BossRig {
         double walk;
         boolean flashing;
         float size = 1f;
+        float pitch = 0f;
+        Color glow = null;
         long attackStart = -100;
         Rig(LivingEntity boss, BossType type, List<Part> parts) { this.boss = boss; this.type = type; this.parts = parts; }
     }
@@ -64,12 +66,19 @@ public class BossRig {
     }
 
     public void attach(LivingEntity boss, BossType type) {
-        if (!enabled() || rigs.containsKey(boss.getUniqueId())) return;
+        attach(boss, type, (float) plugin.bosses().modelScale(type), null);
+    }
+
+    /** A rig on any entity at any size, optionally glowing (used for spectral creatures in abilities). */
+    public void attach(LivingEntity boss, BossType type, float size, Color glow) {
+        if (rigs.containsKey(boss.getUniqueId())) return;
+        if (glow == null && !enabled()) return;
         boss.setInvisible(true);
         EntityEquipment eq = boss.getEquipment();
         if (eq != null) eq.clear();
         Rig rig = new Rig(boss, type, design(type));
-        rig.size = (float) plugin.bosses().modelScale(type);
+        rig.size = size;
+        rig.glow = glow;
         Location at = boss.getLocation();
         at.setYaw(0);
         at.setPitch(0);
@@ -88,7 +97,8 @@ public class BossRig {
                 e.setDisplayHeight(10);
                 e.setViewRange(3f);
                 e.setTeleportDuration(2);
-                e.setGlowColorOverride(Color.fromRGB(0xff2020));
+                e.setGlowColorOverride(glow != null ? glow : Color.fromRGB(0xff2020));
+                if (glow != null) { e.setGlowing(true); e.setBrightness(new org.bukkit.entity.Display.Brightness(15, 15)); }
             });
             rig.displays.add(d);
         }
@@ -120,7 +130,7 @@ public class BossRig {
             for (ItemDisplay d : rig.displays) {
                 if (!d.isValid()) continue;
                 if (d.getLocation().distanceSquared(at) > 0.0004) d.teleport(at);
-                if (hurt != rig.flashing) d.setGlowing(hurt);
+                if (rig.glow == null && hurt != rig.flashing) d.setGlowing(hurt);
             }
             rig.flashing = hurt;
             pose(rig);
@@ -128,8 +138,8 @@ public class BossRig {
     }
 
     private void pose(Rig rig) {
-        float yaw = (float) Math.toRadians(rig.boss.getBodyYaw());
-        Matrix4f base = new Matrix4f().scale(rig.size).rotateY(-yaw);
+        float yaw = (float) Math.toRadians(rig.boss instanceof org.bukkit.entity.ArmorStand ? rig.boss.getLocation().getYaw() : rig.boss.getBodyYaw());
+        Matrix4f base = new Matrix4f().scale(rig.size).rotateY(-yaw).rotateX(rig.pitch);
         Matrix4f[] joints = new Matrix4f[rig.parts.size()];
         for (int i = 0; i < rig.parts.size(); i++) {
             Part part = rig.parts.get(i);
@@ -166,6 +176,17 @@ public class BossRig {
             case WALK -> m.rotateX(p.amp() * (float) Math.sin(rig.walk + p.phase()));
             case ROLL -> m.rotateZ((float) (tick * p.freq()));
         }
+    }
+
+    public void setScale(UUID id, float size) {
+        Rig rig = rigs.get(id);
+        if (rig != null) rig.size = size;
+    }
+
+    /** Tilts a rig nose-down (positive) or nose-up (negative), in radians. */
+    public void setPitch(UUID id, float pitch) {
+        Rig rig = rigs.get(id);
+        if (rig != null) rig.pitch = pitch;
     }
 
     /** Plays the arm-slam pose on this boss's rig (used for its special attacks). */

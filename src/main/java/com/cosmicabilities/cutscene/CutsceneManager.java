@@ -199,6 +199,7 @@ public class CutsceneManager implements Listener {
             p.setGameMode(GameMode.SPECTATOR);
             p.teleport(cam.getLocation());
             p.setSpectatorTarget(cam);
+            p.hideEntity(plugin, boss);   // spectators see invisible mobs as see-through ghosts: hide the base mob
         }
         int rgb = Integer.parseInt(type.color.substring(1), 16);
         java.util.List<org.bukkit.entity.Display> props = new java.util.ArrayList<>();
@@ -248,7 +249,7 @@ public class CutsceneManager implements Listener {
                 }
                 if (t >= length || !boss.isValid()) {
                     cancel();
-                    for (Player p : viewers) if (p.isOnline()) finish(p);
+                    for (Player p : viewers) if (p.isOnline()) { finish(p); p.showEntity(plugin, boss); }
                     if (cam != null && cam.isValid()) cam.remove();
                     for (org.bukkit.entity.Display d : props) if (d.isValid()) d.remove();
                     if (boss.isValid()) {

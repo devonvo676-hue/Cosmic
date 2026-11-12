@@ -66,22 +66,37 @@ public class SerpentsWrathAbility extends CosmicAbility {
         w.playSound(origin, Sound.ENTITY_ELDER_GUARDIAN_CURSE, 1.5f, 1.5f);
         w.playSound(origin, Sound.ENTITY_ENDER_DRAGON_GROWL, 1.2f, 1.6f);
         w.spawnParticle(Particle.BLOCK, origin, 60, 1, 0.3, 1, 0.2, origin.clone().subtract(0, 1, 0).getBlock().getBlockData());
+        // target: whoever you aim at (or the nearest enemy in front of you)
+        LivingEntity target = aimed(player, length + 6);
+        Location[] headPos = {origin.clone().add(0, -1.5, 0)};
+        double[] circleStart = {-1};
         Location[] end = new Location[1];
-        every(travel + coil + 2, t -> {
+        double speed = 0.75;
+        every(travel + coil + 40, t -> {
             Location head;
-            if (t <= travel) {
-                double prog = t / (double) travel;
-                double d = length * prog;
-                head = origin.clone().add(dir.clone().multiply(d)).add(side.clone().multiply(Math.sin(d * 0.42) * 3.2));
+            Location cur = headPos[0];
+            boolean hasTarget = target != null && target.isValid() && !target.isDead();
+            Location goal = hasTarget ? target.getLocation() : origin.clone().add(dir.clone().multiply(length));
+            Vector to = goal.toVector().subtract(cur.toVector()).setY(0);
+            double dist = to.length();
+            if (circleStart[0] < 0 && (dist < 3.6 || t >= travel + 20)) { circleStart[0] = t; end[0] = goal.clone(); }
+            if (circleStart[0] < 0) {
+                // slither toward the target: forward plus a side-to-side wave
+                Vector fwd = dist > 0.01 ? to.clone().normalize() : dir.clone();
+                Vector sideV = new Vector(-fwd.getZ(), 0, fwd.getX());
+                head = cur.clone().add(fwd.clone().multiply(speed)).add(sideV.multiply(Math.cos(t * 0.45) * 0.55));
                 double floor = w.getHighestBlockYAt(head) + 1.0;
-                head.setY(floor + 0.6 + Math.sin(t * 0.35) * 0.7 + (t < 6 ? -2 + t * 0.4 : 0));
+                head.setY(floor + 0.5 + Math.sin(t * 0.35) * 0.4 + (t < 6 ? -1.5 + t * 0.25 : 0));
             } else {
-                if (end[0] == null) end[0] = path.get(path.size() - 1).clone();
-                double k = (t - travel) / (double) coil;
-                double a = k * Math.PI * 3.2;
-                double r = 3.2 - k * 2.0;
-                head = end[0].clone().add(Math.cos(a) * r, k * 3.5, Math.sin(a) * r);
+                // circle around them, tightening and rising into a coil
+                Location c = hasTarget ? target.getLocation() : end[0];
+                end[0] = c.clone();
+                double k = Math.min(1, (t - circleStart[0]) / (double) coil);
+                double a = k * Math.PI * 3.4;
+                double r = 3.4 - k * 1.6;
+                head = c.clone().add(Math.cos(a) * r, 0.6 + k * 2.4, Math.sin(a) * r);
             }
+            headPos[0] = head.clone();
             path.add(head.clone());
             // place every segment along the path, one model length apart, each facing the next one
             Location prev = head;
@@ -109,7 +124,7 @@ public class SerpentsWrathAbility extends CosmicAbility {
             if (t % 2 == 0) w.spawnParticle(Particle.DUST, head, 8, 0.8, 0.6, 0.8, 0, Fx.dust(type.rgb(), 2f));
             if (t % 3 == 0) w.spawnParticle(Particle.END_ROD, head, 2, 0.5, 0.5, 0.5, 0.02);
             if (t % 7 == 0) w.playSound(head, Sound.ENTITY_PHANTOM_FLAP, 1.2f, 0.5f);
-            if (t <= travel) {
+            if (circleStart[0] < 0 || t % 5 == 0) {
                 for (int i = 0; i < body.size(); i += 2) {
                     for (LivingEntity e : Targets.enemies(player, body.get(i).getLocation(), 1.9)) {
                         if (!touched.add(e.getUniqueId())) continue;
@@ -119,7 +134,7 @@ public class SerpentsWrathAbility extends CosmicAbility {
                     }
                 }
             }
-            if (t == travel + coil) {
+            if (circleStart[0] >= 0 && t - circleStart[0] >= coil) {
                 Location c = end[0].clone().add(0, 1.2, 0);
                 w.playSound(c, Sound.ENTITY_FIREWORK_ROCKET_LARGE_BLAST, 2.5f, 0.6f);
                 w.playSound(c, Sound.ENTITY_ENDER_DRAGON_GROWL, 1.5f, 1.2f);
@@ -143,5 +158,20 @@ public class SerpentsWrathAbility extends CosmicAbility {
             return true;
         });
         return true;
+    }
+
+    private LivingEntity aimed(Player player, double range) {
+        var ray = player.getWorld().rayTraceEntities(player.getEyeLocation(), player.getEyeLocation().getDirection(), range, 2.0,
+                e -> e instanceof LivingEntity && Targets.isEnemy(player, e));
+        if (ray != null && ray.getHitEntity() instanceof LivingEntity le) return le;
+        Vector look = player.getEyeLocation().getDirection().normalize();
+        LivingEntity best = null;
+        double bestD = Double.MAX_VALUE;
+        for (LivingEntity e : Targets.enemies(player, player.getLocation(), range)) {
+            Vector to = e.getLocation().toVector().subtract(player.getLocation().toVector());
+            if (to.clone().normalize().dot(look) < 0.7) continue;
+            if (to.length() < bestD) { bestD = to.length(); best = e; }
+        }
+        return best;
     }
 }

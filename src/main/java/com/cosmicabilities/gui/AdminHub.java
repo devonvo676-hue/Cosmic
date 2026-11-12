@@ -128,7 +128,8 @@ public class AdminHub implements Listener {
         inv.setItem(H_AH, Icons.gui(plugin, "auction", "<yellow><bold>Auction House", "<gray>Open /ah. Shift + right-click a", "<gray>listing to remove it.", "", "<yellow>Click to open"));
         inv.setItem(H_SHOP, Icons.gui(plugin, "shop", "<green><bold>AFK Shop Editor", "<gray>Add items, set prices, move them.", "", "<yellow>Click to open"));
         inv.setItem(H_RECIPES, Icons.gui(plugin, "recipes", "<gold><bold>Recipes", "<gray>Change how cosmic items are crafted.", "", "<yellow>Click to open"));
-        inv.setItem(H_RPG, Icons.gui(plugin, "rpg", "<red><bold>Admin RPG", "<gray>Rocket launcher that leaves a crater.", "", "<yellow>Click to get one"));
+        inv.setItem(H_RPG, Icons.gui(plugin, "config", "<aqua><bold>Full Config", "<gray>Every single setting in config.yml,",
+                "<gray>including every ability and boss,", "<gray>in folders. Saves instantly.", "", "<yellow>Click to open"));
         inv.setItem(H_CONFIG, Icons.gui(plugin, "config", "<gray><bold>All Settings", "<gray>Every other setting, grouped.", "", "<yellow>Click to open"));
         inv.setItem(H_RESET, Icons.gui(plugin, "reset", "<aqua><bold>Reset Cooldowns", "<yellow>Click <gray>yours", "<yellow>Shift-click <gray>everyone's"));
 
@@ -495,7 +496,7 @@ public class AdminHub implements Listener {
             case H_TEAMS -> openTeams(admin);
             case H_STATS -> openStats(admin);
             case H_BOSSES -> openBosses(admin);
-            case H_RPG -> admin.getInventory().addItem(plugin.rpg().create());
+            case H_RPG -> plugin.configBrowser().open(admin, "", 0);
             case H_COOLDOWNS -> plugin.configPanel().openAbilities(admin);
             case H_CLOSE -> admin.closeInventory();
             default -> { }
