@@ -71,6 +71,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
     private com.cosmicabilities.events.ServerEvents events;
     private com.cosmicabilities.supply.SupplyDrops supplyDrops;
     private com.cosmicabilities.admin.AdminRpg rpg;
+    private com.cosmicabilities.admin.Cocaine cocaine;
 
     @Override
     public void onEnable() {
@@ -96,14 +97,29 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
             }
             getConfig().set("migrations.tools-cosmic-shards", true);
         }
-        // 2.7: every ability's cooldown starts at 3 minutes (each one can be changed in /cconfig)
-        if (!getConfig().getBoolean("migrations.cooldowns-3min", false)) {
+        // 2.8: back to each ability's own cooldown (2.7 had set them all to 3 minutes). Still editable in /cconfig.
+        if (!getConfig().getBoolean("migrations.cooldowns-restored", false)) {
             for (com.cosmicabilities.ability.AbilityType t : com.cosmicabilities.ability.AbilityType.values()) {
-                getConfig().set("ability-settings." + t.id() + ".cooldown", 180);
+                getConfig().set("ability-settings." + t.id() + ".cooldown", t.baseCooldown);
             }
+            getConfig().set("migrations.cooldowns-restored", true);
             getConfig().set("migrations.cooldowns-3min", true);
-            // and the anti-one-shot nerf: all ability damage x0.8 on top of the combo damage cap
+        }
+        // 2.7 anti-one-shot nerf: all normal ability damage x0.8 (on top of the combo damage cap)
+        if (!getConfig().getBoolean("migrations.damage-nerf-27", false)) {
             if (getConfig().getDouble("abilities.damage-multiplier", 1.0) >= 1.0) getConfig().set("abilities.damage-multiplier", 0.8);
+            getConfig().set("migrations.damage-nerf-27", true);
+        }
+        // 2.8: every boss gets its own full set of values; the 2.7 global multipliers go back to 1
+        if (!getConfig().getBoolean("migrations.boss-values-28", false)) {
+            org.bukkit.configuration.file.YamlConfiguration defs = org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(
+                    new java.io.InputStreamReader(java.util.Objects.requireNonNull(getResource("config.yml")), java.nio.charset.StandardCharsets.UTF_8));
+            for (com.cosmicabilities.boss.BossType t : com.cosmicabilities.boss.BossType.values()) {
+                org.bukkit.configuration.ConfigurationSection sec = defs.getConfigurationSection("bosses." + t.id());
+                if (sec != null) for (String k : sec.getKeys(true)) if (!sec.isConfigurationSection(k)) getConfig().set("bosses." + t.id() + "." + k, sec.get(k));
+            }
+            for (String k : new String[]{"health-multiplier", "damage-multiplier", "size-multiplier"}) getConfig().set("bosses." + k, 1.0);
+            getConfig().set("migrations.boss-values-28", true);
         }
         // 2.6: no more daily login cash - players earn cash from kills instead
         if (!getConfig().getBoolean("migrations.no-daily-cash", false)) {
@@ -120,6 +136,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
         events = new com.cosmicabilities.events.ServerEvents(this);
         supplyDrops = new com.cosmicabilities.supply.SupplyDrops(this);
         rpg = new com.cosmicabilities.admin.AdminRpg(this);
+        cocaine = new com.cosmicabilities.admin.Cocaine(this);
         status = new StatusManager(this);
         combat = new CombatTracker();
         engine = new AbilityEngine(this);
@@ -155,7 +172,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
 
         for (Listener l : new Listener[]{playerListener, new BossListener(this), new StatusListener(this), combat,
                 new KeybindListener(this), bossFightPanel, holdersPanel, keybindPanel, orbs, configPanel,
-                banPistol, adminPanel, abilitiesPanel, cutscenes, afk, afkShop, tools, recipes, roll, adminHub, menu, items, economy, coinflip, discord, ranks, sidebar, auctions, teams, rpg}) {
+                banPistol, adminPanel, abilitiesPanel, cutscenes, afk, afkShop, tools, recipes, roll, adminHub, menu, items, economy, coinflip, discord, ranks, sidebar, auctions, teams, rpg, cocaine, supplyDrops}) {
             getServer().getPluginManager().registerEvents(l, this);
         }
 
@@ -222,6 +239,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
         if (auctions != null) auctions.save();
         if (teams != null) teams.save();
         if (events != null) events.shutdown();
+        if (cocaine != null) cocaine.shutdown();
         if (cutscenes != null) cutscenes.shutdown();
         if (status != null) status.shutdown();
         if (bossManager != null) bossManager.shutdown();
@@ -289,6 +307,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
     public com.cosmicabilities.events.ServerEvents events() { return events; }
     public com.cosmicabilities.supply.SupplyDrops supplyDrops() { return supplyDrops; }
     public com.cosmicabilities.admin.AdminRpg rpg() { return rpg; }
+    public com.cosmicabilities.admin.Cocaine cocaine() { return cocaine; }
 
     private void bind(String name, org.bukkit.command.CommandExecutor exec, org.bukkit.command.TabCompleter tab) {
         PluginCommand c = getCommand(name);

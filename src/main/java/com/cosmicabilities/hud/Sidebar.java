@@ -127,7 +127,7 @@ public class Sidebar implements Listener, CommandExecutor {
                 icon("cosmic", "item/coin", false).append(plugin.mm(" <white>Cash: " + value + "$" + plugin.economy().format(cash))),
                 Component.text(" "),
                 plugin.mm(accent + "<bold>Team"),
-                icon("minecraft", "item/white_banner", false).append(plugin.mm(" <white>" + (team == null ? "<gray>None" : team.name))),
+                icon("cosmic", "item/team_shield", false).append(plugin.mm(" <white>" + (team == null ? "<gray>None" : team.name))),
                 icon("minecraft", "item/gold_ingot", false).append(plugin.mm(" <white>Bank: " + value + (team == null ? "-" : "$" + plugin.economy().format(team.bank)))),
                 icon("minecraft", "item/clock_00", false).append(plugin.mm(" <white>Season " + plugin.teams().season() + ": " + value + plugin.teams().timeLeft())),
                 Component.text("   "),

@@ -127,42 +127,66 @@ public class AbilityOrbs implements Listener {
     }
 
     /** Called when a boss dies: a random ability orb for whoever grabs it first. */
-    public void bossDrop(Location at, String bossName, String bossId) {
+    /** The boss's own ability (or, if the ability-chance roll fails, a random one) goes to whoever did the most damage. */
+    public void bossDrop(Location at, String bossName, String bossId, UUID top, double exclusiveChance) {
         if (!plugin.getConfig().getBoolean("ability-drops.from-bosses", true)) return;
         AbilityType exclusive = AbilityType.forBoss(bossId);
-        double chance = plugin.getConfig().getDouble("ability-drops.boss-exclusive-chance", 0.35);
         AbilityType type;
-        if (exclusive != null && ThreadLocalRandom.current().nextDouble() < chance) {
+        if (exclusive != null && ThreadLocalRandom.current().nextDouble() < exclusiveChance) {
             type = exclusive;
         } else {
             java.util.List<AbilityType> all = AbilityType.rollable();
             type = all.get(ThreadLocalRandom.current().nextInt(all.size()));
         }
-        drop(at, type, 1, null);
-        if (type.exclusive()) {
-            for (Player p : Bukkit.getOnlinePlayers()) p.playSound(p.getLocation(), org.bukkit.Sound.UI_TOAST_CHALLENGE_COMPLETE, 0.8f, 0.8f);
-            Bukkit.broadcast(plugin.mm(plugin.prefix() + bossName + " <gray>dropped its <gold><bold>BOSS ABILITY</bold> " + type.colored()
-                    + "<gray>! First to grab it gets it."));
-        } else {
-            Bukkit.broadcast(plugin.mm(plugin.prefix() + bossName + " <gray>dropped a " + type.colored() + " <gray>orb! First to grab it gets the ability."));
-        }
+        award(top, type, at, bossName);
     }
 
-    /** The Ender Dragon always drops the legendary Dragon's Wrath orb (ability-drops.dragon-chance). */
-    @org.bukkit.event.EventHandler
+    /** Gives an ability orb straight to the top damage dealer (dropped at their feet if their inventory is full). */
+    public void award(UUID top, AbilityType type, Location fallback, String sourceName) {
+        Player p = top == null ? null : Bukkit.getPlayer(top);
+        String label = type.exclusive() ? (type.source() == AbilityType.Source.DRAGON ? "<gold><bold>LEGENDARY</bold> " : "<gold><bold>BOSS ABILITY</bold> ") : "";
+        if (p == null) {
+            drop(fallback, type, 1, top);
+            Bukkit.broadcast(plugin.mm(plugin.prefix() + sourceName + " <gray>dropped " + label + type.colored() + "<gray>!"));
+            return;
+        }
+        for (ItemStack left : p.getInventory().addItem(orb(type, 1)).values()) drop(p.getLocation(), type, 1, p.getUniqueId());
+        p.showTitle(Title.title(plugin.mm("<gold><bold>TOP DAMAGE!"), plugin.mm("<gray>You won " + label + type.colored()),
+                Title.Times.times(Duration.ofMillis(200), Duration.ofMillis(3000), Duration.ofMillis(700))));
+        for (Player o : Bukkit.getOnlinePlayers()) o.playSound(o.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 0.8f, 0.9f);
+        Bukkit.broadcast(plugin.mm(plugin.prefix() + "<white>" + p.getName() + " <gray>did the most damage to " + sourceName
+                + " <gray>and won " + label + type.colored() + "<gray>!"));
+    }
+
+    // ------------------------------------------------------------------ Ender Dragon: top damage dealer wins Dragon's Awakening
+
+    private final java.util.Map<UUID, java.util.Map<UUID, Double>> dragonDamage = new java.util.concurrent.ConcurrentHashMap<>();
+
+    @EventHandler(priority = org.bukkit.event.EventPriority.MONITOR, ignoreCancelled = true)
+    public void onDragonHit(org.bukkit.event.entity.EntityDamageByEntityEvent event) {
+        org.bukkit.entity.Entity hit = event.getEntity();
+        if (hit instanceof org.bukkit.entity.ComplexEntityPart part) hit = part.getParent();
+        if (!(hit instanceof org.bukkit.entity.EnderDragon dragon)) return;
+        org.bukkit.entity.Entity damager = event.getDamager();
+        if (damager instanceof org.bukkit.entity.Projectile proj && proj.getShooter() instanceof Player shooter) damager = shooter;
+        if (damager instanceof org.bukkit.entity.TNTPrimed tnt && tnt.getSource() instanceof Player src) damager = src;
+        if (!(damager instanceof Player player)) return;
+        dragonDamage.computeIfAbsent(dragon.getUniqueId(), k -> new java.util.concurrent.ConcurrentHashMap<>())
+                .merge(player.getUniqueId(), event.getFinalDamage(), Double::sum);
+    }
+
+    @EventHandler
     public void onDragonDeath(org.bukkit.event.entity.EntityDeathEvent event) {
         if (!(event.getEntity() instanceof org.bukkit.entity.EnderDragon dragon)) return;
+        java.util.Map<UUID, Double> dmg = dragonDamage.remove(dragon.getUniqueId());
         if (ThreadLocalRandom.current().nextDouble() >= plugin.getConfig().getDouble("ability-drops.dragon-chance", 1.0)) return;
+        UUID top = dmg == null ? null : dmg.entrySet().stream().max(java.util.Map.Entry.comparingByValue()).map(java.util.Map.Entry::getKey).orElse(null);
+        if (top == null && dragon.getKiller() != null) top = dragon.getKiller().getUniqueId();
         World w = dragon.getWorld();
-        Location at = new Location(w, 0, w.getHighestBlockYAt(0, 0) + 1.5, 0);   // the exit portal
-        if (w.getEnvironment() != World.Environment.THE_END) at = dragon.getLocation();
-        final Location spot = at;
-        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
-            drop(spot, AbilityType.DRAGON_WRATH, 1, null);
-            for (Player p : Bukkit.getOnlinePlayers()) p.playSound(p.getLocation(), org.bukkit.Sound.ENTITY_ENDER_DRAGON_GROWL, 0.7f, 1.2f);
-            Bukkit.broadcast(plugin.mm(plugin.prefix() + "<dark_purple><bold>The Ender Dragon</bold> <gray>has fallen and dropped the <gold><bold>LEGENDARY</bold> "
-                    + AbilityType.DRAGON_WRATH.colored() + " <gray>orb at the exit portal!"));
-        }, 200L);
+        Location at = w.getEnvironment() == World.Environment.THE_END ? new Location(w, 0.5, w.getHighestBlockYAt(0, 0) + 1.5, 0.5) : dragon.getLocation();
+        final UUID winner = top;
+        plugin.getServer().getScheduler().runTaskLater(plugin, () -> award(winner, AbilityType.DRAGON_AWAKENING, at,
+                "<dark_purple><bold>the Ender Dragon</bold>"), 200L);
     }
 
     /** Called on player death. Returns a message describing what was lost, or null. */

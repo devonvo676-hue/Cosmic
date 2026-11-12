@@ -157,6 +157,113 @@ public class CutsceneManager implements Listener {
         }.runTaskTimer(plugin, 1L, 1L);
     }
 
+    // ------------------------------------------------------------------ boss entrance
+
+    /**
+     * Boss entrance: the boss rises out of the ground while every player nearby watches through a camera that
+     * sweeps in from far away to the boss's face. The boss can't move, attack or be hurt until it's over.
+     */
+    public void playBossIntro(org.bukkit.entity.LivingEntity boss, com.cosmicabilities.boss.BossType type) {
+        int length = Math.max(40, (int) (plugin.getConfig().getDouble("bosses.cutscene-seconds", 6) * 20));
+        double radius = plugin.getConfig().getDouble("bosses.cutscene-radius", 64);
+        Location ground = boss.getLocation().clone();
+        World w = ground.getWorld();
+        double height = plugin.bosses().size(type) * (type == com.cosmicabilities.boss.BossType.SOLAR_TITAN ? 1.6 : 1.4);
+        boss.setAI(false);
+        boss.setInvulnerable(true);
+        boss.setGravity(false);
+        boss.teleport(ground.clone().subtract(0, height + 1, 0));
+        float yaw = ground.getYaw();
+        java.util.List<Player> viewers = new java.util.ArrayList<>();
+        for (Player p : w.getPlayers()) {
+            if (sessions.containsKey(p.getUniqueId()) || p.isDead()) continue;
+            if (p.getLocation().distanceSquared(ground) > radius * radius) continue;
+            if (p.getGameMode() == GameMode.SPECTATOR) continue;
+            if (plugin.afk().isAfk(p.getUniqueId())) continue;
+            viewers.add(p);
+        }
+        Location focus = ground.clone().add(0, height * 0.75, 0);
+        ArmorStand cam = viewers.isEmpty() ? null : w.spawn(bossCam(focus, yaw, 0, height), ArmorStand.class, a -> {
+            a.setVisible(false);
+            a.setGravity(false);
+            a.setInvulnerable(true);
+            a.setSilent(true);
+            a.setMarker(true);
+            a.setPersistent(false);
+        });
+        for (Player p : viewers) {
+            p.getPersistentDataContainer().set(restoreKey, PersistentDataType.STRING, serialize(p.getLocation(), p.getGameMode()));
+            sessions.put(p.getUniqueId(), new Session(cam, null, p.getGameMode(), p.getLocation().clone()));
+            p.setGameMode(GameMode.SPECTATOR);
+            p.setSpectatorTarget(cam);
+        }
+        int rgb = Integer.parseInt(type.color.substring(1), 16);
+        new BukkitRunnable() {
+            int t = 0;
+            @Override
+            public void run() {
+                double prog = t / (double) length;
+                if (cam != null && cam.isValid()) {
+                    cam.teleport(bossCam(focus, yaw, prog, height));
+                    for (Player p : viewers) if (p.isOnline() && p.getSpectatorTarget() == null && sessions.containsKey(p.getUniqueId())) p.setSpectatorTarget(cam);
+                }
+                // the boss rises out of the ground over the first half
+                double rise = Math.min(1, t / (length * 0.5));
+                if (boss.isValid()) {
+                    Location at = ground.clone().subtract(0, (height + 1) * (1 - rise * rise * (3 - 2 * rise)), 0);
+                    boss.teleport(at);
+                }
+                if (rise < 1) {
+                    w.spawnParticle(Particle.BLOCK, ground.clone().add(0, 0.2, 0), 25, height * 0.4, 0.2, height * 0.4, 0.2,
+                            ground.clone().subtract(0, 1, 0).getBlock().getBlockData());
+                    if (t % 4 == 0) w.playSound(ground, Sound.BLOCK_DEEPSLATE_BREAK, 2f, 0.5f);
+                    if (t % 10 == 0) Fx.ring(w, ground.clone().add(0, 0.1, 0), height * 0.8 + Math.sin(t) * 0.3, 40, t, Fx.dust(rgb, 2f));
+                }
+                if (t == 0) {
+                    w.playSound(ground, Sound.ENTITY_WARDEN_EMERGE, 3f, 0.7f);
+                    w.strikeLightningEffect(ground.clone().add(4, 0, 0));
+                    w.strikeLightningEffect(ground.clone().add(-4, 0, 2));
+                }
+                if (t == (int) (length * 0.55)) {
+                    w.playSound(ground, Sound.ENTITY_ENDER_DRAGON_GROWL, 3f, 0.6f);
+                    w.playSound(ground, Sound.ENTITY_WITHER_SPAWN, 2f, 0.7f);
+                    w.spawnParticle(Particle.EXPLOSION_EMITTER, focus, 2, 1, 1, 1, 0);
+                    for (int r = 1; r <= 8; r++) Fx.ring(w, ground.clone().add(0, 0.3, 0), r * 1.5, 20 + r * 8, r, Fx.dust(rgb, 2.2f));
+                    for (Player p : w.getPlayers()) {
+                        if (p.getLocation().distanceSquared(ground) > radius * radius * 2) continue;
+                        p.showTitle(Title.title(plugin.mm(type.colored()), plugin.mm("<gray>has awakened"),
+                                Title.Times.times(Duration.ofMillis(300), Duration.ofMillis(2400), Duration.ofMillis(700))));
+                    }
+                }
+                if (t >= length || !boss.isValid()) {
+                    cancel();
+                    for (Player p : viewers) if (p.isOnline()) finish(p);
+                    if (cam != null && cam.isValid()) cam.remove();
+                    if (boss.isValid()) {
+                        boss.teleport(ground);
+                        boss.setGravity(true);
+                        boss.setInvulnerable(false);
+                        boss.setAI(true);
+                    }
+                    return;
+                }
+                t++;
+            }
+        }.runTaskTimer(plugin, 1L, 1L);
+    }
+
+    /** Camera for the boss entrance: starts far away and low, sweeps around and pushes in to the boss's face. */
+    private static Location bossCam(Location focus, float bossYaw, double prog, double height) {
+        double ease = prog * prog * (3 - 2 * prog);
+        double facing = Math.toRadians(bossYaw + 90);       // in front of the boss
+        double angle = facing + 1.3 - ease * 1.3;
+        double dist = height * 6 + 8 - ease * (height * 4 + 6);
+        double y = -height * 0.4 + ease * height * 0.5 + 1;
+        Location cam = focus.clone().add(Math.cos(angle) * dist, y, Math.sin(angle) * dist);
+        cam.setDirection(focus.toVector().subtract(cam.toVector()));
+        return cam;
+    }
+
     /** Spins the emblem around Y at a given scale and height above the origin. */
     private static Transformation emblemAt(float scale, float height, int t) {
         return new Transformation(new Vector3f(0, height, 0), new Quaternionf().rotateY(t * 0.18f),
@@ -184,7 +291,7 @@ public class CutsceneManager implements Listener {
     private void finish(Player p) {
         Session s = sessions.remove(p.getUniqueId());
         if (s == null) return;
-        if (s.emblem().isValid()) s.emblem().remove();
+        if (s.emblem() != null && s.emblem().isValid()) s.emblem().remove();
         if (s.camera() != null) {
             p.setSpectatorTarget(null);
             if (s.camera().isValid()) s.camera().remove();

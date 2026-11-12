@@ -37,13 +37,87 @@ import java.util.concurrent.ThreadLocalRandom;
 /**
  * Supply drops: a crate floats down from the sky on a parachute, lands as a chest full of loot (supply-drops.loot)
  * and is announced to everyone. Admins call one at their position or any coordinates:
- * /supplydrop [here | <x> <y> <z> | random <radius>] or from /adminpanel.
+ * /supplydrop (random spot) [here | loot | <x> <y> <z> | random <radius>] or from /adminpanel. Loot is edited in a chest GUI.
  */
-public class SupplyDrops implements CommandExecutor {
+public class SupplyDrops implements CommandExecutor, org.bukkit.event.Listener {
     private final CosmicAbilitiesPlugin plugin;
+    private final java.io.File lootFile;
+    private final List<ItemStack> loot = new ArrayList<>();
+
+    /** The loot editor: a plain chest the admin fills with whatever the drops should contain. */
+    public static final class LootHolder implements org.bukkit.inventory.InventoryHolder {
+        Inventory inventory;
+        @Override
+        public @NotNull Inventory getInventory() { return inventory; }
+    }
 
     public SupplyDrops(CosmicAbilitiesPlugin plugin) {
         this.plugin = plugin;
+        this.lootFile = new java.io.File(plugin.getDataFolder(), "supply-loot.yml");
+        loadLoot();
+    }
+
+    private void loadLoot() {
+        loot.clear();
+        org.bukkit.configuration.file.YamlConfiguration yml = org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(lootFile);
+        for (String b64 : yml.getStringList("items")) {
+            try {
+                loot.add(ItemStack.deserializeBytes(java.util.Base64.getDecoder().decode(b64)));
+            } catch (RuntimeException e) {
+                plugin.getLogger().warning("Skipping a broken supply drop item");
+            }
+        }
+    }
+
+    private void saveLoot() {
+        org.bukkit.configuration.file.YamlConfiguration yml = new org.bukkit.configuration.file.YamlConfiguration();
+        List<String> out = new ArrayList<>();
+        for (ItemStack it : loot) out.add(java.util.Base64.getEncoder().encodeToString(it.serializeAsBytes()));
+        yml.set("items", out);
+        try { yml.save(lootFile); } catch (java.io.IOException e) { plugin.getLogger().warning("Could not save supply-loot.yml: " + e.getMessage()); }
+    }
+
+    public int lootCount() { return loot.size(); }
+
+    public void openEditor(Player admin) {
+        LootHolder h = new LootHolder();
+        Inventory inv = Bukkit.createInventory(h, 54, plugin.mm("<dark_green>Supply drop loot <dark_gray>- close to save"));
+        h.inventory = inv;
+        for (int i = 0; i < loot.size() && i < 54; i++) inv.setItem(i, loot.get(i).clone());
+        admin.openInventory(inv);
+        admin.sendMessage(plugin.mm(plugin.prefix() + "<gray>Put in everything a supply drop can contain. Each stack has a <white>"
+                + Math.round(plugin.getConfig().getDouble("supply-drops.item-chance", 0.7) * 100) + "% <gray>chance to be in each drop. Close to save."));
+    }
+
+    @org.bukkit.event.EventHandler
+    public void onEditorClose(org.bukkit.event.inventory.InventoryCloseEvent event) {
+        if (!(event.getInventory().getHolder() instanceof LootHolder)) return;
+        if (!(event.getPlayer() instanceof Player p) || !BanPistol.isAdmin(p)) return;
+        loot.clear();
+        for (ItemStack it : event.getInventory().getContents()) if (it != null && !it.getType().isAir()) loot.add(it.clone());
+        saveLoot();
+        p.sendMessage(plugin.mm(plugin.prefix() + "<green>Saved " + loot.size() + " supply drop items."));
+    }
+
+    /** A random spot around the world spawn (supply-drops.random-min-radius .. random-radius), never in water. */
+    public Location randomLocation(World w) {
+        double max = plugin.getConfig().getDouble("supply-drops.random-radius", 800);
+        double min = Math.min(max, plugin.getConfig().getDouble("supply-drops.random-min-radius", 100));
+        Location spawn = w.getSpawnLocation();
+        ThreadLocalRandom r = ThreadLocalRandom.current();
+        Location best = spawn;
+        for (int i = 0; i < 12; i++) {
+            double a = r.nextDouble(Math.PI * 2), d = min + r.nextDouble() * Math.max(1, max - min);
+            Location at = spawn.clone().add(Math.cos(a) * d, 0, Math.sin(a) * d);
+            Block top = w.getHighestBlockAt(at);
+            best = at;
+            if (!top.isLiquid() && top.getType() != Material.ICE) break;
+        }
+        return best;
+    }
+
+    public void callRandom(World w, CommandSender by) {
+        call(randomLocation(w), by);
     }
 
     public void call(Location target, CommandSender by) {
@@ -145,8 +219,20 @@ public class SupplyDrops implements CommandExecutor {
         }
     }
 
-    /** supply-drops.loot entries: "ITEM:min-max:chance", e.g. "DIAMOND:2-6:0.8" or "cosmic:upgrade_token:1:0.15" */
     private List<ItemStack> rollLoot() {
+        ThreadLocalRandom r = ThreadLocalRandom.current();
+        if (!loot.isEmpty()) {
+            double chance = plugin.getConfig().getDouble("supply-drops.item-chance", 0.7);
+            List<ItemStack> out = new ArrayList<>();
+            for (ItemStack it : loot) if (r.nextDouble() < chance) out.add(it.clone());
+            if (out.isEmpty()) out.add(loot.get(r.nextInt(loot.size())).clone());
+            return out;
+        }
+        return rollConfigLoot();
+    }
+
+    /** supply-drops.loot entries: "ITEM:min-max:chance", e.g. "DIAMOND:2-6:0.8" or "cosmic:upgrade_token:1:0.15" */
+    private List<ItemStack> rollConfigLoot() {
         List<ItemStack> out = new ArrayList<>();
         ThreadLocalRandom r = ThreadLocalRandom.current();
         for (String line : plugin.getConfig().getStringList("supply-drops.loot")) {
@@ -193,13 +279,15 @@ public class SupplyDrops implements CommandExecutor {
                 double rad = args.length > 1 ? Double.parseDouble(args[1]) : 200;
                 double a = Math.random() * Math.PI * 2, d = Math.random() * rad;
                 call(p.getLocation().add(Math.cos(a) * d, 0, Math.sin(a) * d), sender);
-            } else if (p != null) {
+            } else if (args.length >= 1 && args[0].equalsIgnoreCase("here") && p != null) {
                 call(p.getLocation(), sender);
+            } else if (args.length >= 1 && args[0].equalsIgnoreCase("loot") && p != null) {
+                openEditor(p);
             } else {
-                sender.sendMessage("/supplydrop <x> <y> <z>");
+                callRandom(p != null ? p.getWorld() : Bukkit.getWorlds().get(0), sender);
             }
         } catch (NumberFormatException e) {
-            sender.sendMessage(plugin.mm(plugin.prefix() + "<red>/supplydrop [here | <x> <y> <z> | random <radius>]"));
+            sender.sendMessage(plugin.mm(plugin.prefix() + "<red>/supplydrop [here | loot | <x> <y> <z> | random <radius>]"));
         }
         return true;
     }

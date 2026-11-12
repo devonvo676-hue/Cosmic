@@ -112,11 +112,16 @@ public final class Targets {
 
     /** Deals ability damage. `ability` (MiniMessage, e.g. "<#4cc9f0>Pulsar") is used in the death message. */
     public static double damage(Player caster, LivingEntity target, double amount, int rgb, String ability) {
+        return damage(caster, target, amount, rgb, ability, false);
+    }
+
+    /** exact = the boss / dragon abilities: their listed heart damage, not scaled by the global multiplier or combo cap. */
+    public static double damage(Player caster, LivingEntity target, double amount, int rgb, String ability, boolean exact) {
         if (amount <= 0 || target.isDead()) return 0;
         if (ability != null) lastHits.put(target.getUniqueId(), new AbilityHit(caster.getName(), ability, System.currentTimeMillis()));
-        double mult = plugin.getConfig().getDouble("abilities.damage-multiplier", 1.0);
+        double mult = exact ? 1.0 : plugin.getConfig().getDouble("abilities.damage-multiplier", 1.0);
         double raw = amount * mult;
-        if (target instanceof Player) {
+        if (target instanceof Player && !exact) {
             // anti one-shot: cap how much ability damage one player can take inside a short window
             double cap = plugin.getConfig().getDouble("abilities.combo-damage-cap", 14);
             long window = (long) (plugin.getConfig().getDouble("abilities.combo-window-seconds", 4) * 1000);

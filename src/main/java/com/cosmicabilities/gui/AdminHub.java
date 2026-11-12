@@ -45,13 +45,14 @@ import java.util.concurrent.ConcurrentHashMap;
  * announce, reload, unban, name tags, cooldowns and clean-up.
  */
 public class AdminHub implements Listener {
-    enum Page { HUB, GIVE, PLAYERS, PLAYER, PICK, UNBAN, RANKS, EVENTS, STATS, BOSSES, TEAMS }
+    enum Page { HUB, GIVE, PLAYERS, PLAYER, PICK, UNBAN, RANKS, EVENTS, STATS, BOSSES, BOSS_EDIT, TEAMS, SUPPLY }
     enum PickMode { SLOT1, SLOT2, ORB }
 
     public static final class Holder implements InventoryHolder {
         Inventory inventory;
         final Page page;
         UUID target;
+        String key;
         PickMode mode;
         final Map<Integer, Object> slots = new HashMap<>();
         Holder(Page page) { this.page = page; }
@@ -129,16 +130,15 @@ public class AdminHub implements Listener {
         inv.setItem(H_EVENTS, Icons.button(plugin, Material.FIREWORK_ROCKET, "<yellow><bold>Daily Events",
                 "<gray>2x kill money, 2x AFK tokens, ability", "<gray>frenzy, supply drop rain, boss fights.",
                 "<gray>Active: <white>" + plugin.events().activeEvents().size()));
-        inv.setItem(H_SUPPLY, Icons.button(plugin, Material.CHEST_MINECART, "<green><bold>Supply Drop",
-                "<yellow>Click <gray>drop one where you stand", "<yellow>Right <gray>drop one 100-300 blocks away",
-                "<gray>Or <white>/supplydrop <x> <y> <z>"));
+        inv.setItem(H_SUPPLY, Icons.button(plugin, Material.CHEST_MINECART, "<green><bold>Supply Drops",
+                "<gray>Spawn one at a random spot, edit the", "<gray>loot, chance per item, spawn radius."));
         inv.setItem(H_TEAMS, Icons.button(plugin, Material.WHITE_BANNER, "<aqua><bold>Teams & Season",
                 "<gray>Team bank leaderboard, season length,", "<gray>end the season and hand out rewards.",
                 "<gray>Season <white>" + plugin.teams().season() + " <gray>ends in <white>" + plugin.teams().timeLeft()));
         inv.setItem(H_STATS, Icons.button(plugin, Material.WRITABLE_BOOK, "<#f15bb5><bold>Player Stats",
                 "<gray>Refresh everyone's sidebar / tab / tags,", "<gray>or reset kills, deaths and cash."));
-        inv.setItem(H_BOSSES, Icons.button(plugin, Material.DRAGON_HEAD, "<red><bold>Boss Strength",
-                "<gray>Health, damage and size multipliers", "<gray>for every boss."));
+        inv.setItem(H_BOSSES, Icons.button(plugin, Material.DRAGON_HEAD, "<red><bold>Boss Settings",
+                "<gray>Health, damage, special attacks, speed,", "<gray>size, armor, drops and the spawn cutscene."));
         inv.setItem(H_RPG, plugin.rpg().create());
         inv.setItem(H_COOLDOWNS, Icons.button(plugin, Material.CLOCK, "<aqua><bold>Ability Cooldowns",
                 "<gray>Change every ability's cooldown,", "<gray>all at once or one by one."));
@@ -161,6 +161,7 @@ public class AdminHub implements Listener {
         put(h, 25, plugin.items().afkToken(1), "afk");
         put(h, 15, plugin.items().token(1), "token");
         put(h, 17, plugin.rpg().create(), "rpg");
+        put(h, 9, plugin.cocaine().create(), "cocaine");
         put(h, 16, plugin.coinflip().coin("<gold><bold>+$100,000", "<gray>Click: give yourself $100,000", "<gray>Shift: $1,000,000"), "cash");
         CosmicMaterial[] mats = CosmicMaterial.values();
         for (int i = 0; i < mats.length; i++) put(h, 19 + i, mats[i].create(16), mats[i]);
@@ -307,6 +308,8 @@ public class AdminHub implements Listener {
             case EVENTS -> eventsClick(admin, raw, click);
             case STATS -> statsClick(admin, raw, click);
             case BOSSES -> bossesClick(admin, raw, click);
+            case BOSS_EDIT -> bossEditClick(admin, h, raw, click);
+            case SUPPLY -> supplyClick(admin, raw, click);
             case TEAMS -> teamsClick(admin, raw, click);
             case UNBAN -> {
                 if (raw == 49) { open(admin); return; }
@@ -367,15 +370,7 @@ public class AdminHub implements Listener {
                 plugin.roll().spin(admin, RollPanel.Reason.ADMIN);
             }
             case H_EVENTS -> openEvents(admin);
-            case H_SUPPLY -> {
-                admin.closeInventory();
-                if (click.isRightClick()) {
-                    double a = Math.random() * Math.PI * 2, d = 100 + Math.random() * 200;
-                    plugin.supplyDrops().call(admin.getLocation().add(Math.cos(a) * d, 0, Math.sin(a) * d), admin);
-                } else {
-                    plugin.supplyDrops().call(admin.getLocation(), admin);
-                }
-            }
+            case H_SUPPLY -> openSupply(admin);
             case H_TEAMS -> openTeams(admin);
             case H_STATS -> openStats(admin);
             case H_BOSSES -> openBosses(admin);
@@ -409,6 +404,7 @@ public class AdminHub implements Listener {
                 yield null;
             }
             case "rpg" -> plugin.rpg().create();
+            case "cocaine" -> plugin.cocaine().create();
             default -> plugin.banPistol().create();
         };
         if (it != null) for (ItemStack left : admin.getInventory().addItem(it).values()) admin.getWorld().dropItemNaturally(admin.getLocation(), left);
@@ -659,39 +655,191 @@ public class AdminHub implements Listener {
         }
     }
 
-    // ------------------------------------------------------------------ boss strength
+    // ------------------------------------------------------------------ boss settings
 
-    private static final String[] BOSS_KEYS = {"health-multiplier", "damage-multiplier", "size-multiplier"};
+    private record BossSetting(String key, String label, Material icon, double step, double big, double min, double max, String note) {}
+
+    private static final List<BossSetting> BOSS_SETTINGS = List.of(
+            new BossSetting("health", "Health", Material.GOLDEN_APPLE, 50, 250, 50, 20000, "Server max is 1024 unless raised in spigot.yml"),
+            new BossSetting("damage", "Melee damage", Material.NETHERITE_SWORD, 1, 5, 0, 200, "Per hit, before armor"),
+            new BossSetting("special-damage", "Special attack damage", Material.BLAZE_POWDER, 1, 5, 0, 200, "Damage of its special move"),
+            new BossSetting("special-attack-interval", "Special attack every (s)", Material.CLOCK, 1, 5, 2, 120, "Seconds between special moves"),
+            new BossSetting("special-radius", "Special attack radius", Material.TARGET, 1, 5, 2, 64, "Blocks"),
+            new BossSetting("speed", "Speed", Material.SUGAR, 0.01, 0.05, 0.05, 1.0, "Movement speed (0.3 = normal mob)"),
+            new BossSetting("size", "Size", Material.SCAFFOLDING, 0.1, 0.5, 0.3, 10, "Entity scale - model and hitbox"),
+            new BossSetting("armor", "Armor", Material.NETHERITE_CHESTPLATE, 1, 5, 0, 30, "Armor points (diamond set = 20)"),
+            new BossSetting("armor-toughness", "Armor toughness", Material.NETHERITE_INGOT, 1, 4, 0, 20, ""),
+            new BossSetting("knockback-resistance", "Knockback resistance", Material.ANVIL, 0.05, 0.25, 0, 1, "1 = can't be knocked back"),
+            new BossSetting("heal-percent", "Self-heal (%)", Material.GLISTERING_MELON_SLICE, 1, 5, 0, 50, "Nebula Serpent's special heals this much"),
+            new BossSetting("ability-chance", "Boss ability chance", Material.NETHER_STAR, 0.05, 0.25, 0, 1,
+                    "Chance top damage gets THIS boss's ability (else a random one)"),
+            new BossSetting("drops.min", "Fragments min", Material.AMETHYST_SHARD, 1, 5, 0, 64, "Per player who helped"),
+            new BossSetting("drops.max", "Fragments max", Material.AMETHYST_CLUSTER, 1, 5, 0, 64, ""));
+    private static final int[] BOSS_SETTING_SLOTS = {10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25};
+    private static final int[] BOSS_PICK_SLOTS = {20, 21, 22, 23, 24};
 
     private void openBosses(Player admin) {
         Holder h = new Holder(Page.BOSSES);
-        Inventory inv = create(h, 45, "<dark_red>Boss Strength");
-        Material[] icons = {Material.GOLDEN_APPLE, Material.NETHERITE_SWORD, Material.SCAFFOLDING};
-        String[] names = {"Health", "Damage", "Size"};
-        for (int i = 0; i < 3; i++) {
-            double v = plugin.getConfig().getDouble("bosses." + BOSS_KEYS[i], 1.0);
-            inv.setItem(11 + i * 2, Icons.button(plugin, icons[i], "<red><bold>" + names[i] + ": <white>x" + String.format("%.2f", v),
-                    "<yellow>Left <gray>+0.25  <yellow>Right <gray>-0.25", "<yellow>Shift <gray>+/- 1.0",
-                    i == 2 ? "<gray>Applies to bosses spawned from now on" : "<gray>Applies to bosses spawned from now on"));
+        Inventory inv = create(h, 54, "<dark_red>Boss Settings");
+        com.cosmicabilities.boss.BossType[] types = com.cosmicabilities.boss.BossType.values();
+        Material[] heads = {Material.WITHER_SKELETON_SKULL, Material.MAGMA_BLOCK, Material.BLUE_ICE, Material.DRAGON_HEAD, Material.NETHERITE_BLOCK};
+        for (int i = 0; i < types.length; i++) {
+            var t = types[i];
+            inv.setItem(BOSS_PICK_SLOTS[i], Icons.button(plugin, heads[i], t.colored(),
+                    "<gray>Health <white>" + fmtNum(plugin.bosses().cfg(t, "health", 600)) + " <gray>| Damage <white>" + fmtNum(plugin.bosses().cfg(t, "damage", 10)),
+                    "<gray>Size <white>" + fmtNum(plugin.bosses().cfg(t, "size", t.scale)) + " <gray>| Speed <white>" + fmtNum(plugin.bosses().cfg(t, "speed", 0.3)),
+                    "", "<yellow>Click <gray>to change everything about it"));
         }
-        inv.setItem(31, Icons.button(plugin, Material.BOOK, "<gray>Per-boss health / damage",
-                "<gray>Each boss also has its own values in", "<white>config.yml -> bosses.<boss>.health / damage",
-                "<gray>The multipliers above scale all of them."));
+        String[] names = {"Health", "Damage", "Size"};
+        Material[] icons = {Material.GOLDEN_APPLE, Material.NETHERITE_SWORD, Material.SCAFFOLDING};
+        String[] keys = {"health-multiplier", "damage-multiplier", "size-multiplier"};
+        for (int i = 0; i < 3; i++) {
+            inv.setItem(37 + i, Icons.button(plugin, icons[i], "<red>ALL bosses " + names[i] + ": <white>x" + fmtNum(plugin.getConfig().getDouble("bosses." + keys[i], 1.0)),
+                    "<gray>Multiplies every boss's own value.", "<yellow>Left <gray>+0.1  <yellow>Right <gray>-0.1", "<yellow>Shift <gray>+/- 0.5"));
+        }
+        boolean cut = plugin.getConfig().getBoolean("bosses.cutscene", true);
+        inv.setItem(41, Icons.button(plugin, cut ? Material.ENDER_EYE : Material.ENDER_PEARL, "<aqua>Spawn cutscene: " + (cut ? "<green>ON" : "<red>OFF"),
+                "<gray>Length: <white>" + fmtNum(plugin.getConfig().getDouble("bosses.cutscene-seconds", 6)) + "s",
+                "<yellow>Click <gray>toggle", "<yellow>Right <gray>+1s  <yellow>Shift-right <gray>-1s"));
+        inv.setItem(42, Icons.button(plugin, Material.PLAYER_HEAD, "<aqua>Players needed: <white>" + plugin.getConfig().getInt("bosses.min-players-to-damage", 3),
+                "<gray>The boss is shielded unless this many", "<gray>players are fighting it (1 = off).", "<yellow>Left <gray>+1  <yellow>Right <gray>-1"));
+        inv.setItem(43, Icons.button(plugin, Material.WITHER_SKELETON_SKULL, "<red><bold>Start a boss fight", "<gray>Opens the boss fight panel."));
+        inv.setItem(4, Icons.button(plugin, Material.BOOK, "<gold>Boss settings",
+                "<gray>Pick a boss to change its health, damage,", "<gray>special attack, speed, size, armor, drops...",
+                "<gray>Changes apply to bosses spawned after."));
+        inv.setItem(49, Icons.button(plugin, Material.ARROW, "<yellow>Back"));
+        admin.openInventory(inv);
+    }
+
+    private static String fmtNum(double v) {
+        return v == Math.rint(v) ? String.valueOf((long) v) : String.format(java.util.Locale.US, "%.2f", v);
+    }
+
+    private void bossesClick(Player admin, int raw, ClickType click) {
+        com.cosmicabilities.boss.BossType[] types = com.cosmicabilities.boss.BossType.values();
+        for (int i = 0; i < types.length; i++) if (raw == BOSS_PICK_SLOTS[i]) { openBossEdit(admin, types[i]); return; }
+        String[] keys = {"health-multiplier", "damage-multiplier", "size-multiplier"};
+        if (raw >= 37 && raw <= 39) {
+            String k = "bosses." + keys[raw - 37];
+            double step = click.isShiftClick() ? 0.5 : 0.1;
+            double v = plugin.getConfig().getDouble(k, 1.0) + (click.isRightClick() ? -step : step);
+            plugin.getConfig().set(k, Math.max(0.1, Math.min(raw == 39 ? 4 : 50, Math.round(v * 100) / 100.0)));
+        } else if (raw == 41) {
+            if (click.isRightClick()) {
+                double v = plugin.getConfig().getDouble("bosses.cutscene-seconds", 6) + (click.isShiftClick() ? -1 : 1);
+                plugin.getConfig().set("bosses.cutscene-seconds", Math.max(2, Math.min(20, v)));
+            } else {
+                plugin.getConfig().set("bosses.cutscene", !plugin.getConfig().getBoolean("bosses.cutscene", true));
+            }
+        } else if (raw == 42) {
+            int v = plugin.getConfig().getInt("bosses.min-players-to-damage", 3) + (click.isRightClick() ? -1 : 1);
+            plugin.getConfig().set("bosses.min-players-to-damage", Math.max(1, Math.min(20, v)));
+        } else if (raw == 43) {
+            plugin.bossFightPanel().open(admin);
+            return;
+        } else if (raw == 49) {
+            open(admin);
+            return;
+        } else {
+            return;
+        }
+        plugin.saveConfig();
+        openBosses(admin);
+    }
+
+    private void openBossEdit(Player admin, com.cosmicabilities.boss.BossType type) {
+        Holder h = new Holder(Page.BOSS_EDIT);
+        h.key = type.name();
+        Inventory inv = create(h, 45, "<dark_red>" + type.displayName + " settings");
+        for (int i = 0; i < BOSS_SETTINGS.size(); i++) {
+            BossSetting st = BOSS_SETTINGS.get(i);
+            if (st.key().equals("heal-percent") && type != com.cosmicabilities.boss.BossType.NEBULA_SERPENT) continue;
+            double def = st.key().equals("size") ? type.scale : 0;
+            double v = plugin.bosses().cfg(type, st.key(), def);
+            inv.setItem(BOSS_SETTING_SLOTS[i], Icons.button(plugin, st.icon(), "<red><bold>" + st.label() + ": <white>" + fmtNum(v),
+                    st.note().isEmpty() ? "<dark_gray>" + st.key() : "<gray>" + st.note(),
+                    "<yellow>Left <gray>+" + fmtNum(st.step()) + "  <yellow>Right <gray>-" + fmtNum(st.step()),
+                    "<yellow>Shift <gray>+/- " + fmtNum(st.big())));
+        }
+        inv.setItem(4, Icons.button(plugin, Material.BOOK, type.colored(), "<gray>Saved to config.yml -> bosses." + type.id(),
+                "<gray>Applies to the next one you spawn."));
         inv.setItem(40, Icons.button(plugin, Material.ARROW, "<yellow>Back"));
         admin.openInventory(inv);
     }
 
-    private void bossesClick(Player admin, int raw, ClickType click) {
-        if (raw == 40) { open(admin); return; }
-        for (int i = 0; i < 3; i++) {
-            if (raw != 11 + i * 2) continue;
-            double step = click.isShiftClick() ? 1.0 : 0.25;
-            double v = plugin.getConfig().getDouble("bosses." + BOSS_KEYS[i], 1.0) + (click.isRightClick() ? -step : step);
-            v = Math.max(i == 2 ? 0.25 : 0.25, Math.min(i == 2 ? 4 : 50, Math.round(v * 100) / 100.0));
-            plugin.getConfig().set("bosses." + BOSS_KEYS[i], v);
+    private void bossEditClick(Player admin, Holder h, int raw, ClickType click) {
+        com.cosmicabilities.boss.BossType type = com.cosmicabilities.boss.BossType.valueOf(h.key);
+        if (raw == 40) { openBosses(admin); return; }
+        for (int i = 0; i < BOSS_SETTINGS.size(); i++) {
+            if (raw != BOSS_SETTING_SLOTS[i]) continue;
+            BossSetting st = BOSS_SETTINGS.get(i);
+            double def = st.key().equals("size") ? type.scale : 0;
+            double step = click.isShiftClick() ? st.big() : st.step();
+            double v = plugin.bosses().cfg(type, st.key(), def) + (click.isRightClick() ? -step : step);
+            v = Math.max(st.min(), Math.min(st.max(), Math.round(v * 1000) / 1000.0));
+            plugin.getConfig().set("bosses." + type.id() + "." + st.key(), v);
             plugin.saveConfig();
-            openBosses(admin);
+            openBossEdit(admin, type);
+            return;
         }
+    }
+
+    // ------------------------------------------------------------------ supply drops
+
+    private void openSupply(Player admin) {
+        Holder h = new Holder(Page.SUPPLY);
+        Inventory inv = create(h, 45, "<dark_green>Supply Drops");
+        double radius = plugin.getConfig().getDouble("supply-drops.random-radius", 800);
+        double minR = plugin.getConfig().getDouble("supply-drops.random-min-radius", 100);
+        inv.setItem(11, Icons.button(plugin, Material.CHEST_MINECART, "<green><bold>Spawn supply drop",
+                "<gray>Falls at a random spot <white>" + fmtNum(minR) + "-" + fmtNum(radius), "<gray>blocks from spawn and is announced.",
+                "", "<yellow>Shift-click <gray>drop it where you stand instead"));
+        inv.setItem(13, Icons.button(plugin, Material.CHEST, "<gold><bold>Edit the loot",
+                "<gray>Opens a chest: put in any items", "<gray>(stacks, enchanted gear, cosmic items...).",
+                "<gray>Items in it: <white>" + plugin.supplyDrops().lootCount(),
+                plugin.supplyDrops().lootCount() == 0 ? "<dark_gray>Empty = uses supply-drops.loot in config" : ""));
+        double chance = plugin.getConfig().getDouble("supply-drops.item-chance", 0.7);
+        inv.setItem(15, Icons.button(plugin, Material.RABBIT_FOOT, "<aqua>Chance per item: <white>" + Math.round(chance * 100) + "%",
+                "<gray>Each stack in the loot chest has this", "<gray>chance to be in a drop (100% = all of it).",
+                "<yellow>Left <gray>+10%  <yellow>Right <gray>-10%"));
+        inv.setItem(29, Icons.button(plugin, Material.COMPASS, "<aqua>Random radius: <white>" + fmtNum(radius) + " blocks",
+                "<gray>How far from world spawn drops can land.", "<yellow>Left <gray>+100  <yellow>Right <gray>-100"));
+        inv.setItem(30, Icons.button(plugin, Material.RECOVERY_COMPASS, "<aqua>Minimum distance: <white>" + fmtNum(minR) + " blocks",
+                "<yellow>Left <gray>+50  <yellow>Right <gray>-50"));
+        int despawn = plugin.getConfig().getInt("supply-drops.despawn-minutes", 10);
+        inv.setItem(32, Icons.button(plugin, Material.CLOCK, "<aqua>Chest disappears after: <white>" + (despawn <= 0 ? "never" : despawn + " min"),
+                "<yellow>Left <gray>+5  <yellow>Right <gray>-5"));
+        inv.setItem(33, Icons.button(plugin, Material.CHEST, "<aqua>Supply Rain every: <white>" + plugin.getConfig().getInt("events.supply-rain-minutes", 5) + " min",
+                "<gray>During the Supply Drop Rain event.", "<yellow>Left <gray>+1  <yellow>Right <gray>-1"));
+        inv.setItem(40, Icons.button(plugin, Material.ARROW, "<yellow>Back"));
+        admin.openInventory(inv);
+    }
+
+    private void supplyClick(Player admin, int raw, ClickType click) {
+        int sign = click.isRightClick() ? -1 : 1;
+        switch (raw) {
+            case 11 -> {
+                admin.closeInventory();
+                if (click.isShiftClick()) plugin.supplyDrops().call(admin.getLocation(), admin);
+                else plugin.supplyDrops().callRandom(admin.getWorld(), admin);
+                return;
+            }
+            case 13 -> { plugin.supplyDrops().openEditor(admin); return; }
+            case 15 -> plugin.getConfig().set("supply-drops.item-chance",
+                    Math.max(0.1, Math.min(1.0, Math.round((plugin.getConfig().getDouble("supply-drops.item-chance", 0.7) + sign * 0.1) * 10) / 10.0)));
+            case 29 -> plugin.getConfig().set("supply-drops.random-radius",
+                    Math.max(100, Math.min(30000, plugin.getConfig().getDouble("supply-drops.random-radius", 800) + sign * 100)));
+            case 30 -> plugin.getConfig().set("supply-drops.random-min-radius",
+                    Math.max(0, Math.min(29000, plugin.getConfig().getDouble("supply-drops.random-min-radius", 100) + sign * 50)));
+            case 32 -> plugin.getConfig().set("supply-drops.despawn-minutes",
+                    Math.max(0, Math.min(240, plugin.getConfig().getInt("supply-drops.despawn-minutes", 10) + sign * 5)));
+            case 33 -> plugin.getConfig().set("events.supply-rain-minutes",
+                    Math.max(1, Math.min(120, plugin.getConfig().getInt("events.supply-rain-minutes", 5) + sign)));
+            case 40 -> { open(admin); return; }
+            default -> { return; }
+        }
+        plugin.saveConfig();
+        openSupply(admin);
     }
 
     // ------------------------------------------------------------------ teams & season

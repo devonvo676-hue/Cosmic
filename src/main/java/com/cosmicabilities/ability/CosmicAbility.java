@@ -40,6 +40,12 @@ public abstract class CosmicAbility {
         return Targets.damage(caster, target, amount * mult, type.rgb(), type.colored());
     }
 
+    /** Boss / dragon abilities: deals exactly this many hearts (times the ability's own damage-multiplier). */
+    protected double hearts(Player caster, LivingEntity target, double hearts) {
+        double mult = plugin.getConfig().getDouble("ability-settings." + type.id() + ".damage-multiplier", 1.0);
+        return Targets.damage(caster, target, hearts * 2 * mult, type.rgb(), type.colored(), true);
+    }
+
     protected StatusManager status() {
         return plugin.status();
     }

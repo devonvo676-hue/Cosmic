@@ -55,12 +55,12 @@ public class AbilityEngine {
         abilities.put(AbilityType.ENTROPY, new EntropyAbility(plugin));
         abilities.put(AbilityType.MAGNETOSPHERE, new MagnetosphereAbility(plugin));
         abilities.put(AbilityType.UMBRA, new UmbraAbility(plugin));
-        abilities.put(AbilityType.DRAGON_WRATH, new DragonWrathAbility(plugin));
-        abilities.put(AbilityType.VOID_GRASP, new VoidGraspAbility(plugin));
-        abilities.put(AbilityType.TITAN_FIST, new TitanFistAbility(plugin));
-        abilities.put(AbilityType.GLACIAL_MAW, new GlacialMawAbility(plugin));
-        abilities.put(AbilityType.NEBULA_WINGS, new NebulaWingsAbility(plugin));
-        abilities.put(AbilityType.STAR_OVERDRIVE, new StarOverdriveAbility(plugin));
+        abilities.put(AbilityType.DRAGON_AWAKENING, new DragonAwakeningAbility(plugin));
+        abilities.put(AbilityType.RIFTBREAKER, new RiftbreakerAbility(plugin));
+        abilities.put(AbilityType.STARPIERCER, new StarpiercerAbility(plugin));
+        abilities.put(AbilityType.SHATTERFALL, new ShatterfallAbility(plugin));
+        abilities.put(AbilityType.SERPENTS_WRATH, new SerpentsWrathAbility(plugin));
+        abilities.put(AbilityType.APOCALYPSE, new ApocalypseAbility(plugin));
     }
 
     /** The single upgrade cuts the cooldown by upgrades.cooldown-reduction (default 30%). */

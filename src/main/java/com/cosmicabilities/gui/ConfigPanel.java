@@ -94,7 +94,7 @@ public class ConfigPanel implements Listener {
         for (int i = 0; i < GENERAL.size(); i++) inv.setItem(i, settingItem(GENERAL.get(i)));
         inv.setItem(47, Icons.button(plugin, Material.CLOCK, "<aqua><bold>ALL ability cooldowns",
                 "<gray>Changes every ability at once.", "<gray>(Click an ability below to set just that one.)", "",
-                "<yellow>Left <gray>+30s   <yellow>Right <gray>-30s", "<yellow>Shift-left <gray>set all to 3 minutes"));
+                "<yellow>Left <gray>+5s   <yellow>Right <gray>-5s", "<yellow>Shift-left <gray>reset all to their defaults"));
         inv.setItem(26, Icons.button(plugin, Material.WRITABLE_BOOK, "<aqua><bold>Abilities below",
                 "<gray>Click an ability to change its cooldown,", "<gray>damage and the effects it gives on cast."));
         AbilityType[] types = AbilityType.values();
@@ -194,7 +194,7 @@ public class ConfigPanel implements Listener {
 
         if (h.ability == null && raw == 47) {
             for (AbilityType t : AbilityType.values()) {
-                double v = click == ClickType.SHIFT_LEFT ? 180 : Math.max(5, Math.min(3600, cooldown(t) + (click.isRightClick() ? -30 : 30)));
+                double v = click == ClickType.SHIFT_LEFT ? t.baseCooldown : Math.max(1, Math.min(3600, cooldown(t) + (click.isRightClick() ? -5 : 5)));
                 plugin.getConfig().set("ability-settings." + t.id() + ".cooldown", v);
             }
             plugin.saveConfig();

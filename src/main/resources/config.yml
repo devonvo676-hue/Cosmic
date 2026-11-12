@@ -24,26 +24,26 @@ abilities:
 # Per-ability balance. cooldown = seconds before upgrade/global multiplier; damage-multiplier scales only that ability.
 # Also editable in game with /cconfig.
 ability-settings:
-  singularity: {cooldown: 180, damage-multiplier: 1.0}
-  supernova: {cooldown: 180, damage-multiplier: 1.0}
-  meteor: {cooldown: 180, damage-multiplier: 1.0}
-  solar: {cooldown: 180, damage-multiplier: 1.0}
-  cryostasis: {cooldown: 180, damage-multiplier: 1.0}
-  voidwalker: {cooldown: 180, damage-multiplier: 1.0}
-  pulsar: {cooldown: 180, damage-multiplier: 1.0}
-  nebula: {cooldown: 180, damage-multiplier: 1.0}
-  orbital: {cooldown: 180, damage-multiplier: 1.0}
-  celestial: {cooldown: 180, damage-multiplier: 1.0}
-  paradox: {cooldown: 180, damage-multiplier: 1.0}
-  entropy: {cooldown: 180, damage-multiplier: 1.0}
-  magnetosphere: {cooldown: 180, damage-multiplier: 1.0}
-  umbra: {cooldown: 180, damage-multiplier: 1.0}
-  dragon_wrath: {cooldown: 180, damage-multiplier: 1.0}
-  void_grasp: {cooldown: 180, damage-multiplier: 1.0}
-  titan_fist: {cooldown: 180, damage-multiplier: 1.0}
-  glacial_maw: {cooldown: 180, damage-multiplier: 1.0}
-  nebula_wings: {cooldown: 180, damage-multiplier: 1.0}
-  star_overdrive: {cooldown: 180, damage-multiplier: 1.0}
+  singularity: {cooldown: 18, damage-multiplier: 1.0}
+  supernova: {cooldown: 15, damage-multiplier: 1.0}
+  meteor: {cooldown: 10, damage-multiplier: 1.0}
+  solar: {cooldown: 20, damage-multiplier: 1.0}
+  cryostasis: {cooldown: 18, damage-multiplier: 1.0}
+  voidwalker: {cooldown: 9, damage-multiplier: 1.0}
+  pulsar: {cooldown: 12, damage-multiplier: 1.0}
+  nebula: {cooldown: 22, damage-multiplier: 1.0}
+  orbital: {cooldown: 18, damage-multiplier: 1.0}
+  celestial: {cooldown: 24, damage-multiplier: 1.0}
+  paradox: {cooldown: 20, damage-multiplier: 1.0}
+  entropy: {cooldown: 22, damage-multiplier: 1.0}
+  magnetosphere: {cooldown: 40, damage-multiplier: 1.0}
+  umbra: {cooldown: 20, damage-multiplier: 1.0}
+  dragon_awakening: {cooldown: 50, damage-multiplier: 1.0}
+  riftbreaker: {cooldown: 35, damage-multiplier: 1.0}
+  starpiercer: {cooldown: 30, damage-multiplier: 1.0}
+  shatterfall: {cooldown: 40, damage-multiplier: 1.0}
+  serpents_wrath: {cooldown: 40, damage-multiplier: 1.0}
+  apocalypse: {cooldown: 50, damage-multiplier: 1.0}
 
 # Short combat buff given every time an ability is cast (edit in game with /cconfig).
 # Format: effect:level:seconds  (strength:1:6 = Strength I for 6 seconds). Use [] for none.
@@ -62,12 +62,12 @@ cast-buffs:
   entropy: ["strength:1:5"]
   magnetosphere: ["resistance:1:8"]
   umbra: ["speed:2:5"]
-  dragon_wrath: ["resistance:1:6", "speed:1:6"]
-  void_grasp: ["resistance:1:4"]
-  titan_fist: ["strength:1:5"]
-  glacial_maw: ["resistance:1:4"]
-  nebula_wings: ["speed:1:6"]
-  star_overdrive: ["absorption:2:8"]
+  dragon_awakening: ["resistance:1:6", "speed:1:6"]
+  riftbreaker: ["resistance:1:4"]
+  starpiercer: ["strength:1:5"]
+  shatterfall: ["resistance:1:4"]
+  serpents_wrath: ["speed:1:6"]
+  apocalypse: ["absorption:2:8"]
 
 entropy:
   scramble-seconds: 5      # how long a victim's hotbar stays scrambled before it reverts
@@ -96,8 +96,8 @@ ability-drops:
   from-bosses: true        # every boss drops a random ability orb
   killer-only-seconds: 60  # only the killer can pick up a dropped ability for this long
   lose-on-any-death: false # true = also drop it when dying to mobs/falling/etc.
-  boss-exclusive-chance: 0.35  # chance a boss drops ITS OWN boss ability instead of a normal one
-  dragon-chance: 1.0           # chance the Ender Dragon drops the legendary Dragon's Wrath orb
+  dragon-chance: 1.0           # chance the top damage dealer on the Ender Dragon gets Dragon's Awakening
+  # bosses: the top damage dealer always gets an ability orb (see bosses.<boss>.ability-chance)
 
 reroll:
   craftable: true          # false = can't be crafted (still sold in the AFK shop / given by admins)
@@ -170,36 +170,86 @@ bossfight:
 
 bosses:
   custom-models: true      # animated 3D cosmic boss models (needs the resource pack)
+  cutscene: true           # camera cutscene for everyone nearby when a boss spawns (it rises out of the ground)
+  cutscene-seconds: 6
+  cutscene-radius: 64
   min-players-to-damage: 3 # boss is shielded unless this many players are within fight-radius (1 = off)
   fight-radius: 32
   bossbar-range: 48
-  special-attack-interval: 6
-  # global boss strength (also in /adminpanel -> Boss Strength). Multiplies every boss's health / damage below.
-  health-multiplier: 1.5
-  damage-multiplier: 1.3
-  size-multiplier: 1.3     # bigger models + hitboxes (0.25 - 4)
-  armor: 10
+  # global knobs (multiply every boss's own values below). Everything is also in /adminpanel -> Boss Settings.
+  health-multiplier: 1.0
+  damage-multiplier: 1.0
+  size-multiplier: 1.0
   drops:
     min: 4
     max: 7
     top-damage-bonus: 2
     min-damage-share: 0.05
     bonus-astral-chance: 0.3
+  # Per boss: health, damage (melee), special-damage, special-attack-interval (s), special-radius, speed, size (scale),
+  # armor, armor-toughness, knockback-resistance, follow-range, ability-chance (chance the TOP DAMAGE player gets
+  # this boss's own ability instead of a random one), drops.min / drops.max. Max health is capped at 1024 by spigot.yml.
   void_emperor:
-    health: 500
-    damage: 11
+    health: 650
+    damage: 12
+    special-damage: 6
+    special-attack-interval: 7
+    special-radius: 14
+    speed: 0.3
+    size: 2.2
+    armor: 14
+    armor-toughness: 4
+    knockback-resistance: 0.8
+    ability-chance: 1.0
   solar_titan:
-    health: 500
-    damage: 9
-  frost_leviathan:
-    health: 500
-    damage: 9
-  nebula_serpent:
-    health: 450
-    damage: 8
-  cosmic_destroyer:
-    health: 900
+    health: 850
     damage: 15
+    special-damage: 9
+    special-attack-interval: 8
+    special-radius: 12
+    speed: 0.25
+    size: 2.8
+    armor: 18
+    armor-toughness: 6
+    knockback-resistance: 1.0
+    ability-chance: 1.0
+  frost_leviathan:
+    health: 700
+    damage: 11
+    special-damage: 6
+    special-attack-interval: 6
+    special-radius: 14
+    speed: 0.3
+    size: 2.6
+    armor: 14
+    armor-toughness: 4
+    knockback-resistance: 0.8
+    ability-chance: 1.0
+  nebula_serpent:
+    health: 650
+    damage: 10
+    special-damage: 5
+    special-attack-interval: 6
+    special-radius: 14
+    heal-percent: 5
+    speed: 0.33
+    size: 2.2
+    armor: 12
+    armor-toughness: 4
+    knockback-resistance: 0.7
+    ability-chance: 1.0
+  cosmic_destroyer:
+    health: 1000
+    damage: 17
+    special-damage: 11
+    special-attack-interval: 7
+    special-radius: 10
+    speed: 0.3
+    size: 1.9
+    armor: 20
+    armor-toughness: 8
+    knockback-resistance: 1.0
+    ability-chance: 1.0
 
 # ---------------------------------------------------------------- staff tools
 ban-pistol:
@@ -305,6 +355,10 @@ events:
 
 supply-drops:
   despawn-minutes: 10      # the chest vanishes after this long (0 = never)
+  random-radius: 800       # "spawn" picks a random spot this far (max) from world spawn
+  random-min-radius: 100
+  item-chance: 0.7         # each item in the loot chest (/adminpanel -> Supply Drops -> Edit the loot) has this chance
+  # used only while the loot chest is empty:
   # ITEM:min-max:chance   or   cosmic:<cosmic_shard|upgrade_token|afk_token|reroll>:min-max:chance
   loot:
     - "DIAMOND:3-8:0.9"
@@ -330,3 +384,16 @@ tablist:
   enabled: true
   header-line: "<gray>Money SMP with cosmic abilities"
   footer-line: "<dark_gray>/team  /ah  /afk  /abilities"
+
+# ---------------------------------------------------------------- admin-only "cocaine" (/adminpanel -> Give Items)
+cocaine:
+  duration-seconds: 30
+  size: 0.4                # +40% size while it lasts
+  strength: 3              # Strength level
+  consume: false           # true = one is used up per sniff
+  grab-cooldown-seconds: 3
+  shake-seconds: 1.6
+  shake-damage: 1          # per shake hit (every 8 ticks)
+  slam-damage: 14          # 7 hearts
+  slam-depth: 4            # blocks they're driven into the ground
+  break-blocks: true

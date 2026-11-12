@@ -86,17 +86,18 @@ public class BossManager {
             raw.remove();
             return null;
         }
-        double health = plugin.getConfig().getDouble("bosses." + type.id() + ".health", 350) * healthMult();
-        double damage = plugin.getConfig().getDouble("bosses." + type.id() + ".damage", 8) * damageMult();
+        double health = cfg(type, "health", 600) * healthMult();
+        double damage = cfg(type, "damage", 10) * damageMult();
         setBase(boss, Attribute.MAX_HEALTH, Math.min(2048, health));
         AttributeInstance maxHp = boss.getAttribute(Attribute.MAX_HEALTH);
         boss.setHealth(maxHp == null ? Math.min(boss.getHealth(), health) : maxHp.getValue());   // the server caps max health (spigot.yml, 1024 by default)
-        setBase(boss, Attribute.SCALE, type.scale * sizeMult());
-        setBase(boss, Attribute.ARMOR, plugin.getConfig().getDouble("bosses.armor", 10));
-        setBase(boss, Attribute.MOVEMENT_SPEED, plugin.getConfig().getDouble("bosses." + type.id() + ".speed", type == BossType.SOLAR_TITAN ? 0.28 : 0.3));
+        setBase(boss, Attribute.SCALE, size(type));
+        setBase(boss, Attribute.ARMOR, cfg(type, "armor", 10));
+        setBase(boss, Attribute.ARMOR_TOUGHNESS, cfg(type, "armor-toughness", 4));
+        setBase(boss, Attribute.MOVEMENT_SPEED, cfg(type, "speed", 0.3));
         setBase(boss, Attribute.ATTACK_DAMAGE, damage);
-        setBase(boss, Attribute.KNOCKBACK_RESISTANCE, 0.8);
-        setBase(boss, Attribute.FOLLOW_RANGE, 40);
+        setBase(boss, Attribute.KNOCKBACK_RESISTANCE, cfg(type, "knockback-resistance", 0.8));
+        setBase(boss, Attribute.FOLLOW_RANGE, cfg(type, "follow-range", 40));
 
         if (boss instanceof org.bukkit.entity.Ageable baby) baby.setAdult();
         boss.customName(plugin.mm(type.colored()));
@@ -120,11 +121,27 @@ public class BossManager {
         }
 
         track(boss, type);
+        if (plugin.getConfig().getBoolean("bosses.cutscene", true)) plugin.cutscenes().playBossIntro(boss, type);
         world.playSound(loc, Sound.ENTITY_WITHER_SPAWN, 2f, 0.8f);
         world.spawnParticle(Particle.EXPLOSION_EMITTER, loc, 1);
         Bukkit.broadcast(plugin.mm(plugin.prefix() + type.colored() + " <gray>has descended at <white>"
                 + loc.getBlockX() + ", " + loc.getBlockY() + ", " + loc.getBlockZ() + "<gray> in <white>" + world.getName()));
         return boss;
+    }
+
+    /** bosses.<boss>.<key>, falling back to bosses.<key>, then def. Everything about a boss is configurable this way. */
+    public double cfg(BossType type, String key, double def) {
+        return plugin.getConfig().getDouble("bosses." + type.id() + "." + key, plugin.getConfig().getDouble("bosses." + key, def));
+    }
+
+    /** The boss's size (entity scale), times the global size multiplier. */
+    public double size(BossType type) {
+        return Math.max(0.3, Math.min(10, cfg(type, "size", type.scale) * sizeMult()));
+    }
+
+    /** Damage of a boss's special attack (bosses.<boss>.special-damage), times the global damage multiplier. */
+    private double special(BossType type, double def) {
+        return cfg(type, "special-damage", def) * damageMult();
     }
 
     /** bosses.health-multiplier / damage-multiplier / size-multiplier: global boss strength knobs. */
@@ -163,7 +180,7 @@ public class BossManager {
     /** Runs once per second. */
     public void tick() {
         int range = plugin.getConfig().getInt("bosses.bossbar-range", 48);
-        int interval = Math.max(2, plugin.getConfig().getInt("bosses.special-attack-interval", 6));
+
         Iterator<ActiveBoss> it = active.values().iterator();
         while (it.hasNext()) {
             ActiveBoss ab = it.next();
@@ -186,12 +203,14 @@ public class BossManager {
 
             ambient(ab);
             ab.seconds++;
+            int interval = (int) Math.max(2, cfg(ab.type, "special-attack-interval", 6));
+            if (!boss.hasAI()) continue;   // still in its entrance cutscene
             if (ab.seconds % interval == 0) special(ab);
         }
     }
 
     private void ambient(ActiveBoss ab) {
-        Location c = ab.entity.getLocation().add(0, ab.type.scale * sizeMult(), 0);
+        Location c = ab.entity.getLocation().add(0, size(ab.type), 0);
         World w = c.getWorld();
         switch (ab.type) {
             case VOID_EMPEROR -> w.spawnParticle(Particle.PORTAL, c, 30, 0.6, 1, 0.6, 0.5);
@@ -216,7 +235,7 @@ public class BossManager {
         LivingEntity boss = ab.entity;
         Location loc = boss.getLocation();
         World w = loc.getWorld();
-        List<Player> players = targets(boss, 14);
+        List<Player> players = targets(boss, cfg(ab.type, "special-radius", 14));
         if (players.isEmpty()) return;
         plugin.bossRig().attackPose(boss.getUniqueId());
 
@@ -228,6 +247,7 @@ public class BossManager {
                     Vector pull = loc.toVector().subtract(p.getLocation().toVector()).normalize().multiply(1.1).setY(0.3);
                     p.setVelocity(pull);
                     p.addPotionEffect(new PotionEffect(PotionEffectType.DARKNESS, 60, 0));
+                    p.damage(special(ab.type, 5), boss);
                 }
                 Player victim = players.get(ThreadLocalRandom.current().nextInt(players.size()));
                 Vector facing = victim.getLocation().getDirection().setY(0);
@@ -250,7 +270,7 @@ public class BossManager {
                     }
                 }
                 for (Player p : targets(boss, 8)) {
-                    p.damage(5 * damageMult(), boss);
+                    p.damage(special(ab.type, 8), boss);
                     p.setFireTicks(100);
                 }
             }
@@ -260,19 +280,20 @@ public class BossManager {
                 for (Player p : targets(boss, 10)) {
                     p.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS, 80, 2));
                     p.setFreezeTicks(Math.min(p.getMaxFreezeTicks() + 100, p.getFreezeTicks() + 200));
-                    p.damage(3 * damageMult(), boss);
+                    p.damage(special(ab.type, 5), boss);
                 }
             }
             case NEBULA_SERPENT -> {
                 w.playSound(loc, Sound.ENTITY_EVOKER_CAST_SPELL, 2f, 0.7f);
                 AttributeInstance max = boss.getAttribute(Attribute.MAX_HEALTH);
                 double maxHp = max == null ? boss.getHealth() : max.getValue();
-                boss.setHealth(Math.min(maxHp, boss.getHealth() + maxHp * 0.06));
+                boss.setHealth(Math.min(maxHp, boss.getHealth() + maxHp * cfg(ab.type, "heal-percent", 6) / 100.0));
                 w.spawnParticle(Particle.HEART, loc.clone().add(0, 3, 0), 6, 0.6, 0.4, 0.6, 0);
                 for (Player p : players) {
                     p.addPotionEffect(new PotionEffect(PotionEffectType.NAUSEA, 100, 0));
                     p.addPotionEffect(new PotionEffect(PotionEffectType.WEAKNESS, 100, 0));
                     p.addPotionEffect(new PotionEffect(PotionEffectType.POISON, 60, 0));
+                    p.damage(special(ab.type, 4), boss);
                 }
             }
             case COSMIC_DESTROYER -> {
@@ -282,7 +303,7 @@ public class BossManager {
                     Vector away = p.getLocation().toVector().subtract(loc.toVector()).setY(0);
                     if (away.lengthSquared() > 0.01) away.normalize().multiply(1.2);
                     p.setVelocity(away.setY(0.9));
-                    p.damage(7 * damageMult(), boss);
+                    p.damage(special(ab.type, 10), boss);
                 }
             }
         }
@@ -300,8 +321,9 @@ public class BossManager {
         Player killer = boss.getKiller();
         double total = damage.values().stream().mapToDouble(Double::doubleValue).sum();
         double minShare = plugin.getConfig().getDouble("bosses.drops.min-damage-share", 0.05);
-        UUID top = damage.entrySet().stream().max(Map.Entry.comparingByValue()).map(Map.Entry::getKey).orElse(null);
+        UUID top0 = damage.entrySet().stream().max(Map.Entry.comparingByValue()).map(Map.Entry::getKey).orElse(null);
 
+        UUID top = top0;
         List<Player> rewarded = new ArrayList<>();
         for (Map.Entry<UUID, Double> entry : damage.entrySet()) {
             Player p = Bukkit.getPlayer(entry.getKey());
@@ -311,8 +333,8 @@ public class BossManager {
         }
         if (rewarded.isEmpty() && killer != null) rewarded.add(killer);
 
-        int min = plugin.getConfig().getInt("bosses.drops.min", 3);
-        int max = Math.max(min, plugin.getConfig().getInt("bosses.drops.max", 6));
+        int min = (int) cfg(type, "drops.min", plugin.getConfig().getInt("bosses.drops.min", 3));
+        int max = Math.max(min, (int) cfg(type, "drops.max", plugin.getConfig().getInt("bosses.drops.max", 6)));
         double astralChance = plugin.getConfig().getDouble("bosses.drops.bonus-astral-chance", 0.25);
         int topBonus = plugin.getConfig().getInt("bosses.drops.top-damage-bonus", 2);
         ThreadLocalRandom rnd = ThreadLocalRandom.current();
@@ -333,7 +355,8 @@ public class BossManager {
         }
         Bukkit.broadcast(plugin.mm(plugin.prefix() + type.colored() + " <gray>has been defeated"
                 + (killer != null ? " by <white>" + killer.getName() : "") + "<gray>!"));
-        plugin.orbs().bossDrop(boss.getLocation(), type.colored(), type.id());
+        if (top == null && killer != null) top = killer.getUniqueId();
+        plugin.orbs().bossDrop(boss.getLocation(), type.colored(), type.id(), top, cfg(type, "ability-chance", 1.0));
         return true;
     }
 
