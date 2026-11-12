@@ -213,7 +213,8 @@ public class ConfigPanel implements Listener {
         double hearts = plugin.getConfig().getDouble("ability-settings." + t.id() + ".hearts", 0);
         inv.setItem(24, Icons.button(plugin, Material.RED_DYE, "<white>Damage in hearts: " + (hearts > 0 ? "<red>" + fmt(hearts) + " ❤" : "<gray>default"),
                 t.defaultHearts() > 0 ? "<gray>Total hearts this ability does" : "<gray>Hearts EVERY hit of this ability does",
-                t.defaultHearts() > 0 ? "<gray>(default " + fmt(t.defaultHearts()) + " ❤). 0 = default." : "<gray>(ignores the multipliers). 0 = default.", "",
+                t.defaultHearts() > 0 ? "<gray>(default " + fmt(t.defaultHearts()) + " ❤). 0 = default." : "<gray>(ignores the multipliers). 0 = default.",
+                "<gray>On players this ignores armor: 6 ❤ is", "<gray>6 ❤ whether they wear netherite or nothing.", "",
                 "<yellow>Left <gray>+0.5❤  <yellow>Right <gray>-0.5❤  <yellow>Shift <gray>±2❤"));
         inv.setItem(31, Icons.button(plugin, Material.POTION, "<green><bold>Effects given on cast",
                 "<gray>Set the level and length of each buff below.", "<gray>Level 0 = not given."));

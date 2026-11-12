@@ -33,6 +33,43 @@ public final class Targets {
     }
 
     /** Same (non-rank) scoreboard team = ally. */
+    /**
+     * Hearts-based damage on players: exactly `amount` HP no matter what armor, Protection, Resistance or
+     * enchantments they have (absorption hearts go first). Kills are still credited to the caster.
+     */
+    private static double trueDamage(Player caster, Player victim, double amount, int rgb, double before) {
+        if (victim.isInvulnerable() || victim.getGameMode() == org.bukkit.GameMode.CREATIVE || victim.getGameMode() == org.bukkit.GameMode.SPECTATOR) return 0;
+        org.bukkit.damage.DamageSource src = org.bukkit.damage.DamageSource.builder(org.bukkit.damage.DamageType.MAGIC)
+                .withCausingEntity(caster).withDirectEntity(caster).build();
+        // a tiny real hit first: hurt animation, knockback, and it marks the caster as the attacker
+        victim.damage(0.01, src);
+        victim.setNoDamageTicks(0);
+        if (victim.isDead()) return before;
+        double left = amount;
+        double abs = victim.getAbsorptionAmount();
+        if (abs > 0) {
+            double take = Math.min(abs, left);
+            victim.setAbsorptionAmount(abs - take);
+            left -= take;
+        }
+        if (left > 0) {
+            if (victim.getHealth() - left <= 0.01) {
+                victim.damage(10000, src);   // lethal: goes through the normal death (totems, kill credit, kill money)
+            } else {
+                victim.setHealth(victim.getHealth() - left);
+            }
+        }
+        double after = victim.isDead() ? 0 : victim.getHealth() + victim.getAbsorptionAmount();
+        double dealt = Math.max(0, before - after);
+        if (dealt > 0.05) {
+            Fx.damageNumber(victim, dealt, rgb);
+            Fx.hitmarker(caster, victim);
+            plugin.combat().tag(caster);
+            plugin.combat().tag(victim);
+        }
+        return dealt;
+    }
+
     public static boolean isAlly(Player caster, Player other) {
         if (caster.equals(other)) return true;
         if (trusts(caster, other)) return true;
@@ -139,6 +176,7 @@ public final class Targets {
         }
         double before = target.getHealth() + target.getAbsorptionAmount();
         target.setNoDamageTicks(0);
+        if (exact && target instanceof Player victim) return trueDamage(caster, victim, raw, rgb, before);
         if (plugin.getConfig().getBoolean("abilities.armor-piercing", true)) {
             // magic damage ignores armor points (diamond/netherite plates) but Protection still reduces it,
             // so abilities stay meaningful against a full Prot IV kit without one-shotting anyone
