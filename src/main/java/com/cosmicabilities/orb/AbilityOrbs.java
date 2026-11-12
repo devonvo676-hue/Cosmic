@@ -193,6 +193,8 @@ public class AbilityOrbs implements Listener {
     public String handleDeath(Player victim) {
         PlayerData d = plugin.data().get(victim.getUniqueId());
         if (d == null || d.gained().isEmpty()) return null;
+        // only bosses and the Ender Dragon drop ability orbs; players keep their abilities when they die
+        if (!plugin.getConfig().getBoolean("ability-drops.player-deaths-drop", false)) return null;
         Player killer = victim.getKiller();
         boolean anyDeath = plugin.getConfig().getBoolean("ability-drops.lose-on-any-death", false);
         if (killer == null && !anyDeath) return null;

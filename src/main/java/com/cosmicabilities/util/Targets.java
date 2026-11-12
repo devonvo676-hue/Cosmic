@@ -147,6 +147,9 @@ public final class Targets {
         } else {
             target.damage(raw, caster);
         }
+        // ability hits never give invulnerability frames, so other players can still hit someone who's
+        // being pulled / ticked by an ability (e.g. caught in a Singularity)
+        if (!target.isDead()) target.setNoDamageTicks(0);
         double after = target.isDead() ? 0 : target.getHealth() + target.getAbsorptionAmount();
         double dealt = Math.max(0, before - after);
         // the combo limit counts the damage that actually landed (after Protection), not the raw number

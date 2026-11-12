@@ -57,7 +57,7 @@ public class ConfigPanel implements Listener {
                     new Setting("magnetosphere.hide-from-caster", "Hide forcefield from caster", Kind.BOOL, 0, 0, 0, Material.GLASS, 0),
                     new Setting("magnetosphere.caster-can-pass", "Caster passes own forcefield", Kind.BOOL, 0, 0, 0, Material.LIGHT_BLUE_STAINED_GLASS, 1)),
             List.of(new Setting("ability-drops.from-bosses", "Bosses give ability orbs", Kind.BOOL, 0, 0, 0, Material.HEART_OF_THE_SEA, 1),
-                    new Setting("ability-drops.lose-on-any-death", "Lose slot 2 on any death", Kind.BOOL, 0, 0, 0, Material.BONE, 0),
+                    new Setting("ability-drops.player-deaths-drop", "Players drop slot 2 when killed", Kind.BOOL, 0, 0, 0, Material.BONE, 0),
                     new Setting("death.lose-upgrade", "Lose upgrade on death", Kind.BOOL, 0, 0, 0, Material.SKELETON_SKULL, 1),
                     new Setting("reroll.craftable", "Cosmic Reroll craftable", Kind.BOOL, 0, 0, 0, Material.ECHO_SHARD, 1),
                     new Setting("bosses.min-players-to-damage", "Players needed for bosses", Kind.INT, 1, 1, 50, Material.WITHER_SKELETON_SKULL, 3),

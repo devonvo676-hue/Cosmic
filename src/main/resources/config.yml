@@ -95,7 +95,8 @@ upgrades:
 ability-drops:
   from-bosses: true        # every boss drops a random ability orb
   killer-only-seconds: 60  # only the killer can pick up a dropped ability for this long
-  lose-on-any-death: false # true = also drop it when dying to mobs/falling/etc.
+  player-deaths-drop: false # false = only bosses and the Ender Dragon drop ability orbs (players keep theirs on death)
+  lose-on-any-death: false # (only if player-deaths-drop is true) also drop it when dying to mobs/falling/etc.
   dragon-chance: 1.0           # chance the top damage dealer on the Ender Dragon gets Dragon's Awakening
   # bosses: the top damage dealer always gets an ability orb (see bosses.<boss>.ability-chance)
 
