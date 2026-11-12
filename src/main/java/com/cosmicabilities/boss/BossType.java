@@ -8,7 +8,7 @@ import java.util.Locale;
 
 public enum BossType {
     VOID_EMPEROR("Void Emperor", "#9d4edd", EntityType.WITHER_SKELETON, 1.8, CosmicMaterial.VOID_SHARD, BarColor.PURPLE),
-    SOLAR_TITAN("Solar Titan", "#ffb703", EntityType.BLAZE, 2.6, CosmicMaterial.SOLAR_CORE, BarColor.YELLOW),
+    SOLAR_TITAN("Solar Titan", "#ffb703", EntityType.ZOGLIN, 2.6, CosmicMaterial.SOLAR_CORE, BarColor.YELLOW),
     FROST_LEVIATHAN("Frost Leviathan", "#8ecae6", EntityType.STRAY, 2.4, CosmicMaterial.FROZEN_STARDUST, BarColor.BLUE),
     NEBULA_SERPENT("Nebula Serpent", "#f72585", EntityType.WITCH, 2.0, CosmicMaterial.NEBULA_ESSENCE, BarColor.PINK),
     COSMIC_DESTROYER("Cosmic Destroyer", "#e0e1dd", EntityType.RAVAGER, 1.5, CosmicMaterial.ASTRAL_FRAGMENT, BarColor.WHITE);

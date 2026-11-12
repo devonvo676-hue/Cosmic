@@ -127,12 +127,42 @@ public class AbilityOrbs implements Listener {
     }
 
     /** Called when a boss dies: a random ability orb for whoever grabs it first. */
-    public void bossDrop(Location at, String bossName) {
+    public void bossDrop(Location at, String bossName, String bossId) {
         if (!plugin.getConfig().getBoolean("ability-drops.from-bosses", true)) return;
-        AbilityType[] all = AbilityType.values();
-        AbilityType type = all[ThreadLocalRandom.current().nextInt(all.length)];
+        AbilityType exclusive = AbilityType.forBoss(bossId);
+        double chance = plugin.getConfig().getDouble("ability-drops.boss-exclusive-chance", 0.35);
+        AbilityType type;
+        if (exclusive != null && ThreadLocalRandom.current().nextDouble() < chance) {
+            type = exclusive;
+        } else {
+            java.util.List<AbilityType> all = AbilityType.rollable();
+            type = all.get(ThreadLocalRandom.current().nextInt(all.size()));
+        }
         drop(at, type, 1, null);
-        Bukkit.broadcast(plugin.mm(plugin.prefix() + bossName + " <gray>dropped a " + type.colored() + " <gray>orb! First to grab it gets the ability."));
+        if (type.exclusive()) {
+            for (Player p : Bukkit.getOnlinePlayers()) p.playSound(p.getLocation(), org.bukkit.Sound.UI_TOAST_CHALLENGE_COMPLETE, 0.8f, 0.8f);
+            Bukkit.broadcast(plugin.mm(plugin.prefix() + bossName + " <gray>dropped its <gold><bold>BOSS ABILITY</bold> " + type.colored()
+                    + "<gray>! First to grab it gets it."));
+        } else {
+            Bukkit.broadcast(plugin.mm(plugin.prefix() + bossName + " <gray>dropped a " + type.colored() + " <gray>orb! First to grab it gets the ability."));
+        }
+    }
+
+    /** The Ender Dragon always drops the legendary Dragon's Wrath orb (ability-drops.dragon-chance). */
+    @org.bukkit.event.EventHandler
+    public void onDragonDeath(org.bukkit.event.entity.EntityDeathEvent event) {
+        if (!(event.getEntity() instanceof org.bukkit.entity.EnderDragon dragon)) return;
+        if (ThreadLocalRandom.current().nextDouble() >= plugin.getConfig().getDouble("ability-drops.dragon-chance", 1.0)) return;
+        World w = dragon.getWorld();
+        Location at = new Location(w, 0, w.getHighestBlockYAt(0, 0) + 1.5, 0);   // the exit portal
+        if (w.getEnvironment() != World.Environment.THE_END) at = dragon.getLocation();
+        final Location spot = at;
+        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+            drop(spot, AbilityType.DRAGON_WRATH, 1, null);
+            for (Player p : Bukkit.getOnlinePlayers()) p.playSound(p.getLocation(), org.bukkit.Sound.ENTITY_ENDER_DRAGON_GROWL, 0.7f, 1.2f);
+            Bukkit.broadcast(plugin.mm(plugin.prefix() + "<dark_purple><bold>The Ender Dragon</bold> <gray>has fallen and dropped the <gold><bold>LEGENDARY</bold> "
+                    + AbilityType.DRAGON_WRATH.colored() + " <gray>orb at the exit portal!"));
+        }, 200L);
     }
 
     /** Called on player death. Returns a message describing what was lost, or null. */

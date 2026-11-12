@@ -36,11 +36,13 @@ public final class Targets {
     public static boolean isAlly(Player caster, Player other) {
         if (caster.equals(other)) return true;
         if (trusts(caster, other)) return true;
+        if (plugin.teams() != null && plugin.teams().sameTeam(caster.getUniqueId(), other.getUniqueId())) return true;
         Team team = caster.getScoreboard().getEntryTeam(caster.getName());
         return team != null && !RankTags.isTagTeam(team) && !RankTags.isRankTeam(team) && team.hasEntry(other.getName());
     }
 
     public static boolean isEnemy(Player caster, Entity e) {
+        if (e instanceof Player ap && plugin.afk() != null && plugin.afk().isAfk(ap.getUniqueId())) return false;
         if (!(e instanceof LivingEntity living) || e.equals(caster) || living.isDead() || !living.isValid()) return false;
         if (e instanceof ArmorStand) return false;
         if (e instanceof Tameable tame && tame.isTamed() && caster.getUniqueId().equals(tame.getOwnerUniqueId())) return false;
@@ -95,6 +97,7 @@ public final class Targets {
      */
     /** Who last hit each entity with which ability, so death messages can name it. */
     public record AbilityHit(String caster, String ability, long at) {}
+    private static final java.util.Map<java.util.UUID, java.util.Deque<double[]>> recent = new java.util.concurrent.ConcurrentHashMap<>();
     private static final java.util.Map<java.util.UUID, AbilityHit> lastHits = new java.util.concurrent.ConcurrentHashMap<>();
 
     /** The ability hit that most likely killed this entity (within the last 3 seconds), or null. */
@@ -112,15 +115,31 @@ public final class Targets {
         if (amount <= 0 || target.isDead()) return 0;
         if (ability != null) lastHits.put(target.getUniqueId(), new AbilityHit(caster.getName(), ability, System.currentTimeMillis()));
         double mult = plugin.getConfig().getDouble("abilities.damage-multiplier", 1.0);
+        double raw = amount * mult;
+        if (target instanceof Player) {
+            // anti one-shot: cap how much ability damage one player can take inside a short window
+            double cap = plugin.getConfig().getDouble("abilities.combo-damage-cap", 14);
+            long window = (long) (plugin.getConfig().getDouble("abilities.combo-window-seconds", 4) * 1000);
+            if (cap > 0) {
+                long now = System.currentTimeMillis();
+                java.util.Deque<double[]> log = recent.computeIfAbsent(target.getUniqueId(), k -> new java.util.ArrayDeque<>());
+                while (!log.isEmpty() && now - (long) log.peekFirst()[0] > window) log.pollFirst();
+                double taken = 0;
+                for (double[] e : log) taken += e[1];
+                raw = Math.min(raw, Math.max(0, cap - taken));
+                if (raw <= 0.01) return 0;
+                log.addLast(new double[]{now, raw});
+            }
+        }
         double before = target.getHealth() + target.getAbsorptionAmount();
         target.setNoDamageTicks(0);
         if (plugin.getConfig().getBoolean("abilities.armor-piercing", true)) {
             // magic damage ignores armor points (diamond/netherite plates) but Protection still reduces it,
             // so abilities stay meaningful against a full Prot IV kit without one-shotting anyone
-            target.damage(amount * mult, org.bukkit.damage.DamageSource.builder(org.bukkit.damage.DamageType.MAGIC)
+            target.damage(raw, org.bukkit.damage.DamageSource.builder(org.bukkit.damage.DamageType.MAGIC)
                     .withCausingEntity(caster).withDirectEntity(caster).build());
         } else {
-            target.damage(amount * mult, caster);
+            target.damage(raw, caster);
         }
         double after = target.isDead() ? 0 : target.getHealth() + target.getAbsorptionAmount();
         double dealt = Math.max(0, before - after);

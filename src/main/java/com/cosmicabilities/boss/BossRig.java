@@ -41,6 +41,8 @@ public class BossRig {
         Location last;
         double walk;
         boolean flashing;
+        float size = 1f;
+        long attackStart = -100;
         Rig(LivingEntity boss, BossType type, List<Part> parts) { this.boss = boss; this.type = type; this.parts = parts; }
     }
 
@@ -67,6 +69,7 @@ public class BossRig {
         EntityEquipment eq = boss.getEquipment();
         if (eq != null) eq.clear();
         Rig rig = new Rig(boss, type, design(type));
+        rig.size = (float) plugin.bosses().sizeMult();
         Location at = boss.getLocation();
         at.setYaw(0);
         at.setPitch(0);
@@ -126,7 +129,7 @@ public class BossRig {
 
     private void pose(Rig rig) {
         float yaw = (float) Math.toRadians(rig.boss.getBodyYaw());
-        Matrix4f base = new Matrix4f().rotateY(-yaw);
+        Matrix4f base = new Matrix4f().scale(rig.size).rotateY(-yaw);
         Matrix4f[] joints = new Matrix4f[rig.parts.size()];
         for (int i = 0; i < rig.parts.size(); i++) {
             Part part = rig.parts.get(i);
@@ -150,7 +153,12 @@ public class BossRig {
             case BOB -> m.translate(0, p.amp() * s, 0);
             case SWAY_X -> m.rotateX(p.amp() * s);
             case SWAY_Y -> m.rotateY(p.amp() * s);
-            case ARM -> m.rotateZ(p.bias() + p.amp() * 0.3f * s).rotateX(p.amp() * s);
+            case ARM -> {
+                // special attack: both arms raise up and slam down over ~16 ticks
+                long since = tick - rig.attackStart;
+                float slam = since < 16 ? (float) (since < 9 ? -2.4 * Math.sin(since / 9.0 * Math.PI / 2) : -2.4 * (1 - (since - 9) / 7.0)) : 0f;
+                m.rotateZ(p.bias() + p.amp() * 0.3f * s).rotateX(p.amp() * s + slam);
+            }
             case FLAP -> m.rotateZ(p.bias() + p.amp() * s);
             case SPIN -> m.rotateX(p.amp()).rotateY((float) (tick * p.freq()));
             case SERPENT -> m.rotateX(p.bias() + p.amp() * s).rotateZ(p.amp() * 0.6f * (float) Math.cos(t));
@@ -158,6 +166,12 @@ public class BossRig {
             case WALK -> m.rotateX(p.amp() * (float) Math.sin(rig.walk + p.phase()));
             case ROLL -> m.rotateZ((float) (tick * p.freq()));
         }
+    }
+
+    /** Plays the arm-slam pose on this boss's rig (used for its special attacks). */
+    public void attackPose(UUID boss) {
+        Rig rig = rigs.get(boss);
+        if (rig != null) rig.attackStart = tick;
     }
 
     public void shutdown() {

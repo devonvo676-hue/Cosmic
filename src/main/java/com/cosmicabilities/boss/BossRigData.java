@@ -18,11 +18,15 @@ final class BossRigData {
                     new BossRig.Part("void_emperor_arm_r", 1, -0.6750f, 0.4500f, 0.2250f, 1.0800f, BossRig.Anim.ARM, 0.5f, 0.11f, 1f, -0.45f),
                     new BossRig.Part("void_emperor_arm_l", 1, 0.6750f, 0.4500f, 0.2250f, 1.0800f, BossRig.Anim.ARM, 0.5f, 0.11f, 4.1f, 0.45f));
             case SOLAR_TITAN -> List.of(
-                    new BossRig.Part("solar_titan_body", -1, 0.0000f, 2.8000f, 0.0000f, 2.4000f, BossRig.Anim.BOB, 0.15f, 0.05f, 0f, 0f),
-                    new BossRig.Part("solar_titan_head", 0, 0.0000f, 1.2000f, 0.0000f, 2.4000f, BossRig.Anim.SWAY_Y, 0.35f, 0.03f, 0f, 0f),
-                    new BossRig.Part("solar_titan_fist_r", 0, -2.1000f, 0.0000f, 0.3000f, 2.4000f, BossRig.Anim.BOB, 0.25f, 0.08f, 0f, 0f),
-                    new BossRig.Part("solar_titan_fist_l", 0, 2.1000f, 0.0000f, 0.3000f, 2.4000f, BossRig.Anim.BOB, 0.25f, 0.08f, 3.14f, 0f),
-                    new BossRig.Part("solar_titan_ring", 0, 0.0000f, 0.4500f, 0.0000f, 2.4000f, BossRig.Anim.SPIN, 0.35f, 0.05f, 0f, 0f));
+                    new BossRig.Part("solar_titan_hips", -1, 0.0000f, 1.4438f, 0.0000f, 2.2000f, BossRig.Anim.BOB, 0.04f, 0.08f, 0f, 0f),
+                    new BossRig.Part("solar_titan_leg_r", 0, -0.5500f, -0.2750f, 0.0000f, 2.2000f, BossRig.Anim.WALK, 0.55f, 0f, 0f, 0f),
+                    new BossRig.Part("solar_titan_leg_l", 0, 0.5500f, -0.2750f, 0.0000f, 2.2000f, BossRig.Anim.WALK, 0.55f, 0f, 3.14f, 0f),
+                    new BossRig.Part("solar_titan_torso", 0, 0.0000f, 0.2750f, -0.1375f, 2.2000f, BossRig.Anim.SWAY_X, 0.04f, 0.05f, 0f, 0f),
+                    new BossRig.Part("solar_titan_head", 3, 0.0000f, 1.7188f, 0.8250f, 2.2000f, BossRig.Anim.SWAY_Y, 0.25f, 0.03f, 0f, 0f),
+                    new BossRig.Part("solar_titan_arm_r", 3, -1.7875f, 1.8563f, 0.1375f, 2.2000f, BossRig.Anim.ARM, 0.22f, 0.06f, 0f, -0.12f),
+                    new BossRig.Part("solar_titan_arm_l", 3, 1.7875f, 1.8563f, 0.1375f, 2.2000f, BossRig.Anim.ARM, 0.22f, 0.06f, 3.14f, 0.12f),
+                    new BossRig.Part("solar_titan_fore_r", 5, 0.0000f, -1.1275f, 0.0000f, 2.2000f, BossRig.Anim.SWAY_X, 0.12f, 0.06f, 0.5f, 0f),
+                    new BossRig.Part("solar_titan_fore_l", 6, 0.0000f, -1.1275f, 0.0000f, 2.2000f, BossRig.Anim.SWAY_X, 0.12f, 0.06f, 3.6f, 0f));
             case FROST_LEVIATHAN -> List.of(
                     new BossRig.Part("frost_leviathan_coil", -1, 0.0000f, 0.0000f, 0.0000f, 2.2000f, BossRig.Anim.NONE, 0f, 0f, 0f, 0f),
                     new BossRig.Part("frost_leviathan_seg", -1, 0.0000f, 0.5500f, 0.1375f, 2.2000f, BossRig.Anim.SERPENT, 0.16f, 0.05f, 0f, 0f),

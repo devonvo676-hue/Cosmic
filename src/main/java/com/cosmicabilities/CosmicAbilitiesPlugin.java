@@ -67,6 +67,10 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
     private com.cosmicabilities.rank.Ranks ranks;
     private com.cosmicabilities.hud.Sidebar sidebar;
     private com.cosmicabilities.auction.AuctionHouse auctions;
+    private com.cosmicabilities.team.Teams teams;
+    private com.cosmicabilities.events.ServerEvents events;
+    private com.cosmicabilities.supply.SupplyDrops supplyDrops;
+    private com.cosmicabilities.admin.AdminRpg rpg;
 
     @Override
     public void onEnable() {
@@ -92,6 +96,15 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
             }
             getConfig().set("migrations.tools-cosmic-shards", true);
         }
+        // 2.7: every ability's cooldown starts at 3 minutes (each one can be changed in /cconfig)
+        if (!getConfig().getBoolean("migrations.cooldowns-3min", false)) {
+            for (com.cosmicabilities.ability.AbilityType t : com.cosmicabilities.ability.AbilityType.values()) {
+                getConfig().set("ability-settings." + t.id() + ".cooldown", 180);
+            }
+            getConfig().set("migrations.cooldowns-3min", true);
+            // and the anti-one-shot nerf: all ability damage x0.8 on top of the combo damage cap
+            if (getConfig().getDouble("abilities.damage-multiplier", 1.0) >= 1.0) getConfig().set("abilities.damage-multiplier", 0.8);
+        }
         // 2.6: no more daily login cash - players earn cash from kills instead
         if (!getConfig().getBoolean("migrations.no-daily-cash", false)) {
             getConfig().set("economy.daily-reward", 0);
@@ -103,6 +116,10 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
         Fx.init(this);
 
         dataManager = new DataManager(this);
+        teams = new com.cosmicabilities.team.Teams(this);
+        events = new com.cosmicabilities.events.ServerEvents(this);
+        supplyDrops = new com.cosmicabilities.supply.SupplyDrops(this);
+        rpg = new com.cosmicabilities.admin.AdminRpg(this);
         status = new StatusManager(this);
         combat = new CombatTracker();
         engine = new AbilityEngine(this);
@@ -138,7 +155,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
 
         for (Listener l : new Listener[]{playerListener, new BossListener(this), new StatusListener(this), combat,
                 new KeybindListener(this), bossFightPanel, holdersPanel, keybindPanel, orbs, configPanel,
-                banPistol, adminPanel, abilitiesPanel, cutscenes, afk, afkShop, tools, recipes, roll, adminHub, menu, items, economy, coinflip, discord, ranks, sidebar, auctions}) {
+                banPistol, adminPanel, abilitiesPanel, cutscenes, afk, afkShop, tools, recipes, roll, adminHub, menu, items, economy, coinflip, discord, ranks, sidebar, auctions, teams, rpg}) {
             getServer().getPluginManager().registerEvents(l, this);
         }
 
@@ -151,6 +168,9 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
         for (String name : new String[]{"balance", "pay", "eco"}) bind(name, economy, economy);
         bind("cf", coinflip, coinflip);
         bind("ah", auctions, auctions);
+        bind("team", teams, teams);
+        PluginCommand supplyCmd = getCommand("supplydrop");
+        if (supplyCmd != null) supplyCmd.setExecutor(supplyDrops);
         bind("cosmicrank", ranks, ranks);
         PluginCommand sidebarCmd = getCommand("sidebar");
         if (sidebarCmd != null) sidebarCmd.setExecutor(sidebar);
@@ -183,13 +203,15 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
         getServer().getScheduler().runTaskTimer(this, bossRig::tick, 1L, 1L);
         getServer().getScheduler().runTaskTimer(this, sidebar::tick, 40L, 20L);
         getServer().getScheduler().runTaskTimer(this, auctions::expire, 1200L, 1200L);
+        getServer().getScheduler().runTaskTimer(this, events::tick, 20L, 20L);
+        getServer().getScheduler().runTaskTimer(this, teams::tick, 1200L, 1200L);
         for (Player online : getServer().getOnlinePlayers()) rankTags.refresh(online);
         getServer().getScheduler().runTaskTimer(this, engine::tickHud, 20L, 10L);
         getServer().getScheduler().runTaskTimer(this, bossManager::tick, 20L, 20L);
         getServer().getScheduler().runTaskTimer(this, afk::tick, 20L, 20L);
         getServer().getScheduler().runTaskTimer(this, dataManager::saveDirty, 6000L, 6000L);
 
-        getLogger().info("Cosmic Abilities " + getPluginMeta().getVersion() + " enabled - 14 abilities, 5 bosses, ability orbs, cosmic tools, AFK shop.");
+        getLogger().info("Cosmic Abilities " + getPluginMeta().getVersion() + " enabled - 20 abilities, 5 bosses, teams, ability orbs, cosmic tools, AFK shop.");
     }
 
     @Override
@@ -198,6 +220,8 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
         if (coinflip != null) coinflip.shutdown();
         if (ranks != null) ranks.saveOpen();
         if (auctions != null) auctions.save();
+        if (teams != null) teams.save();
+        if (events != null) events.shutdown();
         if (cutscenes != null) cutscenes.shutdown();
         if (status != null) status.shutdown();
         if (bossManager != null) bossManager.shutdown();
@@ -261,6 +285,10 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
     public com.cosmicabilities.rank.Ranks ranks() { return ranks; }
     public com.cosmicabilities.hud.Sidebar sidebar() { return sidebar; }
     public com.cosmicabilities.auction.AuctionHouse auctions() { return auctions; }
+    public com.cosmicabilities.team.Teams teams() { return teams; }
+    public com.cosmicabilities.events.ServerEvents events() { return events; }
+    public com.cosmicabilities.supply.SupplyDrops supplyDrops() { return supplyDrops; }
+    public com.cosmicabilities.admin.AdminRpg rpg() { return rpg; }
 
     private void bind(String name, org.bukkit.command.CommandExecutor exec, org.bukkit.command.TabCompleter tab) {
         PluginCommand c = getCommand(name);

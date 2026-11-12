@@ -6,11 +6,15 @@
 # (defaults: slot 1 = Sneak + F, slot 2 = Sneak + left-click with an empty hand).
 
 abilities:
-  damage-multiplier: 1.0     # scales ALL ability damage
+  damage-multiplier: 0.8     # scales ALL ability damage
   cooldown-multiplier: 1.0   # scales ALL cooldowns
   minimum-cooldown: 4.0
   hit-players: true          # PvP / region plugins still apply on top of this
   hit-passive-mobs: false
+  # Anti one-shot: a player can only take this much ability damage (before armour) from abilities in any
+  # combo-window-seconds window. Stops stacking several abilities into an instant kill.
+  combo-damage-cap: 14
+  combo-window-seconds: 4
   bonus-mechanics: true      # each ability's signature extra (Event Horizon, Quasar, ...). false = simpler abilities
   # Abilities deal magic damage: armor points don't block it, but Protection enchants still do. Tuned so a full
   # Prot IV diamond player takes about 2-3 hearts from a big hit (vs ~0.5 from a Sharp V netherite sword swing).
@@ -20,20 +24,26 @@ abilities:
 # Per-ability balance. cooldown = seconds before upgrade/global multiplier; damage-multiplier scales only that ability.
 # Also editable in game with /cconfig.
 ability-settings:
-  singularity: {cooldown: 18, damage-multiplier: 1.0}
-  supernova: {cooldown: 15, damage-multiplier: 1.0}
-  meteor: {cooldown: 10, damage-multiplier: 1.0}
-  solar: {cooldown: 20, damage-multiplier: 1.0}
-  cryostasis: {cooldown: 18, damage-multiplier: 1.0}
-  voidwalker: {cooldown: 9, damage-multiplier: 1.0}
-  pulsar: {cooldown: 12, damage-multiplier: 1.0}
-  nebula: {cooldown: 22, damage-multiplier: 1.0}
-  orbital: {cooldown: 18, damage-multiplier: 1.0}
-  celestial: {cooldown: 24, damage-multiplier: 1.0}
-  paradox: {cooldown: 20, damage-multiplier: 1.0}
-  entropy: {cooldown: 22, damage-multiplier: 1.0}
-  magnetosphere: {cooldown: 40, damage-multiplier: 1.0}
-  umbra: {cooldown: 20, damage-multiplier: 1.0}
+  singularity: {cooldown: 180, damage-multiplier: 1.0}
+  supernova: {cooldown: 180, damage-multiplier: 1.0}
+  meteor: {cooldown: 180, damage-multiplier: 1.0}
+  solar: {cooldown: 180, damage-multiplier: 1.0}
+  cryostasis: {cooldown: 180, damage-multiplier: 1.0}
+  voidwalker: {cooldown: 180, damage-multiplier: 1.0}
+  pulsar: {cooldown: 180, damage-multiplier: 1.0}
+  nebula: {cooldown: 180, damage-multiplier: 1.0}
+  orbital: {cooldown: 180, damage-multiplier: 1.0}
+  celestial: {cooldown: 180, damage-multiplier: 1.0}
+  paradox: {cooldown: 180, damage-multiplier: 1.0}
+  entropy: {cooldown: 180, damage-multiplier: 1.0}
+  magnetosphere: {cooldown: 180, damage-multiplier: 1.0}
+  umbra: {cooldown: 180, damage-multiplier: 1.0}
+  dragon_wrath: {cooldown: 180, damage-multiplier: 1.0}
+  void_grasp: {cooldown: 180, damage-multiplier: 1.0}
+  titan_fist: {cooldown: 180, damage-multiplier: 1.0}
+  glacial_maw: {cooldown: 180, damage-multiplier: 1.0}
+  nebula_wings: {cooldown: 180, damage-multiplier: 1.0}
+  star_overdrive: {cooldown: 180, damage-multiplier: 1.0}
 
 # Short combat buff given every time an ability is cast (edit in game with /cconfig).
 # Format: effect:level:seconds  (strength:1:6 = Strength I for 6 seconds). Use [] for none.
@@ -52,6 +62,12 @@ cast-buffs:
   entropy: ["strength:1:5"]
   magnetosphere: ["resistance:1:8"]
   umbra: ["speed:2:5"]
+  dragon_wrath: ["resistance:1:6", "speed:1:6"]
+  void_grasp: ["resistance:1:4"]
+  titan_fist: ["strength:1:5"]
+  glacial_maw: ["resistance:1:4"]
+  nebula_wings: ["speed:1:6"]
+  star_overdrive: ["absorption:2:8"]
 
 entropy:
   scramble-seconds: 5      # how long a victim's hotbar stays scrambled before it reverts
@@ -80,6 +96,8 @@ ability-drops:
   from-bosses: true        # every boss drops a random ability orb
   killer-only-seconds: 60  # only the killer can pick up a dropped ability for this long
   lose-on-any-death: false # true = also drop it when dying to mobs/falling/etc.
+  boss-exclusive-chance: 0.35  # chance a boss drops ITS OWN boss ability instead of a normal one
+  dragon-chance: 1.0           # chance the Ender Dragon drops the legendary Dragon's Wrath orb
 
 reroll:
   craftable: true          # false = can't be crafted (still sold in the AFK shop / given by admins)
@@ -156,6 +174,11 @@ bosses:
   fight-radius: 32
   bossbar-range: 48
   special-attack-interval: 6
+  # global boss strength (also in /adminpanel -> Boss Strength). Multiplies every boss's health / damage below.
+  health-multiplier: 1.5
+  damage-multiplier: 1.3
+  size-multiplier: 1.3     # bigger models + hitboxes (0.25 - 4)
+  armor: 10
   drops:
     min: 4
     max: 7
@@ -211,7 +234,7 @@ announce:
 
 afk:
   minutes-per-token: 30
-  invulnerable: true
+  invulnerable: true       # nothing can hurt or move AFK players; only pressing a movement key ends AFK
   combat-cooldown-seconds: 15
   broadcast: true
 
@@ -263,4 +286,47 @@ auction:
   max-listings: 10
   min-price: 1
   tax: 0.0                 # 0.05 = 5% of each sale is removed from the economy
+  team-bank-pays: true     # purchases by team members come out of the team bank (lowers their season score)
+  team-bank-leader-only: true  # only the team leader can spend the bank (others pay with their own cash)
+  sales-to-team-bank: true # money from selling goes into the seller's team bank
   announce: true
+
+# ---------------------------------------------------------------- teams & seasons (Money SMP)
+teams:
+  max-size: 4
+season:
+  days: 14                 # the richest team bank when it ends wins
+  auto-end: true
+  reward: random-rare      # random-rare = a random boss/dragon ability, or an ability id like dragon_wrath
+
+# ---------------------------------------------------------------- daily events (/adminpanel -> Daily Events)
+events:
+  supply-rain-minutes: 5
+
+supply-drops:
+  despawn-minutes: 10      # the chest vanishes after this long (0 = never)
+  # ITEM:min-max:chance   or   cosmic:<cosmic_shard|upgrade_token|afk_token|reroll>:min-max:chance
+  loot:
+    - "DIAMOND:3-8:0.9"
+    - "NETHERITE_INGOT:1-2:0.35"
+    - "GOLDEN_APPLE:2-5:0.8"
+    - "ENCHANTED_GOLDEN_APPLE:1:0.1"
+    - "ENDER_PEARL:4-12:0.7"
+    - "EXPERIENCE_BOTTLE:16-32:0.6"
+    - "TOTEM_OF_UNDYING:1:0.15"
+    - "cosmic:cosmic_shard:4-12:0.8"
+    - "cosmic:upgrade_token:1:0.15"
+    - "cosmic:reroll:1:0.08"
+
+rpg:
+  explosion-power: 8       # TNT is 4
+  crater-radius: 8
+  break-blocks: true
+  fire: true
+  speed: 2.2
+  cooldown-seconds: 1.5
+
+tablist:
+  enabled: true
+  header-line: "<gray>Money SMP with cosmic abilities"
+  footer-line: "<dark_gray>/team  /ah  /afk  /abilities"

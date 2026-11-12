@@ -86,15 +86,19 @@ public class BossManager {
             raw.remove();
             return null;
         }
-        double health = plugin.getConfig().getDouble("bosses." + type.id() + ".health", 350);
-        double damage = plugin.getConfig().getDouble("bosses." + type.id() + ".damage", 8);
-        setBase(boss, Attribute.MAX_HEALTH, health);
-        boss.setHealth(health);
-        setBase(boss, Attribute.SCALE, type.scale);
+        double health = plugin.getConfig().getDouble("bosses." + type.id() + ".health", 350) * healthMult();
+        double damage = plugin.getConfig().getDouble("bosses." + type.id() + ".damage", 8) * damageMult();
+        setBase(boss, Attribute.MAX_HEALTH, Math.min(2048, health));
+        AttributeInstance maxHp = boss.getAttribute(Attribute.MAX_HEALTH);
+        boss.setHealth(maxHp == null ? Math.min(boss.getHealth(), health) : maxHp.getValue());   // the server caps max health (spigot.yml, 1024 by default)
+        setBase(boss, Attribute.SCALE, type.scale * sizeMult());
+        setBase(boss, Attribute.ARMOR, plugin.getConfig().getDouble("bosses.armor", 10));
+        setBase(boss, Attribute.MOVEMENT_SPEED, plugin.getConfig().getDouble("bosses." + type.id() + ".speed", type == BossType.SOLAR_TITAN ? 0.28 : 0.3));
         setBase(boss, Attribute.ATTACK_DAMAGE, damage);
         setBase(boss, Attribute.KNOCKBACK_RESISTANCE, 0.8);
         setBase(boss, Attribute.FOLLOW_RANGE, 40);
 
+        if (boss instanceof org.bukkit.entity.Ageable baby) baby.setAdult();
         boss.customName(plugin.mm(type.colored()));
         boss.setCustomNameVisible(true);
         boss.setRemoveWhenFarAway(false);
@@ -122,6 +126,11 @@ public class BossManager {
                 + loc.getBlockX() + ", " + loc.getBlockY() + ", " + loc.getBlockZ() + "<gray> in <white>" + world.getName()));
         return boss;
     }
+
+    /** bosses.health-multiplier / damage-multiplier / size-multiplier: global boss strength knobs. */
+    public double healthMult() { return Math.max(0.05, plugin.getConfig().getDouble("bosses.health-multiplier", 1.0)); }
+    public double damageMult() { return Math.max(0, plugin.getConfig().getDouble("bosses.damage-multiplier", 1.0)); }
+    public double sizeMult() { return Math.max(0.25, Math.min(4, plugin.getConfig().getDouble("bosses.size-multiplier", 1.0))); }
 
     private static void setBase(LivingEntity e, Attribute attribute, double value) {
         AttributeInstance inst = e.getAttribute(attribute);
@@ -182,7 +191,7 @@ public class BossManager {
     }
 
     private void ambient(ActiveBoss ab) {
-        Location c = ab.entity.getLocation().add(0, ab.type.scale, 0);
+        Location c = ab.entity.getLocation().add(0, ab.type.scale * sizeMult(), 0);
         World w = c.getWorld();
         switch (ab.type) {
             case VOID_EMPEROR -> w.spawnParticle(Particle.PORTAL, c, 30, 0.6, 1, 0.6, 0.5);
@@ -209,6 +218,7 @@ public class BossManager {
         World w = loc.getWorld();
         List<Player> players = targets(boss, 14);
         if (players.isEmpty()) return;
+        plugin.bossRig().attackPose(boss.getUniqueId());
 
         switch (ab.type) {
             case VOID_EMPEROR -> {
@@ -231,6 +241,8 @@ public class BossManager {
             }
             case SOLAR_TITAN -> {
                 w.playSound(loc, Sound.ENTITY_BLAZE_SHOOT, 2f, 0.5f);
+                w.playSound(loc, Sound.ENTITY_IRON_GOLEM_DAMAGE, 2f, 0.4f);
+                w.spawnParticle(Particle.LAVA, loc, 40, 3, 0.3, 3, 0);
                 for (int r = 2; r <= 8; r += 2) {
                     for (int i = 0; i < r * 8; i++) {
                         double a = 2 * Math.PI * i / (r * 8);
@@ -238,7 +250,7 @@ public class BossManager {
                     }
                 }
                 for (Player p : targets(boss, 8)) {
-                    p.damage(5, boss);
+                    p.damage(5 * damageMult(), boss);
                     p.setFireTicks(100);
                 }
             }
@@ -248,7 +260,7 @@ public class BossManager {
                 for (Player p : targets(boss, 10)) {
                     p.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS, 80, 2));
                     p.setFreezeTicks(Math.min(p.getMaxFreezeTicks() + 100, p.getFreezeTicks() + 200));
-                    p.damage(3, boss);
+                    p.damage(3 * damageMult(), boss);
                 }
             }
             case NEBULA_SERPENT -> {
@@ -270,7 +282,7 @@ public class BossManager {
                     Vector away = p.getLocation().toVector().subtract(loc.toVector()).setY(0);
                     if (away.lengthSquared() > 0.01) away.normalize().multiply(1.2);
                     p.setVelocity(away.setY(0.9));
-                    p.damage(7, boss);
+                    p.damage(7 * damageMult(), boss);
                 }
             }
         }
@@ -321,7 +333,7 @@ public class BossManager {
         }
         Bukkit.broadcast(plugin.mm(plugin.prefix() + type.colored() + " <gray>has been defeated"
                 + (killer != null ? " by <white>" + killer.getName() : "") + "<gray>!"));
-        plugin.orbs().bossDrop(boss.getLocation(), type.colored());
+        plugin.orbs().bossDrop(boss.getLocation(), type.colored(), type.id());
         return true;
     }
 

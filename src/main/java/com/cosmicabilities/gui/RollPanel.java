@@ -78,17 +78,17 @@ public class RollPanel implements Listener {
         if (spins.containsKey(p.getUniqueId())) return false;
         PlayerData d = plugin.data().get(p.getUniqueId());
         if (d == null) return false;
-        Set<AbilityType> pool = EnumSet.allOf(AbilityType.class);
+        Set<AbilityType> pool = EnumSet.copyOf(AbilityType.rollable());
         if (!d.primary().isEmpty()) pool.remove(d.primary().ability());
         if (!d.gained().isEmpty()) pool.remove(d.gained().ability());
-        if (pool.isEmpty()) pool = EnumSet.allOf(AbilityType.class);
+        if (pool.isEmpty()) pool = EnumSet.copyOf(AbilityType.rollable());
         List<AbilityType> options = new ArrayList<>(pool);
         ThreadLocalRandom r = ThreadLocalRandom.current();
         AbilityType result = options.get(r.nextInt(options.size()));
         Spin s = new Spin(p, result, reason, d.primary().isEmpty() ? null : d.primary().ability());
 
         // the reel: random abilities, with the result placed so it stops in the middle
-        AbilityType[] all = AbilityType.values();
+        AbilityType[] all = AbilityType.rollable().toArray(new AbilityType[0]);
         int steps = 46 + r.nextInt(8);
         for (int i = 0; i < steps + REEL.length; i++) s.strip.add(all[r.nextInt(all.length)]);
         s.strip.set(steps + 4, result);   // slot 13 shows strip[offset + 4]

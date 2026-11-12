@@ -22,7 +22,7 @@ import java.util.List;
 
 /** /abilities: a read-only guide to every ability (hover for details), your own slots and how progression works. */
 public class AbilitiesPanel implements Listener {
-    static final int[] SLOTS = {10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25};
+    static final int[] SLOTS = {10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34};
 
     public static final class Holder implements InventoryHolder {
         private Inventory inventory;

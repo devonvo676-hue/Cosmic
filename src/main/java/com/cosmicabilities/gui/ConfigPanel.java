@@ -64,7 +64,7 @@ public class ConfigPanel implements Listener {
     private static final Material[] BUFF_ICONS = {Material.BLAZE_POWDER, Material.SUGAR, Material.IRON_CHESTPLATE,
             Material.GHAST_TEAR, Material.GOLDEN_APPLE, Material.MAGMA_CREAM, Material.GLISTERING_MELON_SLICE};
 
-    private static final int[] ABILITY_SLOTS = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43};
+    private static final int[] ABILITY_SLOTS = {27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46};
 
     public static final class Holder implements InventoryHolder {
         private Inventory inventory;
@@ -92,6 +92,9 @@ public class ConfigPanel implements Listener {
     private void renderMain(Inventory inv) {
         fill(inv);
         for (int i = 0; i < GENERAL.size(); i++) inv.setItem(i, settingItem(GENERAL.get(i)));
+        inv.setItem(47, Icons.button(plugin, Material.CLOCK, "<aqua><bold>ALL ability cooldowns",
+                "<gray>Changes every ability at once.", "<gray>(Click an ability below to set just that one.)", "",
+                "<yellow>Left <gray>+30s   <yellow>Right <gray>-30s", "<yellow>Shift-left <gray>set all to 3 minutes"));
         inv.setItem(26, Icons.button(plugin, Material.WRITABLE_BOOK, "<aqua><bold>Abilities below",
                 "<gray>Click an ability to change its cooldown,", "<gray>damage and the effects it gives on cast."));
         AbilityType[] types = AbilityType.values();
@@ -144,9 +147,9 @@ public class ConfigPanel implements Listener {
     private void renderAbility(Inventory inv, AbilityType t) {
         fill(inv);
         inv.setItem(4, Icons.ability(plugin, t, List.of()));
-        inv.setItem(20, Icons.button(plugin, Material.CLOCK, "<white>Cooldown: <aqua>" + fmt(cooldown(t)) + "s",
+        inv.setItem(20, Icons.button(plugin, Material.CLOCK, "<white>Cooldown: <aqua>" + fmt(cooldown(t)) + "s <gray>(" + mins(cooldown(t)) + ")",
                 "<gray>Default " + fmt(t.baseCooldown) + "s (before upgrade / global multiplier)", "",
-                "<yellow>Left <gray>+1s  <yellow>Right <gray>-1s  <yellow>Shift <gray>x5"));
+                "<yellow>Left <gray>+5s  <yellow>Right <gray>-5s  <yellow>Shift <gray>±1 minute"));
         inv.setItem(24, Icons.button(plugin, Material.IRON_SWORD, "<white>Damage: <red>x" + fmt(damage(t)),
                 "<gray>Multiplies only this ability's damage", "",
                 "<yellow>Left <gray>+0.1  <yellow>Right <gray>-0.1  <yellow>Shift <gray>x5"));
@@ -189,6 +192,17 @@ public class ConfigPanel implements Listener {
         ClickType click = event.getClick();
         int mult = click.isShiftClick() ? 5 : 1;
 
+        if (h.ability == null && raw == 47) {
+            for (AbilityType t : AbilityType.values()) {
+                double v = click == ClickType.SHIFT_LEFT ? 180 : Math.max(5, Math.min(3600, cooldown(t) + (click.isRightClick() ? -30 : 30)));
+                plugin.getConfig().set("ability-settings." + t.id() + ".cooldown", v);
+            }
+            plugin.saveConfig();
+            click(p);
+            renderMain(event.getInventory());
+            p.sendActionBar(plugin.mm("<aqua>All ability cooldowns updated"));
+            return;
+        }
         if (h.ability == null) {
             if (raw < GENERAL.size()) {
                 Setting s = GENERAL.get(raw);
@@ -221,7 +235,7 @@ public class ConfigPanel implements Listener {
         String base = "ability-settings." + t.id();
         switch (raw) {
             case 20 -> {
-                double v = Math.max(1, Math.min(600, cooldown(t) + (click.isRightClick() ? -1 : 1) * mult));
+                double v = Math.max(1, Math.min(3600, cooldown(t) + (click.isRightClick() ? -1 : 1) * (click.isShiftClick() ? 60 : 5)));
                 set(base + ".cooldown", v);
             }
             case 24 -> {
@@ -251,6 +265,11 @@ public class ConfigPanel implements Listener {
     }
 
     // ------------------------------------------------------------------ helpers
+
+    private static String mins(double s) {
+        int m = (int) s / 60, r = (int) s % 60;
+        return m > 0 ? m + "m" + (r > 0 ? " " + r + "s" : "") : r + "s";
+    }
 
     private double cooldown(AbilityType t) {
         return plugin.getConfig().getDouble("ability-settings." + t.id() + ".cooldown", t.baseCooldown);

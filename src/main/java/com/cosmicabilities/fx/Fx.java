@@ -136,6 +136,15 @@ public final class Fx {
         });
     }
 
+    /** Spawns a particle, passing `data` only when this server version's particle wants that data type. */
+    public static void safe(World w, Particle p, Location at, int count, double dx, double dy, double dz, double speed, Object data) {
+        Class<?> type = p.getDataType();
+        if (data != null && type != Void.class && type.isInstance(data)) w.spawnParticle(p, at, count, dx, dy, dz, speed, data);
+        else if (type == Void.class) w.spawnParticle(p, at, count, dx, dy, dz, speed);
+        else if (type == Float.class) w.spawnParticle(p, at, count, dx, dy, dz, speed, 1.0f);
+        else if (type == org.bukkit.Color.class) w.spawnParticle(p, at, count, dx, dy, dz, speed, org.bukkit.Color.WHITE);
+    }
+
     /** Smoothly animates a display to a new transformation after delay ticks, over duration ticks. */
     public static void animate(Display d, int duration, Transformation target, long delay) {
         plugin.getServer().getScheduler().runTaskLater(plugin, () -> {

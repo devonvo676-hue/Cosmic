@@ -55,12 +55,19 @@ public class AbilityEngine {
         abilities.put(AbilityType.ENTROPY, new EntropyAbility(plugin));
         abilities.put(AbilityType.MAGNETOSPHERE, new MagnetosphereAbility(plugin));
         abilities.put(AbilityType.UMBRA, new UmbraAbility(plugin));
+        abilities.put(AbilityType.DRAGON_WRATH, new DragonWrathAbility(plugin));
+        abilities.put(AbilityType.VOID_GRASP, new VoidGraspAbility(plugin));
+        abilities.put(AbilityType.TITAN_FIST, new TitanFistAbility(plugin));
+        abilities.put(AbilityType.GLACIAL_MAW, new GlacialMawAbility(plugin));
+        abilities.put(AbilityType.NEBULA_WINGS, new NebulaWingsAbility(plugin));
+        abilities.put(AbilityType.STAR_OVERDRIVE, new StarOverdriveAbility(plugin));
     }
 
     /** The single upgrade cuts the cooldown by upgrades.cooldown-reduction (default 30%). */
     public double cooldownSeconds(AbilityType type, int tier) {
         double base = plugin.getConfig().getDouble("ability-settings." + type.id() + ".cooldown", type.baseCooldown);
         double cd = base * plugin.getConfig().getDouble("abilities.cooldown-multiplier", 1.0);
+        if (plugin.events() != null) cd *= plugin.events().cooldownMultiplier();
         if (tier >= 2) cd *= 1 - Math.max(0, Math.min(0.9, plugin.getConfig().getDouble("upgrades.cooldown-reduction", 0.3)));
         return Math.max(plugin.getConfig().getDouble("abilities.minimum-cooldown", 4.0), cd);
     }

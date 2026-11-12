@@ -2,7 +2,7 @@ name: CosmicAbilities
 version: '${version}'
 main: com.cosmicabilities.CosmicAbilitiesPlugin
 api-version: '1.21'
-description: Cosmic Awakening - 14 cosmic abilities, boss fights, ability orbs, AFK tokens and staff tools.
+description: Cosmic Awakening - 20 cosmic abilities, teams, seasons, boss fights, ability orbs, AFK tokens and staff tools.
 authors: [Devon]
 
 commands:
@@ -100,6 +100,15 @@ commands:
   discordbridge:
     description: Link game chat to a Discord channel
     usage: /discordbridge set <webhook url>
+    permission: cosmicabilities.admin
+  team:
+    description: Teams - share a bank, no friendly fire, win the season
+    usage: /team <create|invite|accept|leave|kick|disband|deposit|info|top>
+    aliases: [teams, t]
+  supplydrop:
+    description: Call a supply drop
+    usage: /supplydrop [here | <x> <y> <z> | random <radius>]
+    aliases: [supply]
     permission: cosmicabilities.admin
   afk:
     description: Go AFK and earn AFK tokens

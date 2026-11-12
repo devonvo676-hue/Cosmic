@@ -1,15 +1,34 @@
-# Cosmic Abilities 2.6 (Paper 1.21.11)
+# Cosmic Abilities 2.7 (Paper 1.21.11)
 
 ## Build the jar
 Upload this whole folder (including `.github`) to your GitHub repo. GitHub builds it automatically:
 **Actions** tab -> latest run -> **Artifacts** -> **CosmicAbilities** (jar + resource pack).
-Or on a PC with Java 21: `gradlew.bat build` -> `build/libs/CosmicAbilities-2.6.0.jar`.
+Or on a PC with Java 21: `gradlew.bat build` -> `build/libs/CosmicAbilities-2.7.0.jar`.
 
 ## Install
-1. Delete the old CosmicAbilities jar from `plugins/`, add `CosmicAbilities-2.6.0.jar`, restart.
+1. Delete the old CosmicAbilities jar from `plugins/`, add `CosmicAbilities-2.7.0.jar`, restart.
    Your existing config is kept and the new settings are added to it automatically. Player data carries over.
 2. Upload `CosmicAbilities-ResourcePack.zip` (direct download link, e.g. mc-packs.net), put the link and
    its SHA-1 in `config.yml` under `resource-pack`, then `/cosmic admin reload` and rejoin.
+
+## New in 2.7 - Money SMP
+- **Teams**: `/team create <name>`, `/team invite <player>`, `/team accept`, `leave`, `kick`, `disband`, `deposit`, `info`, `top`.
+  Teammates can't hurt each other (hits or abilities). Every kill pays `economy.kill-reward` into the killer's **team bank**.
+- **Seasons** (`season.days`, default 14): the team with the most money in its bank wins, and every member gets a
+  rare boss/dragon ability orb. Then every bank resets. End it early in /adminpanel -> Teams & Season.
+- **Daily events** (/adminpanel -> Daily Events): 2x kill money, 2x AFK tokens, Ability Frenzy (half cooldowns),
+  Supply Drop Rain, Boss Fight. Choose how long each runs.
+- **Auction house** purchases by a team leader come out of the team bank (lowers their season score).
+- **Exclusive abilities**: Dragon's Wrath (only the Ender Dragon drops it), and one per boss: Void Grasp, Titan's Fist,
+  Glacial Maw, Nebula Wings, Star Overdrive (`ability-drops.boss-exclusive-chance`). Never rolled on the wheel.
+- Every cooldown is 3 minutes; change each one (or all at once) in /adminpanel -> Ability Cooldowns.
+  Abilities can't one-shot combo: `abilities.combo-damage-cap` limits ability damage taken in a short window.
+- **Bosses** are stronger and bigger (`bosses.health-multiplier`, `damage-multiplier`, `size-multiplier`, also in
+  /adminpanel -> Boss Strength) and have new models; the Solar Titan is now a walking magma golem.
+- **Admin RPG** (admins only): a rocket that blows a giant crater (`rpg.*`). **Supply drops**: `/supplydrop`
+  or /adminpanel. **Custom tab list** (`tablist.*`). **Player Stats** page: refresh or reset kills / cash.
+- **/afk**: you hover in place and nothing can hurt or move you, even if the ground is dug out. Only pressing a
+  movement key (or attacking / casting) ends it.
 
 ## How it works
 - **Slot 1** = new players spin the **cosmic wheel** (a slot-machine menu of every ability) and keep what it lands on.

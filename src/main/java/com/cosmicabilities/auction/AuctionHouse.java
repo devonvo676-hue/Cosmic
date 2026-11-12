@@ -281,11 +281,25 @@ public class AuctionHouse implements Listener, CommandExecutor, TabCompleter {
         if (l == null) { msg(p, "<red>Someone already bought that."); open(p, 0); return; }
         if (l.seller().equals(p.getUniqueId())) { open(p, 0); return; }
         if (p.getInventory().firstEmpty() < 0) { msg(p, "<red>Make room in your inventory first."); return; }
-        if (!eco().take(p.getUniqueId(), l.price())) { msg(p, "<red>You need " + $(l.price()) + "."); return; }
+        // team members buy with their team bank (that money no longer counts toward winning the season)
+        com.cosmicabilities.team.Teams.Team team = plugin.teams().teamOf(p.getUniqueId());
+        boolean leaderOnly = plugin.getConfig().getBoolean("auction.team-bank-leader-only", true);
+        boolean fromBank = team != null && plugin.getConfig().getBoolean("auction.team-bank-pays", true)
+                && (!leaderOnly || p.getUniqueId().equals(team.leader)) && team.bank >= l.price();
+        if (fromBank) {
+            plugin.teams().addToBank(team, -l.price());
+        } else if (!eco().take(p.getUniqueId(), l.price())) {
+            msg(p, "<red>You need " + $(l.price()) + (team != null && leaderOnly && !p.getUniqueId().equals(team.leader)
+                    ? " <gray>(only your team leader can spend the team bank)" : "") + ".");
+            return;
+        }
         listings.remove(id);
         double tax = Math.max(0, Math.min(0.5, plugin.getConfig().getDouble("auction.tax", 0.0)));
         long paid = l.price() - Math.round(l.price() * tax);
-        eco().add(l.seller(), paid);
+        com.cosmicabilities.team.Teams.Team sellerTeam = plugin.teams().teamOf(l.seller());
+        if (sellerTeam != null && plugin.getConfig().getBoolean("auction.sales-to-team-bank", true)) plugin.teams().addToBank(sellerTeam, paid);
+        else eco().add(l.seller(), paid);
+        if (fromBank) msg(p, "<gray>Paid from <aqua>" + team.name + "<gray>'s team bank <dark_gray>(now " + $(team.bank) + ")");
         p.getInventory().addItem(l.item().clone());
         save();
         msg(p, "<green>Bought <white>" + l.item().getAmount() + "x " + name(l.item()) + " <green>for <gold>" + $(l.price()) + "<green>.");

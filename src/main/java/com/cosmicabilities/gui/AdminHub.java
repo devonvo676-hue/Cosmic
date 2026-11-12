@@ -45,7 +45,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * announce, reload, unban, name tags, cooldowns and clean-up.
  */
 public class AdminHub implements Listener {
-    enum Page { HUB, GIVE, PLAYERS, PLAYER, PICK, UNBAN, RANKS }
+    enum Page { HUB, GIVE, PLAYERS, PLAYER, PICK, UNBAN, RANKS, EVENTS, STATS, BOSSES, TEAMS }
     enum PickMode { SLOT1, SLOT2, ORB }
 
     public static final class Holder implements InventoryHolder {
@@ -61,10 +61,12 @@ public class AdminHub implements Listener {
 
     private static final int H_ABILITIES = 10, H_BOSS = 11, H_CONFIG = 12, H_SHOP = 13, H_RECIPES = 14, H_PLAYERS = 15,
             H_GIVE = 16, H_ANNOUNCE = 28, H_RELOAD = 29, H_UNBAN = 30, H_TAG_ADMIN = 32, H_TAG_OWNER = 33, H_TAG_OFF = 34,
-            H_RESET = 37, H_SWEEP = 38, H_DESPAWN = 39, H_SPIN = 40, H_KILL = 41, H_RANKS = 42, H_AH = 43, H_CLOSE = 49;
+            H_RESET = 37, H_SWEEP = 38, H_DESPAWN = 39, H_SPIN = 40, H_KILL = 41, H_RANKS = 42, H_AH = 43, H_CLOSE = 49,
+            H_EVENTS = 19, H_SUPPLY = 20, H_TEAMS = 21, H_STATS = 22, H_BOSSES = 23, H_RPG = 24, H_COOLDOWNS = 25;
 
     private final CosmicAbilitiesPlugin plugin;
     private final Set<UUID> announcing = ConcurrentHashMap.newKeySet();
+    private final Map<UUID, Integer> eventMinutes = new ConcurrentHashMap<>();
 
     public AdminHub(CosmicAbilitiesPlugin plugin) {
         this.plugin = plugin;
@@ -124,6 +126,22 @@ public class AdminHub implements Listener {
                 "<gray>Open /ah. Admins can remove any", "<gray>listing with shift + right-click."));
         inv.setItem(H_SPIN, Icons.button(plugin, Material.ECHO_SHARD, "<light_purple>Test the spin wheel",
                 "<gray>Spins a new slot 1 ability for yourself."));
+        inv.setItem(H_EVENTS, Icons.button(plugin, Material.FIREWORK_ROCKET, "<yellow><bold>Daily Events",
+                "<gray>2x kill money, 2x AFK tokens, ability", "<gray>frenzy, supply drop rain, boss fights.",
+                "<gray>Active: <white>" + plugin.events().activeEvents().size()));
+        inv.setItem(H_SUPPLY, Icons.button(plugin, Material.CHEST_MINECART, "<green><bold>Supply Drop",
+                "<yellow>Click <gray>drop one where you stand", "<yellow>Right <gray>drop one 100-300 blocks away",
+                "<gray>Or <white>/supplydrop <x> <y> <z>"));
+        inv.setItem(H_TEAMS, Icons.button(plugin, Material.WHITE_BANNER, "<aqua><bold>Teams & Season",
+                "<gray>Team bank leaderboard, season length,", "<gray>end the season and hand out rewards.",
+                "<gray>Season <white>" + plugin.teams().season() + " <gray>ends in <white>" + plugin.teams().timeLeft()));
+        inv.setItem(H_STATS, Icons.button(plugin, Material.WRITABLE_BOOK, "<#f15bb5><bold>Player Stats",
+                "<gray>Refresh everyone's sidebar / tab / tags,", "<gray>or reset kills, deaths and cash."));
+        inv.setItem(H_BOSSES, Icons.button(plugin, Material.DRAGON_HEAD, "<red><bold>Boss Strength",
+                "<gray>Health, damage and size multipliers", "<gray>for every boss."));
+        inv.setItem(H_RPG, plugin.rpg().create());
+        inv.setItem(H_COOLDOWNS, Icons.button(plugin, Material.CLOCK, "<aqua><bold>Ability Cooldowns",
+                "<gray>Change every ability's cooldown,", "<gray>all at once or one by one."));
         inv.setItem(H_CLOSE, Icons.button(plugin, Material.BARRIER, "<red>Close"));
         admin.openInventory(inv);
         admin.playSound(admin.getLocation(), Sound.BLOCK_ENDER_CHEST_OPEN, 0.6f, 1.3f);
@@ -142,11 +160,13 @@ public class AdminHub implements Listener {
         put(h, 24, plugin.tools().create(CosmicTools.Tool.SHOVEL), "shovel");
         put(h, 25, plugin.items().afkToken(1), "afk");
         put(h, 15, plugin.items().token(1), "token");
+        put(h, 17, plugin.rpg().create(), "rpg");
         put(h, 16, plugin.coinflip().coin("<gold><bold>+$100,000", "<gray>Click: give yourself $100,000", "<gray>Shift: $1,000,000"), "cash");
         CosmicMaterial[] mats = CosmicMaterial.values();
         for (int i = 0; i < mats.length; i++) put(h, 19 + i, mats[i].create(16), mats[i]);
         AbilityType[] types = AbilityType.values();
-        for (int i = 0; i < types.length; i++) put(h, 28 + i + (i >= 7 ? 2 : 0), plugin.orbs().orb(types[i], 1), types[i]);
+        int[] orbSlots = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43, 46, 47, 48, 50, 51, 52};
+        for (int i = 0; i < types.length && i < orbSlots.length; i++) put(h, orbSlots[i], plugin.orbs().orb(types[i], 1), types[i]);
         inv.setItem(49, Icons.button(plugin, Material.ARROW, "<yellow>Back"));
         admin.openInventory(inv);
     }
@@ -284,6 +304,10 @@ public class AdminHub implements Listener {
             case PLAYER -> playerClick(admin, h, raw, click);
             case PICK -> pickClick(admin, h, raw);
             case RANKS -> ranksClick(admin, raw);
+            case EVENTS -> eventsClick(admin, raw, click);
+            case STATS -> statsClick(admin, raw, click);
+            case BOSSES -> bossesClick(admin, raw, click);
+            case TEAMS -> teamsClick(admin, raw, click);
             case UNBAN -> {
                 if (raw == 49) { open(admin); return; }
                 if (h.slots.get(raw) instanceof String name) {
@@ -342,6 +366,21 @@ public class AdminHub implements Listener {
                 admin.closeInventory();
                 plugin.roll().spin(admin, RollPanel.Reason.ADMIN);
             }
+            case H_EVENTS -> openEvents(admin);
+            case H_SUPPLY -> {
+                admin.closeInventory();
+                if (click.isRightClick()) {
+                    double a = Math.random() * Math.PI * 2, d = 100 + Math.random() * 200;
+                    plugin.supplyDrops().call(admin.getLocation().add(Math.cos(a) * d, 0, Math.sin(a) * d), admin);
+                } else {
+                    plugin.supplyDrops().call(admin.getLocation(), admin);
+                }
+            }
+            case H_TEAMS -> openTeams(admin);
+            case H_STATS -> openStats(admin);
+            case H_BOSSES -> openBosses(admin);
+            case H_RPG -> admin.getInventory().addItem(plugin.rpg().create());
+            case H_COOLDOWNS -> plugin.configPanel().open(admin);
             case H_CLOSE -> admin.closeInventory();
             default -> { }
         }
@@ -369,6 +408,7 @@ public class AdminHub implements Listener {
                 admin.sendMessage(plugin.mm(plugin.prefix() + "<gold>+$" + plugin.economy().format(amt)));
                 yield null;
             }
+            case "rpg" -> plugin.rpg().create();
             default -> plugin.banPistol().create();
         };
         if (it != null) for (ItemStack left : admin.getInventory().addItem(it).values()) admin.getWorld().dropItemNaturally(admin.getLocation(), left);
@@ -491,6 +531,218 @@ public class AdminHub implements Listener {
             admin.sendMessage(plugin.mm(plugin.prefix() + "<gray>You are now wearing the " + rank.name() + " tag."));
         } else {
             admin.sendMessage(plugin.mm(plugin.prefix() + "<red>You need " + (rank == RankTags.Rank.OWNER ? "OP" : "admin or OP") + " to wear that tag."));
+        }
+    }
+
+
+    // ------------------------------------------------------------------ daily events
+
+    private static final int[] EVENT_SLOTS = {11, 12, 13, 14, 15};
+
+    private void openEvents(Player admin) {
+        Holder h = new Holder(Page.EVENTS);
+        Inventory inv = create(h, 45, "<dark_red>Daily Events");
+        int mins = eventMinutes.getOrDefault(admin.getUniqueId(), 60);
+        com.cosmicabilities.events.ServerEvents.Type[] types = com.cosmicabilities.events.ServerEvents.Type.values();
+        for (int i = 0; i < types.length; i++) {
+            var t = types[i];
+            boolean on = plugin.events().isActive(t);
+            List<String> lore = new ArrayList<>();
+            lore.add("<gray>" + t.desc);
+            lore.add("");
+            if (on) {
+                long left = Math.max(0, (plugin.events().endsAt(t) - System.currentTimeMillis()) / 60000);
+                lore.add("<green><bold>ON</bold> <gray>- " + left + " min left");
+                lore.add("<yellow>Click <gray>to stop it");
+            } else {
+                lore.add("<red>OFF");
+                lore.add("<yellow>Click <gray>to start it for <white>" + mins + " min");
+            }
+            ItemStack it = Icons.button(plugin, t.icon, t.color + "<bold>" + t.title, lore.toArray(new String[0]));
+            if (on) { ItemMeta m = it.getItemMeta(); m.setEnchantmentGlintOverride(true); it.setItemMeta(m); }
+            inv.setItem(EVENT_SLOTS[i], it);
+        }
+        inv.setItem(31, Icons.button(plugin, Material.CLOCK, "<aqua><bold>Event length: <white>" + mins + " min",
+                "<yellow>Left <gray>+15 min  <yellow>Right <gray>-15 min", "<yellow>Shift <gray>+/- 60 min",
+                "<gray>Supply rain drops one every <white>" + plugin.getConfig().getInt("events.supply-rain-minutes", 5) + " min"));
+        inv.setItem(40, Icons.button(plugin, Material.ARROW, "<yellow>Back"));
+        admin.openInventory(inv);
+    }
+
+    private void eventsClick(Player admin, int raw, ClickType click) {
+        if (raw == 40) { open(admin); return; }
+        if (raw == 31) {
+            int step = click.isShiftClick() ? 60 : 15;
+            int m = eventMinutes.getOrDefault(admin.getUniqueId(), 60) + (click.isRightClick() ? -step : step);
+            eventMinutes.put(admin.getUniqueId(), Math.max(5, Math.min(24 * 60, m)));
+            openEvents(admin);
+            return;
+        }
+        com.cosmicabilities.events.ServerEvents.Type[] types = com.cosmicabilities.events.ServerEvents.Type.values();
+        for (int i = 0; i < types.length; i++) {
+            if (raw != EVENT_SLOTS[i]) continue;
+            var t = types[i];
+            if (plugin.events().isActive(t)) {
+                plugin.events().stop(t);
+                openEvents(admin);
+            } else {
+                plugin.events().start(t, eventMinutes.getOrDefault(admin.getUniqueId(), 60));
+                if (t == com.cosmicabilities.events.ServerEvents.Type.BOSS_FIGHT) plugin.bossFightPanel().open(admin);
+                else openEvents(admin);
+            }
+            return;
+        }
+    }
+
+    // ------------------------------------------------------------------ stats
+
+    private void openStats(Player admin) {
+        Holder h = new Holder(Page.STATS);
+        Inventory inv = create(h, 45, "<dark_red>Player Stats");
+        inv.setItem(10, Icons.button(plugin, Material.SUNFLOWER, "<green><bold>Refresh everyone's stats",
+                "<gray>Re-saves everyone's data and redraws", "<gray>every sidebar, tab list and name tag."));
+        inv.setItem(12, Icons.button(plugin, Material.IRON_SWORD, "<red><bold>Reset everyone's kills",
+                "<gray>Kills and deaths back to 0", "<gray>(online and offline players).", "", "<red>Shift-click to confirm"));
+        inv.setItem(14, plugin.coinflip().coin("<gold><bold>Reset everyone's cash",
+                "<gray>Everyone back to the starting", "<gray>$" + plugin.economy().format(plugin.getConfig().getLong("economy.starting-cash", 10000)) + ".",
+                "", "<red>Shift-click to confirm"));
+        inv.setItem(16, Icons.button(plugin, Material.TNT_MINECART, "<dark_red><bold>Reset ALL stats",
+                "<gray>Kills, deaths, cash and team banks.", "", "<red>Shift-click to confirm"));
+        inv.setItem(40, Icons.button(plugin, Material.ARROW, "<yellow>Back"));
+        admin.openInventory(inv);
+    }
+
+    private void statsClick(Player admin, int raw, ClickType click) {
+        switch (raw) {
+            case 10 -> {
+                refreshAll();
+                admin.sendMessage(plugin.mm(plugin.prefix() + "<green>Refreshed everyone's stats."));
+            }
+            case 12, 14, 16 -> {
+                if (!click.isShiftClick()) {
+                    admin.sendMessage(plugin.mm(plugin.prefix() + "<red>Shift-click to confirm - this can't be undone."));
+                    return;
+                }
+                boolean kills = raw != 14, cash = raw != 12;
+                int n = 0;
+                long start = plugin.getConfig().getLong("economy.starting-cash", 10000);
+                for (OfflinePlayer op : Bukkit.getOfflinePlayers()) {
+                    n++;
+                    if (kills) {
+                        try {
+                            op.setStatistic(org.bukkit.Statistic.PLAYER_KILLS, 0);
+                            op.setStatistic(org.bukkit.Statistic.DEATHS, 0);
+                        } catch (RuntimeException ignored) { }
+                    }
+                    if (cash) {
+                        long bal = plugin.economy().balance(op.getUniqueId());
+                        plugin.economy().add(op.getUniqueId(), start - bal);
+                    }
+                }
+                if (raw == 16) plugin.teams().resetBanks();
+                plugin.data().saveAll();
+                refreshAll();
+                Bukkit.broadcast(plugin.mm(plugin.prefix() + "<gold>An admin reset " + (raw == 12 ? "everyone's kills" : raw == 14 ? "everyone's cash" : "all stats") + "."));
+                admin.sendMessage(plugin.mm(plugin.prefix() + "<gray>Reset <white>" + n + " <gray>players."));
+            }
+            case 40 -> open(admin);
+            default -> { }
+        }
+    }
+
+    private void refreshAll() {
+        plugin.data().saveAll();
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            plugin.tags().refresh(p);
+            plugin.sidebar().update(p);
+            plugin.sidebar().tab(p);
+        }
+    }
+
+    // ------------------------------------------------------------------ boss strength
+
+    private static final String[] BOSS_KEYS = {"health-multiplier", "damage-multiplier", "size-multiplier"};
+
+    private void openBosses(Player admin) {
+        Holder h = new Holder(Page.BOSSES);
+        Inventory inv = create(h, 45, "<dark_red>Boss Strength");
+        Material[] icons = {Material.GOLDEN_APPLE, Material.NETHERITE_SWORD, Material.SCAFFOLDING};
+        String[] names = {"Health", "Damage", "Size"};
+        for (int i = 0; i < 3; i++) {
+            double v = plugin.getConfig().getDouble("bosses." + BOSS_KEYS[i], 1.0);
+            inv.setItem(11 + i * 2, Icons.button(plugin, icons[i], "<red><bold>" + names[i] + ": <white>x" + String.format("%.2f", v),
+                    "<yellow>Left <gray>+0.25  <yellow>Right <gray>-0.25", "<yellow>Shift <gray>+/- 1.0",
+                    i == 2 ? "<gray>Applies to bosses spawned from now on" : "<gray>Applies to bosses spawned from now on"));
+        }
+        inv.setItem(31, Icons.button(plugin, Material.BOOK, "<gray>Per-boss health / damage",
+                "<gray>Each boss also has its own values in", "<white>config.yml -> bosses.<boss>.health / damage",
+                "<gray>The multipliers above scale all of them."));
+        inv.setItem(40, Icons.button(plugin, Material.ARROW, "<yellow>Back"));
+        admin.openInventory(inv);
+    }
+
+    private void bossesClick(Player admin, int raw, ClickType click) {
+        if (raw == 40) { open(admin); return; }
+        for (int i = 0; i < 3; i++) {
+            if (raw != 11 + i * 2) continue;
+            double step = click.isShiftClick() ? 1.0 : 0.25;
+            double v = plugin.getConfig().getDouble("bosses." + BOSS_KEYS[i], 1.0) + (click.isRightClick() ? -step : step);
+            v = Math.max(i == 2 ? 0.25 : 0.25, Math.min(i == 2 ? 4 : 50, Math.round(v * 100) / 100.0));
+            plugin.getConfig().set("bosses." + BOSS_KEYS[i], v);
+            plugin.saveConfig();
+            openBosses(admin);
+        }
+    }
+
+    // ------------------------------------------------------------------ teams & season
+
+    private void openTeams(Player admin) {
+        Holder h = new Holder(Page.TEAMS);
+        Inventory inv = create(h, 54, "<dark_red>Teams & Season " + plugin.teams().season());
+        List<com.cosmicabilities.team.Teams.Team> rank = plugin.teams().ranking();
+        for (int i = 0; i < rank.size() && i < 28; i++) {
+            var t = rank.get(i);
+            List<String> lore = new ArrayList<>();
+            lore.add("<gray>Bank: <gold>$" + plugin.economy().format(t.bank));
+            OfflinePlayer leader = Bukkit.getOfflinePlayer(t.leader);
+            lore.add("<gray>Leader: <white>" + leader.getName());
+            lore.add("<gray>Members: <white>" + t.members.size());
+            inv.setItem(10 + (i / 7) * 9 + i % 7, Icons.button(plugin, i == 0 ? Material.GOLD_BLOCK : i < 3 ? Material.IRON_BLOCK : Material.STONE,
+                    "<aqua><bold>#" + (i + 1) + " " + t.name, lore.toArray(new String[0])));
+        }
+        int days = plugin.getConfig().getInt("season.days", 14);
+        inv.setItem(46, Icons.button(plugin, Material.CLOCK, "<aqua>Season length: <white>" + days + " days",
+                "<yellow>Left <gray>+1 day  <yellow>Right <gray>-1 day", "<gray>Ends in <white>" + plugin.teams().timeLeft()));
+        boolean auto = plugin.getConfig().getBoolean("season.auto-end", true);
+        inv.setItem(47, Icons.button(plugin, auto ? Material.LIME_DYE : Material.GRAY_DYE, "<aqua>Auto-end season: " + (auto ? "<green>ON" : "<red>OFF"),
+                "<gray>When on, the season ends by itself", "<gray>and the richest team gets rewarded."));
+        inv.setItem(51, Icons.button(plugin, Material.NETHER_STAR, "<gold><bold>End season now",
+                "<gray>The richest team's members each get", "<gray>a rare boss/dragon ability orb,", "<gray>then every bank resets to $0.",
+                "", "<red>Shift-click to confirm"));
+        inv.setItem(49, Icons.button(plugin, Material.ARROW, "<yellow>Back"));
+        admin.openInventory(inv);
+    }
+
+    private void teamsClick(Player admin, int raw, ClickType click) {
+        switch (raw) {
+            case 46 -> {
+                int d = plugin.getConfig().getInt("season.days", 14) + (click.isRightClick() ? -1 : 1);
+                plugin.getConfig().set("season.days", Math.max(1, Math.min(90, d)));
+                plugin.saveConfig();
+                openTeams(admin);
+            }
+            case 47 -> {
+                plugin.getConfig().set("season.auto-end", !plugin.getConfig().getBoolean("season.auto-end", true));
+                plugin.saveConfig();
+                openTeams(admin);
+            }
+            case 51 -> {
+                if (!click.isShiftClick()) { admin.sendMessage(plugin.mm(plugin.prefix() + "<red>Shift-click to end the season.")); return; }
+                admin.closeInventory();
+                plugin.teams().endSeason(admin);
+            }
+            case 49 -> open(admin);
+            default -> { }
         }
     }
 

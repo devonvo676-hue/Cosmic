@@ -111,8 +111,15 @@ public class Economy implements Listener, CommandExecutor, TabCompleter {
         Player killer = victim.getKiller();
         long reward = killReward();
         if (killer == null || killer.equals(victim) || reward <= 0) return;
-        add(killer.getUniqueId(), reward);
-        killer.sendActionBar(plugin.mm("<gold>+$" + format(reward) + " <gray>for killing <white>" + victim.getName()));
+        reward = Math.round(reward * plugin.events().killMultiplier());
+        com.cosmicabilities.team.Teams.Team team = plugin.teams().teamOf(killer.getUniqueId());
+        if (team != null) {
+            plugin.teams().addToBank(team, reward);
+            killer.sendActionBar(plugin.mm("<gold>+$" + format(reward) + " <gray>to <white>" + team.name + "<gray>'s bank for killing <white>" + victim.getName()));
+        } else {
+            add(killer.getUniqueId(), reward);
+            killer.sendActionBar(plugin.mm("<gold>+$" + format(reward) + " <gray>for killing <white>" + victim.getName()));
+        }
         killer.playSound(killer.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 0.8f, 1.4f);
     }
 
