@@ -84,7 +84,7 @@ public class AdminPanel implements Listener {
         inv.setItem(RESET_CD, Icons.button(plugin, Material.CLOCK, "<aqua>Reset my cooldowns"));
         inv.setItem(MAX_TIER, Icons.button(plugin, Material.EXPERIENCE_BOTTLE, "<light_purple>Upgrade my abilities", "<gray>Both slots upgraded"));
         inv.setItem(CLEAR_SLOT2, Icons.button(plugin, Material.LAVA_BUCKET, "<red>Clear slot 2"));
-        inv.setItem(CLOSE, Icons.button(plugin, Material.ARROW, "<yellow>Back to admin panel"));
+        inv.setItem(CLOSE, Icons.gui(plugin, "back", "<yellow>Back to admin panel"));
     }
 
     private static String slotText(PlayerData d, int slot) {

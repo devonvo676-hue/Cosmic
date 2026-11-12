@@ -186,7 +186,8 @@ bosses:
     top-damage-bonus: 2
     min-damage-share: 0.05
     bonus-astral-chance: 0.3
-  # Per boss: health, damage (melee), special-damage, special-attack-interval (s), special-radius, speed, size (scale),
+  # Per boss: health, damage (melee), special-damage, special-attack-interval (s), special-radius, speed, size (1 = normal;
+  # the hitbox always matches the model),
   # armor, armor-toughness, knockback-resistance, follow-range, ability-chance (chance the TOP DAMAGE player gets
   # this boss's own ability instead of a random one), drops.min / drops.max. Max health is capped at 1024 by spigot.yml.
   void_emperor:
@@ -196,7 +197,7 @@ bosses:
     special-attack-interval: 7
     special-radius: 14
     speed: 0.3
-    size: 2.2
+    size: 1.0
     armor: 14
     armor-toughness: 4
     knockback-resistance: 0.8
@@ -208,7 +209,7 @@ bosses:
     special-attack-interval: 8
     special-radius: 12
     speed: 0.25
-    size: 2.8
+    size: 1.0
     armor: 18
     armor-toughness: 6
     knockback-resistance: 1.0
@@ -220,7 +221,7 @@ bosses:
     special-attack-interval: 6
     special-radius: 14
     speed: 0.3
-    size: 2.6
+    size: 1.0
     armor: 14
     armor-toughness: 4
     knockback-resistance: 0.8
@@ -231,9 +232,8 @@ bosses:
     special-damage: 5
     special-attack-interval: 6
     special-radius: 14
-    heal-percent: 5
     speed: 0.33
-    size: 2.2
+    size: 1.0
     armor: 12
     armor-toughness: 4
     knockback-resistance: 0.7
@@ -245,7 +245,7 @@ bosses:
     special-attack-interval: 7
     special-radius: 10
     speed: 0.3
-    size: 1.9
+    size: 1.0
     armor: 20
     armor-toughness: 8
     knockback-resistance: 1.0
@@ -382,7 +382,7 @@ rpg:
 
 tablist:
   enabled: true
-  header-line: "<gray>Money SMP with cosmic abilities"
+  header-line: ""          # optional extra line under the COSMIC title
   footer-line: "<dark_gray>/team  /ah  /afk  /abilities"
 
 # ---------------------------------------------------------------- admin-only "cocaine" (/adminpanel -> Give Items)

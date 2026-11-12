@@ -60,10 +60,11 @@ public class AdminHub implements Listener {
         public @NotNull Inventory getInventory() { return inventory; }
     }
 
-    private static final int H_ABILITIES = 10, H_BOSS = 11, H_CONFIG = 12, H_SHOP = 13, H_RECIPES = 14, H_PLAYERS = 15,
-            H_GIVE = 16, H_ANNOUNCE = 28, H_RELOAD = 29, H_UNBAN = 30, H_TAG_ADMIN = 32, H_TAG_OWNER = 33, H_TAG_OFF = 34,
-            H_RESET = 37, H_SWEEP = 38, H_DESPAWN = 39, H_SPIN = 40, H_KILL = 41, H_RANKS = 42, H_AH = 43, H_CLOSE = 49,
-            H_EVENTS = 19, H_SUPPLY = 20, H_TEAMS = 21, H_STATS = 22, H_BOSSES = 23, H_RPG = 24, H_COOLDOWNS = 25;
+    // layout: one row per section, the section's label on the left
+    private static final int H_ABILITIES = 11, H_BOSS = 12, H_BOSSES = 13, H_EVENTS = 14, H_SUPPLY = 15, H_TEAMS = 16, H_COOLDOWNS = 17,
+            H_PLAYERS = 20, H_STATS = 21, H_RANKS = 22, H_GIVE = 23, H_UNBAN = 24, H_ANNOUNCE = 25, H_SPIN = 26,
+            H_KILL = 29, H_AH = 30, H_SHOP = 31, H_RECIPES = 32, H_RPG = 33, H_CONFIG = 34, H_RESET = 35,
+            H_RELOAD = 38, H_SWEEP = 39, H_DESPAWN = 40, H_TAG_ADMIN = 42, H_TAG_OWNER = 43, H_TAG_OFF = 44, H_CLOSE = 49;
 
     private final CosmicAbilitiesPlugin plugin;
     private final Set<UUID> announcing = ConcurrentHashMap.newKeySet();
@@ -85,64 +86,53 @@ public class AdminHub implements Listener {
 
     public void open(Player admin) {
         Holder h = new Holder(Page.HUB);
-        Inventory inv = create(h, 54, "<dark_red><bold>Cosmic Admin Panel");
-        inv.setItem(4, Icons.button(plugin, Material.NETHER_STAR, "<gradient:#9b5de5:#00bbf9><bold>Cosmic Abilities " + plugin.getPluginMeta().getVersion(),
-                "<gray>Everything you can do as an admin is here.", "<gray>Online: <white>" + Bukkit.getOnlinePlayers().size()));
-        inv.setItem(H_ABILITIES, Icons.button(plugin, Material.AMETHYST_CLUSTER, "<light_purple><bold>Abilities",
-                "<gray>Equip any ability on yourself,", "<gray>test-cast, materials, Ban Pistol."));
-        inv.setItem(H_BOSS, Icons.button(plugin, Material.WITHER_SKELETON_SKULL, "<red><bold>Boss Fights",
-                "<gray>Pick a boss, countdown and how many", "<gray>players must be there to start."));
-        inv.setItem(H_CONFIG, Icons.button(plugin, Material.COMPARATOR, "<aqua><bold>Config",
-                "<gray>Global settings + every ability's", "<gray>cooldown, damage and cast effects."));
-        inv.setItem(H_SHOP, Icons.button(plugin, Material.EMERALD, "<green><bold>AFK Shop Editor",
-                "<gray>Click items in your inventory to add them,", "<gray>change prices, remove entries."));
-        inv.setItem(H_RECIPES, Icons.button(plugin, Material.CRAFTING_TABLE, "<gold><bold>Recipes",
-                "<gray>Change how the Cosmic Reroll, Pickaxe", "<gray>and Axe are crafted, or turn crafting off."));
-        inv.setItem(H_PLAYERS, Icons.button(plugin, Material.PLAYER_HEAD, "<yellow><bold>Players",
-                "<gray>Set or spin someone's abilities, upgrades,", "<gray>orbs, AFK tokens, cooldowns."));
-        inv.setItem(H_GIVE, Icons.button(plugin, Material.CHEST, "<white><bold>Give Items",
-                "<gray>Rerolls, cosmic tools, shards, upgrade", "<gray>tokens, orbs, fragments, cash, Ban Pistol."));
-        inv.setItem(H_ANNOUNCE, Icons.button(plugin, Material.BELL, "<gold><bold>Announce",
-                "<gray>Type your message in chat next.", "<gray>Use <white>title | subtitle <gray>for two lines."));
-        inv.setItem(H_RELOAD, Icons.button(plugin, Material.REPEATER, "<green><bold>Reload",
-                "<gray>Re-read config.yml + afkshop.yml now."));
-        inv.setItem(H_UNBAN, Icons.button(plugin, Material.IRON_BARS, "<red><bold>Banned Players",
-                "<gray>Click someone to unban them."));
-        inv.setItem(H_TAG_ADMIN, Icons.button(plugin, Material.RED_BANNER, "<red><bold>[ADMIN] tag", "<gray>Requires admin or OP"));
-        inv.setItem(H_TAG_OWNER, Icons.button(plugin, Material.YELLOW_BANNER, "<gold><bold>[OWNER] tag", "<gray>Requires OP"));
-        inv.setItem(H_TAG_OFF, Icons.button(plugin, Material.WHITE_BANNER, "<white>Remove my tag"));
-        inv.setItem(H_RESET, Icons.button(plugin, Material.CLOCK, "<aqua>Reset my cooldowns",
-                "<gray>Shift-click: everyone's"));
-        inv.setItem(H_SWEEP, Icons.button(plugin, Material.BRUSH, "<aqua>Clean up effects",
-                "<gray>Removes any stuck ability visuals."));
-        inv.setItem(H_DESPAWN, Icons.button(plugin, Material.TNT, "<red>Despawn all bosses"));
+        Inventory inv = create(h, 54, "<dark_gray>✦ <gradient:#9b5de5:#00bbf9><bold>Cosmic Admin</bold></gradient>");
+        ItemStack row = Icons.button(plugin, Material.GRAY_STAINED_GLASS_PANE, " ");
+        for (int r = 1; r <= 4; r++) for (int c = 1; c <= 8; c++) inv.setItem(r * 9 + c, row);
+        inv.setItem(4, Icons.gui(plugin, "logo", "<gradient:#9b5de5:#00bbf9><bold>Cosmic Abilities " + plugin.getPluginMeta().getVersion(),
+                "<gray>Online: <white>" + Bukkit.getOnlinePlayers().size() + "  <gray>Bosses alive: <white>" + plugin.bosses().aliveCount(),
+                "<gray>Season <white>" + plugin.teams().season() + " <gray>ends in <white>" + plugin.teams().timeLeft(),
+                "<gray>Events on: <white>" + plugin.events().activeEvents().size()));
+        inv.setItem(9, Icons.gui(plugin, "sec_game", "<#c77dff><bold>GAME", "<gray>Abilities, bosses, events, seasons"));
+        inv.setItem(18, Icons.gui(plugin, "sec_players", "<#48cae4><bold>PLAYERS", "<gray>Players, stats, ranks, items"));
+        inv.setItem(27, Icons.gui(plugin, "sec_eco", "<#ffb703><bold>ECONOMY & ITEMS", "<gray>Cash, auction house, shop, recipes"));
+        inv.setItem(36, Icons.gui(plugin, "sec_server", "<#9a9ab0><bold>SERVER", "<gray>Reload, clean up, name tags"));
+
+        inv.setItem(H_ABILITIES, Icons.gui(plugin, "abilities", "<#c77dff><bold>Abilities", "<gray>Equip any ability on yourself,", "<gray>test-cast, materials, Ban Pistol.", "", "<yellow>Click to open"));
+        inv.setItem(H_BOSS, Icons.gui(plugin, "boss_fight", "<red><bold>Start a Boss Fight", "<gray>Pick a boss, a countdown and how", "<gray>many players must be there.", "", "<yellow>Click to open"));
+        inv.setItem(H_BOSSES, Icons.gui(plugin, "boss_settings", "<red><bold>Boss Settings", "<gray>Health, damage, special attacks, speed,", "<gray>size, armor, drops, spawn cutscene.", "", "<yellow>Click to open"));
+        inv.setItem(H_EVENTS, Icons.gui(plugin, "events", "<yellow><bold>Daily Events", "<gray>2x kill money, 2x AFK tokens, ability", "<gray>frenzy, supply rain, boss fights.",
+                "<gray>Running now: <white>" + plugin.events().activeEvents().size(), "", "<yellow>Click to open"));
+        inv.setItem(H_SUPPLY, Icons.gui(plugin, "supply", "<green><bold>Supply Drops", "<gray>Spawn one at a random spot, edit the", "<gray>loot and where they can land.", "", "<yellow>Click to open"));
+        inv.setItem(H_TEAMS, Icons.gui(plugin, "teams", "<aqua><bold>Teams & Season", "<gray>Bank leaderboard, season length,", "<gray>end the season and give rewards.", "", "<yellow>Click to open"));
+        inv.setItem(H_COOLDOWNS, Icons.gui(plugin, "cooldowns", "<aqua><bold>Ability Cooldowns & Damage", "<gray>Every ability's cooldown, damage", "<gray>and cast effects, one by one or all.", "", "<yellow>Click to open"));
+
+        inv.setItem(H_PLAYERS, Icons.gui(plugin, "players", "<#48cae4><bold>Players", "<gray>Set or spin abilities, upgrades,", "<gray>orbs, AFK tokens, ranks, teleport.", "", "<yellow>Click to open"));
+        inv.setItem(H_STATS, Icons.gui(plugin, "stats", "<#48cae4><bold>Player Stats", "<gray>Refresh everyone's sidebar and tab,", "<gray>or reset kills / cash.", "", "<yellow>Click to open"));
+        inv.setItem(H_RANKS, Icons.gui(plugin, "ranks", "<#ffb703><bold>Ranks", "<gray>Starlight, Cosmos, Supernova.", "<gray>Test them, get rank boxes, Tebex help.", "", "<yellow>Click to open"));
+        inv.setItem(H_GIVE, Icons.gui(plugin, "give", "<white><bold>Give Items", "<gray>Rerolls, tools, shards, tokens, orbs,", "<gray>cash, Ban Pistol, RPG and more.", "", "<yellow>Click to open"));
+        inv.setItem(H_UNBAN, Icons.gui(plugin, "unban", "<red><bold>Banned Players", "<gray>Click someone to unban them.", "", "<yellow>Click to open"));
+        inv.setItem(H_ANNOUNCE, Icons.gui(plugin, "announce", "<gold><bold>Announce", "<gray>Type your message in chat next.", "<gray>Use <white>title | subtitle <gray>for two lines."));
+        inv.setItem(H_SPIN, Icons.gui(plugin, "spin", "<light_purple><bold>Test the Spin Wheel", "<gray>Spins a new slot 1 ability for yourself."));
+
         long kr = plugin.economy().killReward();
-        inv.setItem(H_KILL, plugin.coinflip().coin("<gold><bold>Cash per kill: <yellow>$" + plugin.economy().format(kr),
-                "<gray>Every player kill pays the killer this.",
-                "<yellow>Left <gray>+$100  <yellow>Right <gray>-$100", "<yellow>Shift-left <gray>+$1,000  <yellow>Shift-right <gray>-$1,000"));
-        inv.setItem(H_RANKS, Icons.button(plugin, Material.ORANGE_SHULKER_BOX, "<#ffb703><bold>Ranks",
-                "<gray>Starlight, Cosmos, Supernova.", "<gray>Give yourself a rank or rank box to test,",
-                "<gray>and see how to hook up Tebex."));
-        inv.setItem(H_AH, Icons.button(plugin, Material.GOLD_INGOT, "<yellow><bold>Auction House",
-                "<gray>Open /ah. Admins can remove any", "<gray>listing with shift + right-click."));
-        inv.setItem(H_SPIN, Icons.button(plugin, Material.ECHO_SHARD, "<light_purple>Test the spin wheel",
-                "<gray>Spins a new slot 1 ability for yourself."));
-        inv.setItem(H_EVENTS, Icons.button(plugin, Material.FIREWORK_ROCKET, "<yellow><bold>Daily Events",
-                "<gray>2x kill money, 2x AFK tokens, ability", "<gray>frenzy, supply drop rain, boss fights.",
-                "<gray>Active: <white>" + plugin.events().activeEvents().size()));
-        inv.setItem(H_SUPPLY, Icons.button(plugin, Material.CHEST_MINECART, "<green><bold>Supply Drops",
-                "<gray>Spawn one at a random spot, edit the", "<gray>loot, chance per item, spawn radius."));
-        inv.setItem(H_TEAMS, Icons.button(plugin, Material.WHITE_BANNER, "<aqua><bold>Teams & Season",
-                "<gray>Team bank leaderboard, season length,", "<gray>end the season and hand out rewards.",
-                "<gray>Season <white>" + plugin.teams().season() + " <gray>ends in <white>" + plugin.teams().timeLeft()));
-        inv.setItem(H_STATS, Icons.button(plugin, Material.WRITABLE_BOOK, "<#f15bb5><bold>Player Stats",
-                "<gray>Refresh everyone's sidebar / tab / tags,", "<gray>or reset kills, deaths and cash."));
-        inv.setItem(H_BOSSES, Icons.button(plugin, Material.DRAGON_HEAD, "<red><bold>Boss Settings",
-                "<gray>Health, damage, special attacks, speed,", "<gray>size, armor, drops and the spawn cutscene."));
-        inv.setItem(H_RPG, plugin.rpg().create());
-        inv.setItem(H_COOLDOWNS, Icons.button(plugin, Material.CLOCK, "<aqua><bold>Ability Cooldowns",
-                "<gray>Change every ability's cooldown,", "<gray>all at once or one by one."));
-        inv.setItem(H_CLOSE, Icons.button(plugin, Material.BARRIER, "<red>Close"));
+        inv.setItem(H_KILL, Icons.gui(plugin, "kill_reward", "<gold><bold>Cash per Kill: <yellow>$" + plugin.economy().format(kr),
+                "<gray>Goes into the killer's team bank", "<gray>(or their own cash with no team).", "",
+                "<yellow>Left <gray>+$100   <yellow>Right <gray>-$100", "<yellow>Shift <gray>+/- $1,000"));
+        inv.setItem(H_AH, Icons.gui(plugin, "auction", "<yellow><bold>Auction House", "<gray>Open /ah. Shift + right-click a", "<gray>listing to remove it.", "", "<yellow>Click to open"));
+        inv.setItem(H_SHOP, Icons.gui(plugin, "shop", "<green><bold>AFK Shop Editor", "<gray>Add items, set prices, move them.", "", "<yellow>Click to open"));
+        inv.setItem(H_RECIPES, Icons.gui(plugin, "recipes", "<gold><bold>Recipes", "<gray>Change how cosmic items are crafted.", "", "<yellow>Click to open"));
+        inv.setItem(H_RPG, Icons.gui(plugin, "rpg", "<red><bold>Admin RPG", "<gray>Rocket launcher that leaves a crater.", "", "<yellow>Click to get one"));
+        inv.setItem(H_CONFIG, Icons.gui(plugin, "config", "<gray><bold>All Settings", "<gray>Every other setting, grouped.", "", "<yellow>Click to open"));
+        inv.setItem(H_RESET, Icons.gui(plugin, "reset", "<aqua><bold>Reset Cooldowns", "<yellow>Click <gray>yours", "<yellow>Shift-click <gray>everyone's"));
+
+        inv.setItem(H_RELOAD, Icons.gui(plugin, "reload", "<green><bold>Reload Config", "<gray>Re-read config.yml + afkshop.yml now."));
+        inv.setItem(H_SWEEP, Icons.gui(plugin, "sweep", "<aqua><bold>Clean Up Effects", "<gray>Removes any stuck ability visuals."));
+        inv.setItem(H_DESPAWN, Icons.gui(plugin, "despawn", "<red><bold>Despawn All Bosses", "<gray>No drops."));
+        inv.setItem(H_TAG_ADMIN, Icons.gui(plugin, "tag_admin", "<red><bold>Wear [ADMIN]", "<gray>Needs admin or OP"));
+        inv.setItem(H_TAG_OWNER, Icons.gui(plugin, "tag_owner", "<gold><bold>Wear [OWNER]", "<gray>Needs OP"));
+        inv.setItem(H_TAG_OFF, Icons.gui(plugin, "tag_off", "<gray><bold>Remove My Tag"));
+        inv.setItem(H_CLOSE, Icons.gui(plugin, "close", "<red>Close"));
         admin.openInventory(inv);
         admin.playSound(admin.getLocation(), Sound.BLOCK_ENDER_CHEST_OPEN, 0.6f, 1.3f);
     }
@@ -168,7 +158,7 @@ public class AdminHub implements Listener {
         AbilityType[] types = AbilityType.values();
         int[] orbSlots = {28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43, 46, 47, 48, 50, 51, 52};
         for (int i = 0; i < types.length && i < orbSlots.length; i++) put(h, orbSlots[i], plugin.orbs().orb(types[i], 1), types[i]);
-        inv.setItem(49, Icons.button(plugin, Material.ARROW, "<yellow>Back"));
+        inv.setItem(49, Icons.gui(plugin, "back", "<yellow>Back"));
         admin.openInventory(inv);
     }
 
@@ -198,7 +188,7 @@ public class AdminHub implements Listener {
             head.setItemMeta(meta);
             put(h, i++, head, online.getUniqueId());
         }
-        inv.setItem(49, Icons.button(plugin, Material.ARROW, "<yellow>Back"));
+        inv.setItem(49, Icons.gui(plugin, "back", "<yellow>Back"));
         admin.openInventory(inv);
     }
 
@@ -240,7 +230,7 @@ public class AdminHub implements Listener {
         inv.setItem(33, Icons.button(plugin, Material.NETHERITE_AXE, "<light_purple>Give Cosmic Axe"));
         com.cosmicabilities.rank.PlayerRank pr = plugin.ranks().rankOf(target);
         inv.setItem(34, Icons.button(plugin, pr.box, "<white>Rank: " + pr.mini(), "<yellow>Left <gray>next rank  <yellow>Right <gray>previous"));
-        inv.setItem(49, Icons.button(plugin, Material.ARROW, "<yellow>Back"));
+        inv.setItem(49, Icons.gui(plugin, "back", "<yellow>Back"));
         admin.openInventory(inv);
     }
 
@@ -255,7 +245,7 @@ public class AdminHub implements Listener {
         });
         AbilityType[] types = AbilityType.values();
         for (int i = 0; i < types.length; i++) put(h, AbilitiesPanel.SLOTS[i], Icons.ability(plugin, types[i], List.of("<yellow>Click to choose")), types[i]);
-        inv.setItem(49, Icons.button(plugin, Material.ARROW, "<yellow>Back"));
+        inv.setItem(49, Icons.gui(plugin, "back", "<yellow>Back"));
         admin.openInventory(inv);
     }
 
@@ -274,7 +264,7 @@ public class AdminHub implements Listener {
             put(h, i++, head, op.getName());
         }
         if (i == 0) inv.setItem(22, Icons.button(plugin, Material.LIME_DYE, "<green>Nobody is banned"));
-        inv.setItem(49, Icons.button(plugin, Material.ARROW, "<yellow>Back"));
+        inv.setItem(49, Icons.gui(plugin, "back", "<yellow>Back"));
         admin.openInventory(inv);
     }
 
@@ -375,7 +365,7 @@ public class AdminHub implements Listener {
             case H_STATS -> openStats(admin);
             case H_BOSSES -> openBosses(admin);
             case H_RPG -> admin.getInventory().addItem(plugin.rpg().create());
-            case H_COOLDOWNS -> plugin.configPanel().open(admin);
+            case H_COOLDOWNS -> plugin.configPanel().openAbilities(admin);
             case H_CLOSE -> admin.closeInventory();
             default -> { }
         }
@@ -507,7 +497,7 @@ public class AdminHub implements Listener {
                 "<gray>Click a box below to get one yourself.",
                 "", "<dark_gray>A worn [OWNER]/[ADMIN] tag shows instead of a",
                 "<dark_gray>rank - take it off to see your rank tag."));
-        inv.setItem(49, Icons.button(plugin, Material.ARROW, "<yellow>Back"));
+        inv.setItem(49, Icons.gui(plugin, "back", "<yellow>Back"));
         admin.openInventory(inv);
     }
 
@@ -558,10 +548,10 @@ public class AdminHub implements Listener {
             if (on) { ItemMeta m = it.getItemMeta(); m.setEnchantmentGlintOverride(true); it.setItemMeta(m); }
             inv.setItem(EVENT_SLOTS[i], it);
         }
-        inv.setItem(31, Icons.button(plugin, Material.CLOCK, "<aqua><bold>Event length: <white>" + mins + " min",
+        inv.setItem(31, Icons.gui(plugin, "cooldowns", "<aqua><bold>Event length: <white>" + mins + " min",
                 "<yellow>Left <gray>+15 min  <yellow>Right <gray>-15 min", "<yellow>Shift <gray>+/- 60 min",
                 "<gray>Supply rain drops one every <white>" + plugin.getConfig().getInt("events.supply-rain-minutes", 5) + " min"));
-        inv.setItem(40, Icons.button(plugin, Material.ARROW, "<yellow>Back"));
+        inv.setItem(40, Icons.gui(plugin, "back", "<yellow>Back"));
         admin.openInventory(inv);
     }
 
@@ -595,7 +585,7 @@ public class AdminHub implements Listener {
     private void openStats(Player admin) {
         Holder h = new Holder(Page.STATS);
         Inventory inv = create(h, 45, "<dark_red>Player Stats");
-        inv.setItem(10, Icons.button(plugin, Material.SUNFLOWER, "<green><bold>Refresh everyone's stats",
+        inv.setItem(10, Icons.gui(plugin, "reload", "<green><bold>Refresh everyone's stats",
                 "<gray>Re-saves everyone's data and redraws", "<gray>every sidebar, tab list and name tag."));
         inv.setItem(12, Icons.button(plugin, Material.IRON_SWORD, "<red><bold>Reset everyone's kills",
                 "<gray>Kills and deaths back to 0", "<gray>(online and offline players).", "", "<red>Shift-click to confirm"));
@@ -604,7 +594,7 @@ public class AdminHub implements Listener {
                 "", "<red>Shift-click to confirm"));
         inv.setItem(16, Icons.button(plugin, Material.TNT_MINECART, "<dark_red><bold>Reset ALL stats",
                 "<gray>Kills, deaths, cash and team banks.", "", "<red>Shift-click to confirm"));
-        inv.setItem(40, Icons.button(plugin, Material.ARROW, "<yellow>Back"));
+        inv.setItem(40, Icons.gui(plugin, "back", "<yellow>Back"));
         admin.openInventory(inv);
     }
 
@@ -666,16 +656,15 @@ public class AdminHub implements Listener {
             new BossSetting("special-attack-interval", "Special attack every (s)", Material.CLOCK, 1, 5, 2, 120, "Seconds between special moves"),
             new BossSetting("special-radius", "Special attack radius", Material.TARGET, 1, 5, 2, 64, "Blocks"),
             new BossSetting("speed", "Speed", Material.SUGAR, 0.01, 0.05, 0.05, 1.0, "Movement speed (0.3 = normal mob)"),
-            new BossSetting("size", "Size", Material.SCAFFOLDING, 0.1, 0.5, 0.3, 10, "Entity scale - model and hitbox"),
+            new BossSetting("size", "Size", Material.SCAFFOLDING, 0.1, 0.5, 0.2, 5, "1 = normal. Model and hitbox grow together"),
             new BossSetting("armor", "Armor", Material.NETHERITE_CHESTPLATE, 1, 5, 0, 30, "Armor points (diamond set = 20)"),
             new BossSetting("armor-toughness", "Armor toughness", Material.NETHERITE_INGOT, 1, 4, 0, 20, ""),
             new BossSetting("knockback-resistance", "Knockback resistance", Material.ANVIL, 0.05, 0.25, 0, 1, "1 = can't be knocked back"),
-            new BossSetting("heal-percent", "Self-heal (%)", Material.GLISTERING_MELON_SLICE, 1, 5, 0, 50, "Nebula Serpent's special heals this much"),
             new BossSetting("ability-chance", "Boss ability chance", Material.NETHER_STAR, 0.05, 0.25, 0, 1,
                     "Chance top damage gets THIS boss's ability (else a random one)"),
             new BossSetting("drops.min", "Fragments min", Material.AMETHYST_SHARD, 1, 5, 0, 64, "Per player who helped"),
             new BossSetting("drops.max", "Fragments max", Material.AMETHYST_CLUSTER, 1, 5, 0, 64, ""));
-    private static final int[] BOSS_SETTING_SLOTS = {10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25};
+    private static final int[] BOSS_SETTING_SLOTS = {10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24};
     private static final int[] BOSS_PICK_SLOTS = {20, 21, 22, 23, 24};
 
     private void openBosses(Player admin) {
@@ -687,7 +676,7 @@ public class AdminHub implements Listener {
             var t = types[i];
             inv.setItem(BOSS_PICK_SLOTS[i], Icons.button(plugin, heads[i], t.colored(),
                     "<gray>Health <white>" + fmtNum(plugin.bosses().cfg(t, "health", 600)) + " <gray>| Damage <white>" + fmtNum(plugin.bosses().cfg(t, "damage", 10)),
-                    "<gray>Size <white>" + fmtNum(plugin.bosses().cfg(t, "size", t.scale)) + " <gray>| Speed <white>" + fmtNum(plugin.bosses().cfg(t, "speed", 0.3)),
+                    "<gray>Size <white>x" + fmtNum(plugin.bosses().cfg(t, "size", 1.0)) + " <gray>| Speed <white>" + fmtNum(plugin.bosses().cfg(t, "speed", 0.3)),
                     "", "<yellow>Click <gray>to change everything about it"));
         }
         String[] names = {"Health", "Damage", "Size"};
@@ -698,16 +687,16 @@ public class AdminHub implements Listener {
                     "<gray>Multiplies every boss's own value.", "<yellow>Left <gray>+0.1  <yellow>Right <gray>-0.1", "<yellow>Shift <gray>+/- 0.5"));
         }
         boolean cut = plugin.getConfig().getBoolean("bosses.cutscene", true);
-        inv.setItem(41, Icons.button(plugin, cut ? Material.ENDER_EYE : Material.ENDER_PEARL, "<aqua>Spawn cutscene: " + (cut ? "<green>ON" : "<red>OFF"),
+        inv.setItem(41, Icons.gui(plugin, cut ? "on" : "off", "<aqua>Spawn cutscene: " + (cut ? "<green>ON" : "<red>OFF"),
                 "<gray>Length: <white>" + fmtNum(plugin.getConfig().getDouble("bosses.cutscene-seconds", 6)) + "s",
                 "<yellow>Click <gray>toggle", "<yellow>Right <gray>+1s  <yellow>Shift-right <gray>-1s"));
         inv.setItem(42, Icons.button(plugin, Material.PLAYER_HEAD, "<aqua>Players needed: <white>" + plugin.getConfig().getInt("bosses.min-players-to-damage", 3),
                 "<gray>The boss is shielded unless this many", "<gray>players are fighting it (1 = off).", "<yellow>Left <gray>+1  <yellow>Right <gray>-1"));
-        inv.setItem(43, Icons.button(plugin, Material.WITHER_SKELETON_SKULL, "<red><bold>Start a boss fight", "<gray>Opens the boss fight panel."));
-        inv.setItem(4, Icons.button(plugin, Material.BOOK, "<gold>Boss settings",
+        inv.setItem(43, Icons.gui(plugin, "boss_fight", "<red><bold>Start a boss fight", "<gray>Opens the boss fight panel."));
+        inv.setItem(4, Icons.gui(plugin, "info", "<gold>Boss settings",
                 "<gray>Pick a boss to change its health, damage,", "<gray>special attack, speed, size, armor, drops...",
                 "<gray>Changes apply to bosses spawned after."));
-        inv.setItem(49, Icons.button(plugin, Material.ARROW, "<yellow>Back"));
+        inv.setItem(49, Icons.gui(plugin, "back", "<yellow>Back"));
         admin.openInventory(inv);
     }
 
@@ -753,8 +742,7 @@ public class AdminHub implements Listener {
         Inventory inv = create(h, 45, "<dark_red>" + type.displayName + " settings");
         for (int i = 0; i < BOSS_SETTINGS.size(); i++) {
             BossSetting st = BOSS_SETTINGS.get(i);
-            if (st.key().equals("heal-percent") && type != com.cosmicabilities.boss.BossType.NEBULA_SERPENT) continue;
-            double def = st.key().equals("size") ? type.scale : 0;
+            double def = st.key().equals("size") ? 1.0 : 0;
             double v = plugin.bosses().cfg(type, st.key(), def);
             inv.setItem(BOSS_SETTING_SLOTS[i], Icons.button(plugin, st.icon(), "<red><bold>" + st.label() + ": <white>" + fmtNum(v),
                     st.note().isEmpty() ? "<dark_gray>" + st.key() : "<gray>" + st.note(),
@@ -763,7 +751,7 @@ public class AdminHub implements Listener {
         }
         inv.setItem(4, Icons.button(plugin, Material.BOOK, type.colored(), "<gray>Saved to config.yml -> bosses." + type.id(),
                 "<gray>Applies to the next one you spawn."));
-        inv.setItem(40, Icons.button(plugin, Material.ARROW, "<yellow>Back"));
+        inv.setItem(40, Icons.gui(plugin, "back", "<yellow>Back"));
         admin.openInventory(inv);
     }
 
@@ -773,7 +761,7 @@ public class AdminHub implements Listener {
         for (int i = 0; i < BOSS_SETTINGS.size(); i++) {
             if (raw != BOSS_SETTING_SLOTS[i]) continue;
             BossSetting st = BOSS_SETTINGS.get(i);
-            double def = st.key().equals("size") ? type.scale : 0;
+            double def = st.key().equals("size") ? 1.0 : 0;
             double step = click.isShiftClick() ? st.big() : st.step();
             double v = plugin.bosses().cfg(type, st.key(), def) + (click.isRightClick() ? -step : step);
             v = Math.max(st.min(), Math.min(st.max(), Math.round(v * 1000) / 1000.0));
@@ -791,10 +779,10 @@ public class AdminHub implements Listener {
         Inventory inv = create(h, 45, "<dark_green>Supply Drops");
         double radius = plugin.getConfig().getDouble("supply-drops.random-radius", 800);
         double minR = plugin.getConfig().getDouble("supply-drops.random-min-radius", 100);
-        inv.setItem(11, Icons.button(plugin, Material.CHEST_MINECART, "<green><bold>Spawn supply drop",
+        inv.setItem(11, Icons.gui(plugin, "random", "<green><bold>Spawn supply drop",
                 "<gray>Falls at a random spot <white>" + fmtNum(minR) + "-" + fmtNum(radius), "<gray>blocks from spawn and is announced.",
                 "", "<yellow>Shift-click <gray>drop it where you stand instead"));
-        inv.setItem(13, Icons.button(plugin, Material.CHEST, "<gold><bold>Edit the loot",
+        inv.setItem(13, Icons.gui(plugin, "loot", "<gold><bold>Edit the loot",
                 "<gray>Opens a chest: put in any items", "<gray>(stacks, enchanted gear, cosmic items...).",
                 "<gray>Items in it: <white>" + plugin.supplyDrops().lootCount(),
                 plugin.supplyDrops().lootCount() == 0 ? "<dark_gray>Empty = uses supply-drops.loot in config" : ""));
@@ -802,7 +790,7 @@ public class AdminHub implements Listener {
         inv.setItem(15, Icons.button(plugin, Material.RABBIT_FOOT, "<aqua>Chance per item: <white>" + Math.round(chance * 100) + "%",
                 "<gray>Each stack in the loot chest has this", "<gray>chance to be in a drop (100% = all of it).",
                 "<yellow>Left <gray>+10%  <yellow>Right <gray>-10%"));
-        inv.setItem(29, Icons.button(plugin, Material.COMPASS, "<aqua>Random radius: <white>" + fmtNum(radius) + " blocks",
+        inv.setItem(29, Icons.gui(plugin, "radius", "<aqua>Random radius: <white>" + fmtNum(radius) + " blocks",
                 "<gray>How far from world spawn drops can land.", "<yellow>Left <gray>+100  <yellow>Right <gray>-100"));
         inv.setItem(30, Icons.button(plugin, Material.RECOVERY_COMPASS, "<aqua>Minimum distance: <white>" + fmtNum(minR) + " blocks",
                 "<yellow>Left <gray>+50  <yellow>Right <gray>-50"));
@@ -811,7 +799,7 @@ public class AdminHub implements Listener {
                 "<yellow>Left <gray>+5  <yellow>Right <gray>-5"));
         inv.setItem(33, Icons.button(plugin, Material.CHEST, "<aqua>Supply Rain every: <white>" + plugin.getConfig().getInt("events.supply-rain-minutes", 5) + " min",
                 "<gray>During the Supply Drop Rain event.", "<yellow>Left <gray>+1  <yellow>Right <gray>-1"));
-        inv.setItem(40, Icons.button(plugin, Material.ARROW, "<yellow>Back"));
+        inv.setItem(40, Icons.gui(plugin, "back", "<yellow>Back"));
         admin.openInventory(inv);
     }
 
@@ -862,12 +850,12 @@ public class AdminHub implements Listener {
         inv.setItem(46, Icons.button(plugin, Material.CLOCK, "<aqua>Season length: <white>" + days + " days",
                 "<yellow>Left <gray>+1 day  <yellow>Right <gray>-1 day", "<gray>Ends in <white>" + plugin.teams().timeLeft()));
         boolean auto = plugin.getConfig().getBoolean("season.auto-end", true);
-        inv.setItem(47, Icons.button(plugin, auto ? Material.LIME_DYE : Material.GRAY_DYE, "<aqua>Auto-end season: " + (auto ? "<green>ON" : "<red>OFF"),
+        inv.setItem(47, Icons.gui(plugin, auto ? "on" : "off", "<aqua>Auto-end season: " + (auto ? "<green>ON" : "<red>OFF"),
                 "<gray>When on, the season ends by itself", "<gray>and the richest team gets rewarded."));
-        inv.setItem(51, Icons.button(plugin, Material.NETHER_STAR, "<gold><bold>End season now",
+        inv.setItem(51, Icons.gui(plugin, "teams", "<gold><bold>End season now",
                 "<gray>The richest team's members each get", "<gray>a rare boss/dragon ability orb,", "<gray>then every bank resets to $0.",
                 "", "<red>Shift-click to confirm"));
-        inv.setItem(49, Icons.button(plugin, Material.ARROW, "<yellow>Back"));
+        inv.setItem(49, Icons.gui(plugin, "back", "<yellow>Back"));
         admin.openInventory(inv);
     }
 

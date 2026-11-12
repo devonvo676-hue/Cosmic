@@ -19,7 +19,7 @@ public enum CosmicMaterial {
     VOID_SHARD("Void Shard", Material.ECHO_SHARD, "#9d4edd", "Dropped by the Void Emperor"),
     SOLAR_CORE("Solar Core", Material.MAGMA_CREAM, "#ffb703", "Dropped by the Solar Titan"),
     FROZEN_STARDUST("Frozen Stardust", Material.PRISMARINE_CRYSTALS, "#8ecae6", "Dropped by the Frost Leviathan"),
-    NEBULA_ESSENCE("Nebula Essence", Material.AMETHYST_SHARD, "#f72585", "Dropped by the Nebula Serpent"),
+    NEBULA_ESSENCE("Nebula Essence", Material.AMETHYST_SHARD, "#f72585", "Dropped by the Nebula Drake"),
     ASTRAL_FRAGMENT("Astral Fragment", Material.FIREWORK_STAR, "#e0e1dd", "Dropped by the Cosmic Destroyer");
 
     private static final MiniMessage MM = MiniMessage.miniMessage();

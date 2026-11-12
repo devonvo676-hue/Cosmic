@@ -34,41 +34,54 @@ public class ConfigPanel implements Listener {
 
     private record Setting(String path, String label, Kind kind, double step, double min, double max, Material icon, double def) {}
 
-    private static final List<Setting> GENERAL = List.of(
-            new Setting("abilities.damage-multiplier", "All ability damage", Kind.DOUBLE, 0.1, 0.1, 5, Material.IRON_SWORD, 1),
-            new Setting("abilities.cooldown-multiplier", "All ability cooldowns", Kind.DOUBLE, 0.1, 0.1, 5, Material.CLOCK, 1),
-            new Setting("upgrades.cooldown-reduction", "Upgrade cooldown cut", Kind.DOUBLE, 0.05, 0, 0.9, Material.EXPERIENCE_BOTTLE, 0.3),
-            new Setting("abilities.bonus-mechanics", "Signature bonus mechanics", Kind.BOOL, 0, 0, 0, Material.NETHER_STAR, 1),
-            new Setting("abilities.hit-players", "Abilities hit players", Kind.BOOL, 0, 0, 0, Material.PLAYER_HEAD, 1),
-            new Setting("abilities.hit-passive-mobs", "Abilities hit passive mobs", Kind.BOOL, 0, 0, 0, Material.LEAD, 0),
-            new Setting("effects.damage-numbers", "Floating damage numbers", Kind.BOOL, 0, 0, 0, Material.NAME_TAG, 1),
-            new Setting("magnetosphere.hide-from-caster", "Hide forcefield from its caster", Kind.BOOL, 0, 0, 0, Material.GLASS, 0),
-            new Setting("magnetosphere.duration-seconds", "Forcefield duration (s)", Kind.INT, 1, 3, 60, Material.BEACON, 15),
-            new Setting("death.lose-upgrade", "Lose upgrade on death", Kind.BOOL, 0, 0, 0, Material.SKELETON_SKULL, 1),
-            new Setting("ability-drops.from-bosses", "Bosses drop ability orbs", Kind.BOOL, 0, 0, 0, Material.HEART_OF_THE_SEA, 1),
-            new Setting("ability-drops.lose-on-any-death", "Lose gained ability on any death", Kind.BOOL, 0, 0, 0, Material.BONE, 0),
-            new Setting("bosses.min-players-to-damage", "Default players needed for bosses", Kind.INT, 1, 1, 50, Material.WITHER_SKELETON_SKULL, 3),
-            new Setting("upgrades.cutscene", "Upgrade cutscene", Kind.BOOL, 0, 0, 0, Material.ENDER_EYE, 1),
-            new Setting("afk.minutes-per-token", "Minutes per AFK token", Kind.INT, 5, 5, 600, Material.COMPASS, 30),
-            new Setting("afk.invulnerable", "AFK players invulnerable", Kind.BOOL, 0, 0, 0, Material.TOTEM_OF_UNDYING, 1),
-            new Setting("ban-pistol.duration-minutes", "Ban Pistol length (min, 0 = forever)", Kind.INT, 10, 0, 525600, Material.IRON_HORSE_ARMOR, 0),
-            new Setting("reroll.craftable", "Cosmic Reroll craftable", Kind.BOOL, 0, 0, 0, Material.ECHO_SHARD, 1),
-            new Setting("abilities.armor-piercing", "Abilities pierce armor (magic dmg)", Kind.BOOL, 0, 0, 0, Material.NETHERITE_CHESTPLATE, 1),
-            new Setting("magnetosphere.caster-can-pass", "Caster can pass own forcefield", Kind.BOOL, 0, 0, 0, Material.LIGHT_BLUE_STAINED_GLASS, 1),
-            new Setting("magnetosphere.radius", "Forcefield radius", Kind.INT, 1, 3, 15, Material.HEART_OF_THE_SEA, 6),
-            new Setting("cosmic-tools.max-tree-blocks", "Cosmic Axe max logs per tree", Kind.INT, 25, 10, 2000, Material.OAK_LOG, 200),
-            new Setting("economy.kill-reward", "Cash per player kill ($)", Kind.INT, 100, 0, 1000000, Material.GOLD_INGOT, 1000));
+    // sections of the "All Settings" page: each row is one group, its label on the left
+    private static final String[][] SECTIONS = {
+            {"sec_game", "<#c77dff><bold>ABILITIES", "<gray>Damage, cooldowns, PvP rules"},
+            {"sec_server", "<#9a9ab0><bold>EFFECTS", "<gray>Visuals and the forcefield"},
+            {"sec_eco", "<#ffb703><bold>DROPS & DEATH", "<gray>Orbs, upgrades, crafting, bosses"},
+            {"sec_players", "<#48cae4><bold>PLAYERS", "<gray>AFK, cash, staff tools"}};
+
+    private static final List<List<Setting>> GROUPS = List.of(
+            List.of(new Setting("abilities.damage-multiplier", "All ability damage", Kind.DOUBLE, 0.1, 0.1, 5, Material.IRON_SWORD, 0.8),
+                    new Setting("abilities.cooldown-multiplier", "All ability cooldowns", Kind.DOUBLE, 0.1, 0.1, 5, Material.CLOCK, 1),
+                    new Setting("abilities.combo-damage-cap", "Anti one-shot damage cap (HP)", Kind.INT, 1, 0, 100, Material.SHIELD, 14),
+                    new Setting("upgrades.cooldown-reduction", "Upgrade cooldown cut", Kind.DOUBLE, 0.05, 0, 0.9, Material.EXPERIENCE_BOTTLE, 0.3),
+                    new Setting("abilities.bonus-mechanics", "Signature bonus mechanics", Kind.BOOL, 0, 0, 0, Material.NETHER_STAR, 1),
+                    new Setting("abilities.hit-players", "Abilities hit players", Kind.BOOL, 0, 0, 0, Material.PLAYER_HEAD, 1),
+                    new Setting("abilities.armor-piercing", "Abilities pierce armor", Kind.BOOL, 0, 0, 0, Material.NETHERITE_CHESTPLATE, 1)),
+            List.of(new Setting("effects.damage-numbers", "Floating damage numbers", Kind.BOOL, 0, 0, 0, Material.NAME_TAG, 1),
+                    new Setting("upgrades.cutscene", "Upgrade cutscene", Kind.BOOL, 0, 0, 0, Material.ENDER_EYE, 1),
+                    new Setting("abilities.hit-passive-mobs", "Abilities hit passive mobs", Kind.BOOL, 0, 0, 0, Material.LEAD, 0),
+                    new Setting("magnetosphere.duration-seconds", "Forcefield duration (s)", Kind.INT, 1, 3, 60, Material.BEACON, 15),
+                    new Setting("magnetosphere.radius", "Forcefield radius", Kind.INT, 1, 3, 15, Material.HEART_OF_THE_SEA, 6),
+                    new Setting("magnetosphere.hide-from-caster", "Hide forcefield from caster", Kind.BOOL, 0, 0, 0, Material.GLASS, 0),
+                    new Setting("magnetosphere.caster-can-pass", "Caster passes own forcefield", Kind.BOOL, 0, 0, 0, Material.LIGHT_BLUE_STAINED_GLASS, 1)),
+            List.of(new Setting("ability-drops.from-bosses", "Bosses give ability orbs", Kind.BOOL, 0, 0, 0, Material.HEART_OF_THE_SEA, 1),
+                    new Setting("ability-drops.lose-on-any-death", "Lose slot 2 on any death", Kind.BOOL, 0, 0, 0, Material.BONE, 0),
+                    new Setting("death.lose-upgrade", "Lose upgrade on death", Kind.BOOL, 0, 0, 0, Material.SKELETON_SKULL, 1),
+                    new Setting("reroll.craftable", "Cosmic Reroll craftable", Kind.BOOL, 0, 0, 0, Material.ECHO_SHARD, 1),
+                    new Setting("bosses.min-players-to-damage", "Players needed for bosses", Kind.INT, 1, 1, 50, Material.WITHER_SKELETON_SKULL, 3),
+                    new Setting("ability-drops.dragon-chance", "Dragon gives Dragon's Awakening", Kind.DOUBLE, 0.1, 0, 1, Material.DRAGON_EGG, 1),
+                    new Setting("cosmic-tools.max-tree-blocks", "Cosmic Axe max logs", Kind.INT, 25, 10, 2000, Material.OAK_LOG, 200)),
+            List.of(new Setting("afk.minutes-per-token", "Minutes per AFK token", Kind.INT, 5, 5, 600, Material.COMPASS, 30),
+                    new Setting("afk.invulnerable", "AFK players protected", Kind.BOOL, 0, 0, 0, Material.TOTEM_OF_UNDYING, 1),
+                    new Setting("economy.kill-reward", "Cash per kill ($)", Kind.INT, 100, 0, 1000000, Material.GOLD_INGOT, 1000),
+                    new Setting("economy.starting-cash", "Starting cash ($)", Kind.INT, 1000, 0, 100000000, Material.GOLD_NUGGET, 10000),
+                    new Setting("teams.max-size", "Max team size", Kind.INT, 1, 1, 20, Material.WHITE_BANNER, 4),
+                    new Setting("ban-pistol.duration-minutes", "Ban Pistol length (0 = forever)", Kind.INT, 10, 0, 525600, Material.IRON_HORSE_ARMOR, 0),
+                    new Setting("tablist.enabled", "Custom tab list", Kind.BOOL, 0, 0, 0, Material.OAK_SIGN, 1)));
 
     /** The combat buffs an ability can give on cast (PvP-relevant only). */
     private static final String[] BUFFS = {"strength", "speed", "resistance", "regeneration", "absorption", "fire_resistance", "health_boost"};
     private static final Material[] BUFF_ICONS = {Material.BLAZE_POWDER, Material.SUGAR, Material.IRON_CHESTPLATE,
             Material.GHAST_TEAR, Material.GOLDEN_APPLE, Material.MAGMA_CREAM, Material.GLISTERING_MELON_SLICE};
 
-    private static final int[] ABILITY_SLOTS = {27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46};
+    private static final int[] ABILITY_SLOTS = {10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43};
 
     public static final class Holder implements InventoryHolder {
         private Inventory inventory;
-        AbilityType ability;   // null = main page
+        AbilityType ability;   // null = main page / ability list
+        boolean list;          // the ability list page
         @Override
         public @NotNull Inventory getInventory() { return inventory; }
     }
@@ -83,25 +96,46 @@ public class ConfigPanel implements Listener {
 
     public void open(Player p) {
         Holder h = new Holder();
-        Inventory inv = Bukkit.createInventory(h, 54, plugin.mm("<dark_aqua><bold>Cosmic Config</bold> <dark_gray>(saves instantly)"));
+        Inventory inv = Bukkit.createInventory(h, 54, plugin.mm("<dark_gray>✦ <aqua><bold>All Settings</bold> <dark_gray>(saves instantly)"));
         h.inventory = inv;
         renderMain(inv);
         p.openInventory(inv);
     }
 
+    private static int groupSlot(int row, int i) { return (row + 1) * 9 + 2 + i; }
+
     private void renderMain(Inventory inv) {
         fill(inv);
-        for (int i = 0; i < GENERAL.size(); i++) inv.setItem(i, settingItem(GENERAL.get(i)));
-        inv.setItem(47, Icons.button(plugin, Material.CLOCK, "<aqua><bold>ALL ability cooldowns",
-                "<gray>Changes every ability at once.", "<gray>(Click an ability below to set just that one.)", "",
-                "<yellow>Left <gray>+5s   <yellow>Right <gray>-5s", "<yellow>Shift-left <gray>reset all to their defaults"));
-        inv.setItem(26, Icons.button(plugin, Material.WRITABLE_BOOK, "<aqua><bold>Abilities below",
-                "<gray>Click an ability to change its cooldown,", "<gray>damage and the effects it gives on cast."));
+        ItemStack row = Icons.button(plugin, Material.GRAY_STAINED_GLASS_PANE, " ");
+        for (int r = 1; r <= 4; r++) for (int c = 1; c <= 8; c++) inv.setItem(r * 9 + c, row);
+        inv.setItem(4, Icons.gui(plugin, "config", "<aqua><bold>All Settings", "<gray>Every change is saved to config.yml", "<gray>and works right away."));
+        for (int r = 0; r < GROUPS.size(); r++) {
+            inv.setItem((r + 1) * 9, Icons.gui(plugin, SECTIONS[r][0], SECTIONS[r][1], SECTIONS[r][2]));
+            List<Setting> g = GROUPS.get(r);
+            for (int i = 0; i < g.size(); i++) inv.setItem(groupSlot(r, i), settingItem(g.get(i)));
+        }
+        inv.setItem(47, Icons.gui(plugin, "cooldowns", "<aqua><bold>Ability Cooldowns & Damage", "<gray>Each ability on its own page.", "", "<yellow>Click to open"));
+        inv.setItem(49, Icons.gui(plugin, "reload", "<green><bold>Reload from file", "<gray>Re-reads config.yml and the AFK shop"));
+        inv.setItem(45, Icons.gui(plugin, "back", "<yellow>Back to admin panel"));
+    }
+
+    /** The ability list: every ability's cooldown at a glance + change them all at once. */
+    public void openAbilities(Player p) {
+        Holder h = new Holder();
+        h.list = true;
+        Inventory inv = Bukkit.createInventory(h, 54, plugin.mm("<dark_gray>✦ <aqua><bold>Ability Cooldowns & Damage"));
+        h.inventory = inv;
+        renderAbilities(inv);
+        p.openInventory(inv);
+    }
+
+    private void renderAbilities(Inventory inv) {
+        fill(inv);
         AbilityType[] types = AbilityType.values();
-        for (int i = 0; i < types.length; i++) {
+        for (int i = 0; i < types.length && i < ABILITY_SLOTS.length; i++) {
             AbilityType t = types[i];
-            ItemStack it = Icons.button(plugin, Material.PAPER, "<bold>" + t.colored(),
-                    "<gray>Cooldown: <white>" + fmt(cooldown(t)) + "s",
+            ItemStack it = Icons.button(plugin, Material.PAPER, "<bold>" + t.colored() + (t.exclusive() ? " <gold>★" : ""),
+                    "<gray>Cooldown: <white>" + mins(cooldown(t)) + (cooldown(t) != t.baseCooldown ? " <dark_gray>(default " + mins(t.baseCooldown) + ")" : ""),
                     "<gray>Damage: <white>x" + fmt(damage(t)),
                     "<gray>On cast: <white>" + plugin.engine().buffText(t),
                     "", "<yellow>Click to edit");
@@ -110,9 +144,12 @@ public class ConfigPanel implements Listener {
             it.setItemMeta(meta);
             inv.setItem(ABILITY_SLOTS[i], it);
         }
-        inv.setItem(49, Icons.button(plugin, Material.REPEATER, "<green><bold>Reload from file",
-                "<gray>Re-reads config.yml and the AFK shop", "<gray>(same as /creload)"));
-        inv.setItem(53, Icons.button(plugin, Material.ARROW, "<yellow>Back to admin panel"));
+        inv.setItem(4, Icons.gui(plugin, "cooldowns", "<aqua><bold>Ability Cooldowns & Damage", "<gray>Click an ability to change its cooldown,",
+                "<gray>damage and the effects it gives on cast.", "<gold>★ <gray>= boss / dragon ability"));
+        inv.setItem(48, Icons.gui(plugin, "minus", "<red><bold>ALL cooldowns -5s", "<yellow>Shift <gray>-30s"));
+        inv.setItem(49, Icons.gui(plugin, "reset", "<aqua><bold>Reset ALL cooldowns", "<gray>Back to each ability's default.", "", "<red>Shift-click to confirm"));
+        inv.setItem(50, Icons.gui(plugin, "plus", "<green><bold>ALL cooldowns +5s", "<yellow>Shift <gray>+30s"));
+        inv.setItem(45, Icons.gui(plugin, "back", "<yellow>Back"));
     }
 
     private ItemStack settingItem(Setting s) {
@@ -130,6 +167,10 @@ public class ConfigPanel implements Listener {
             lore.add("<yellow>Shift-click <gray>for x5 steps");
         }
         lore.add("<dark_gray>" + s.path());
+        if (s.kind() == Kind.BOOL) {
+            boolean v = plugin.getConfig().getBoolean(s.path(), s.def() != 0);
+            return Icons.gui(plugin, v ? "on" : "off", (v ? "<green>" : "<gray>") + s.label(), lore.toArray(new String[0]));
+        }
         return Icons.button(plugin, s.icon(), "<white>" + s.label(), lore.toArray(new String[0]));
     }
 
@@ -171,8 +212,8 @@ public class ConfigPanel implements Listener {
             }
             inv.setItem(37 + i, it);
         }
-        inv.setItem(45, Icons.button(plugin, Material.ARROW, "<yellow>Back"));
-        inv.setItem(49, Icons.button(plugin, Material.LAVA_BUCKET, "<red>Reset this ability to defaults"));
+        inv.setItem(45, Icons.gui(plugin, "back", "<yellow>Back"));
+        inv.setItem(49, Icons.gui(plugin, "reset", "<red>Reset this ability to defaults"));
     }
 
     // ------------------------------------------------------------------ clicks
@@ -192,40 +233,52 @@ public class ConfigPanel implements Listener {
         ClickType click = event.getClick();
         int mult = click.isShiftClick() ? 5 : 1;
 
-        if (h.ability == null && raw == 47) {
-            for (AbilityType t : AbilityType.values()) {
-                double v = click == ClickType.SHIFT_LEFT ? t.baseCooldown : Math.max(1, Math.min(3600, cooldown(t) + (click.isRightClick() ? -5 : 5)));
-                plugin.getConfig().set("ability-settings." + t.id() + ".cooldown", v);
+        if (h.list) {
+            AbilityType[] types = AbilityType.values();
+            for (int i = 0; i < types.length && i < ABILITY_SLOTS.length; i++) {
+                if (raw == ABILITY_SLOTS[i]) { openAbility(p, types[i]); return; }
             }
-            plugin.saveConfig();
-            click(p);
-            renderMain(event.getInventory());
-            p.sendActionBar(plugin.mm("<aqua>All ability cooldowns updated"));
+            if (raw == 48 || raw == 50 || raw == 49) {
+                if (raw == 49 && !click.isShiftClick()) { p.sendActionBar(plugin.mm("<red>Shift-click to reset every cooldown")); return; }
+                double step = (raw == 48 ? -1 : 1) * (click.isShiftClick() ? 30 : 5);
+                for (AbilityType t : types) {
+                    double v = raw == 49 ? t.baseCooldown : Math.max(1, Math.min(3600, cooldown(t) + step));
+                    plugin.getConfig().set("ability-settings." + t.id() + ".cooldown", v);
+                }
+                plugin.saveConfig();
+                click(p);
+                renderAbilities(event.getInventory());
+                p.sendActionBar(plugin.mm("<aqua>All ability cooldowns updated"));
+            } else if (raw == 45) {
+                plugin.adminHub().open(p);
+            }
             return;
         }
         if (h.ability == null) {
-            if (raw < GENERAL.size()) {
-                Setting s = GENERAL.get(raw);
-                if (s.kind() == Kind.BOOL) {
-                    set(s.path(), !plugin.getConfig().getBoolean(s.path(), s.def() != 0));
-                } else {
-                    double v = plugin.getConfig().getDouble(s.path(), s.def());
-                    v += (click.isRightClick() ? -1 : 1) * s.step() * mult;
-                    v = Math.max(s.min(), Math.min(s.max(), Math.round(v * 100) / 100.0));
-                    set(s.path(), s.kind() == Kind.INT ? (Object) (int) Math.round(v) : (Object) v);
+            for (int r = 0; r < GROUPS.size(); r++) {
+                List<Setting> g = GROUPS.get(r);
+                for (int i = 0; i < g.size(); i++) {
+                    if (raw != groupSlot(r, i)) continue;
+                    Setting s = g.get(i);
+                    if (s.kind() == Kind.BOOL) {
+                        set(s.path(), !plugin.getConfig().getBoolean(s.path(), s.def() != 0));
+                    } else {
+                        double v = plugin.getConfig().getDouble(s.path(), s.def());
+                        v += (click.isRightClick() ? -1 : 1) * s.step() * mult;
+                        v = Math.max(s.min(), Math.min(s.max(), Math.round(v * 100) / 100.0));
+                        set(s.path(), s.kind() == Kind.INT ? (Object) (int) Math.round(v) : (Object) v);
+                    }
+                    click(p);
+                    renderMain(event.getInventory());
+                    return;
                 }
-                click(p);
-                renderMain(event.getInventory());
-                return;
             }
-            for (int i = 0; i < ABILITY_SLOTS.length; i++) {
-                if (raw == ABILITY_SLOTS[i]) { openAbility(p, AbilityType.values()[i]); return; }
-            }
-            if (raw == 49) {
+            if (raw == 47) openAbilities(p);
+            else if (raw == 49) {
                 plugin.reloadAll();
                 p.sendMessage(plugin.mm(plugin.prefix() + "<green>Config reloaded from file."));
                 renderMain(event.getInventory());
-            } else if (raw == 53) {
+            } else if (raw == 45) {
                 plugin.adminHub().open(p);
             }
             return;
@@ -242,7 +295,7 @@ public class ConfigPanel implements Listener {
                 double v = Math.max(0, Math.min(10, Math.round((damage(t) + (click.isRightClick() ? -0.1 : 0.1) * mult) * 100) / 100.0));
                 set(base + ".damage-multiplier", v);
             }
-            case 45 -> { open(p); return; }
+            case 45 -> { openAbilities(p); return; }
             case 49 -> {
                 set(base, null);
                 set("cast-buffs." + t.id(), plugin.getConfig().getDefaults() == null ? null
@@ -310,7 +363,7 @@ public class ConfigPanel implements Listener {
     }
 
     private void fill(Inventory inv) {
-        ItemStack pane = Icons.button(plugin, Material.GRAY_STAINED_GLASS_PANE, " ");
+        ItemStack pane = Icons.button(plugin, Material.BLACK_STAINED_GLASS_PANE, " ");
         for (int i = 0; i < inv.getSize(); i++) inv.setItem(i, pane);
     }
 

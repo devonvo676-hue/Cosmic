@@ -9,14 +9,14 @@ final class BossRigData {
     static List<BossRig.Part> parts(BossType type) {
         return switch (type) {
             case VOID_EMPEROR -> List.of(
-                    new BossRig.Part("void_emperor_robe", -1, 0.0000f, 2.4000f, 0.0000f, 1.8000f, BossRig.Anim.SWAY_X, 0.04f, 0.05f, 0f, 0f),
-                    new BossRig.Part("void_emperor_torso", -1, 0.0000f, 2.4000f, 0.0000f, 1.8000f, BossRig.Anim.BOB, 0.1f, 0.06f, 0f, 0f),
+                    new BossRig.Part("void_emperor_robe", -1, 0.0000f, 2.9500f, 0.0000f, 1.8000f, BossRig.Anim.SWAY_X, 0.04f, 0.05f, 0f, 0f),
+                    new BossRig.Part("void_emperor_torso", -1, 0.0000f, 2.9500f, 0.0000f, 1.8000f, BossRig.Anim.BOB, 0.1f, 0.06f, 0f, 0f),
                     new BossRig.Part("void_emperor_head", 1, 0.0000f, 1.4625f, 0.0450f, 1.8000f, BossRig.Anim.SWAY_Y, 0.3f, 0.03f, 0f, 0f),
                     new BossRig.Part("void_emperor_halo", 2, 0.0000f, 0.6188f, -0.6750f, 1.8000f, BossRig.Anim.ROLL, 0f, 0.04f, 0f, 0f),
                     new BossRig.Part("void_emperor_arm_r", 1, -0.9450f, 1.1250f, 0.0000f, 1.8000f, BossRig.Anim.ARM, 0.3f, 0.07f, 0f, -0.18f),
                     new BossRig.Part("void_emperor_arm_l", 1, 0.9450f, 1.1250f, 0.0000f, 1.8000f, BossRig.Anim.ARM, 0.3f, 0.07f, 3.14f, 0.18f));
             case SOLAR_TITAN -> List.of(
-                    new BossRig.Part("solar_titan_hips", -1, 0.0000f, 1.7325f, 0.0000f, 2.2000f, BossRig.Anim.BOB, 0.04f, 0.08f, 0f, 0f),
+                    new BossRig.Part("solar_titan_hips", -1, 0.0000f, 1.9800f, 0.0000f, 2.2000f, BossRig.Anim.BOB, 0.04f, 0.08f, 0f, 0f),
                     new BossRig.Part("solar_titan_leg_r", 0, -0.5500f, -0.2750f, 0.0000f, 2.2000f, BossRig.Anim.WALK, 0.55f, 0f, 0f, 0f),
                     new BossRig.Part("solar_titan_leg_l", 0, 0.5500f, -0.2750f, 0.0000f, 2.2000f, BossRig.Anim.WALK, 0.55f, 0f, 3.14f, 0f),
                     new BossRig.Part("solar_titan_torso", 0, 0.0000f, 0.2750f, -0.1375f, 2.2000f, BossRig.Anim.SWAY_X, 0.04f, 0.05f, 0f, 0f),
@@ -48,7 +48,7 @@ final class BossRigData {
                     new BossRig.Part("nebula_serpent_tail2", 11, 0.0000f, 0.0000f, -0.7837f, 1.9000f, BossRig.Anim.SWAY_Y, 0.24f, 0.06f, 0.8f, 0f),
                     new BossRig.Part("nebula_serpent_tail3", 12, 0.0000f, 0.0000f, -0.7837f, 1.9000f, BossRig.Anim.SWAY_Y, 0.3f, 0.06f, 1.6f, 0f));
             case COSMIC_DESTROYER -> List.of(
-                    new BossRig.Part("cosmic_destroyer_body", -1, 0.0000f, 1.9475f, 0.0000f, 1.9000f, BossRig.Anim.BOB, 0.04f, 0.1f, 0f, 0f),
+                    new BossRig.Part("cosmic_destroyer_body", -1, 0.0000f, 2.1138f, 0.0000f, 1.9000f, BossRig.Anim.BOB, 0.04f, 0.1f, 0f, 0f),
                     new BossRig.Part("cosmic_destroyer_head", 0, 0.0000f, 0.1900f, 1.1162f, 1.9000f, BossRig.Anim.SWAY_Y, 0.15f, 0.04f, 0f, 0f),
                     new BossRig.Part("cosmic_destroyer_jaw", 1, 0.0000f, -0.2850f, 0.1425f, 1.9000f, BossRig.Anim.JAW, 0.3f, 0.06f, 0f, 0f),
                     new BossRig.Part("cosmic_destroyer_leg", 0, -0.6650f, -0.2850f, 0.7719f, 1.9000f, BossRig.Anim.WALK, 0.5f, 0f, 0f, 0f),

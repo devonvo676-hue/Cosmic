@@ -76,7 +76,7 @@ public class MainMenu implements Listener {
                 "<gray>The COSMIC panel on the right", "<gray>of your screen. Click to toggle."));
         inv.setItem(40, Icons.button(plugin, Material.SUNFLOWER, "<gold><bold>Coinflip", "<gray>Cash: <yellow>$" + plugin.economy().format(plugin.economy().balance(p.getUniqueId())), "<gray>Bet against other players <dark_gray>(/cf)"));
         if (BanPistol.isStaff(p) && p.isOp()) inv.setItem(49, Icons.button(plugin, Material.COMMAND_BLOCK, "<dark_red><bold>Admin Panel"));
-        else inv.setItem(49, Icons.button(plugin, Material.BARRIER, "<red>Close"));
+        else inv.setItem(49, Icons.gui(plugin, "close", "<red>Close"));
         p.openInventory(inv);
         p.playSound(p.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.6f, 1.4f);
     }
@@ -117,7 +117,7 @@ public class MainMenu implements Listener {
         ItemStack pane = Icons.button(plugin, Material.BLACK_STAINED_GLASS_PANE, " ");
         for (int i = 0; i < 27; i++) inv.setItem(i, pane);
         for (int i = 0; i < RecipeManager.IDS.size(); i++) inv.setItem(ITEM_SLOTS[i], plugin.recipes().icon(p, RecipeManager.IDS.get(i)));
-        inv.setItem(22, Icons.button(plugin, Material.ARROW, "<yellow>Back"));
+        inv.setItem(22, Icons.gui(plugin, "back", "<yellow>Back"));
         p.openInventory(inv);
     }
 

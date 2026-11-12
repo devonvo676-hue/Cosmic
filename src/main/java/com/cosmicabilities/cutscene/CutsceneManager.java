@@ -168,7 +168,7 @@ public class CutsceneManager implements Listener {
         double radius = plugin.getConfig().getDouble("bosses.cutscene-radius", 64);
         Location ground = boss.getLocation().clone();
         World w = ground.getWorld();
-        double height = plugin.bosses().size(type) * (type == com.cosmicabilities.boss.BossType.SOLAR_TITAN ? 1.6 : 1.4);
+        double height = Math.max(2.0, boss.getHeight());
         boss.setAI(false);
         boss.setInvulnerable(true);
         boss.setGravity(false);

@@ -77,7 +77,7 @@ public class BossFightPanel implements Listener {
                 "<gray>The fight waits until this many players", "<gray>are near the spot, then starts.",
                 "<gray>The boss also can't be hurt with fewer.", "",
                 "<yellow>Left-click <gray>+1   <yellow>Right-click <gray>-1   <yellow>Shift <gray>x5"));
-        inv.setItem(DESPAWN, Icons.button(plugin, Material.BARRIER, "<red>End all boss fights", "<gray>Removes every active boss (no drops)."));
+        inv.setItem(DESPAWN, Icons.gui(plugin, "despawn", "<red>End all boss fights", "<gray>Removes every active boss (no drops)."));
         inv.setItem(CLOSE, Icons.button(plugin, Material.OAK_DOOR, "<gray>Close"));
     }
 

@@ -57,8 +57,8 @@ public class HoldersPanel implements Listener {
         }
         ItemStack pane = Icons.button(plugin, Material.BLACK_STAINED_GLASS_PANE, " ");
         for (int i = 45; i < 54; i++) inv.setItem(i, pane);
-        if (page > 0) inv.setItem(PREV, Icons.button(plugin, Material.ARROW, "<yellow>Previous page"));
-        if (page < pages - 1) inv.setItem(NEXT, Icons.button(plugin, Material.ARROW, "<yellow>Next page"));
+        if (page > 0) inv.setItem(PREV, Icons.gui(plugin, "back", "<yellow>Previous page"));
+        if (page < pages - 1) inv.setItem(NEXT, Icons.gui(plugin, "next", "<yellow>Next page"));
         inv.setItem(49, Icons.button(plugin, Material.BOOK, "<gray>Page " + (page + 1) + "/" + pages,
                 "<dark_gray>Hover a head to see that player's abilities."));
         viewer.openInventory(inv);

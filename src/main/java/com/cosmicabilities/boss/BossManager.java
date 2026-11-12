@@ -100,6 +100,9 @@ public class BossManager {
         setBase(boss, Attribute.FOLLOW_RANGE, cfg(type, "follow-range", 40));
 
         if (boss instanceof org.bukkit.entity.Ageable baby) baby.setAdult();
+        if (boss instanceof org.bukkit.entity.Hoglin hog) { hog.setImmuneToZombification(true); hog.setIsAbleToBeHunted(false); }
+        if (boss instanceof org.bukkit.entity.PiglinAbstract pig) pig.setImmuneToZombification(true);
+        boss.setSilent(true);   // the model makes its own sounds
         boss.customName(plugin.mm(type.colored()));
         boss.setCustomNameVisible(true);
         boss.setRemoveWhenFarAway(false);
@@ -108,6 +111,7 @@ public class BossManager {
         boss.addPotionEffect(new PotionEffect(PotionEffectType.FIRE_RESISTANCE, PotionEffect.INFINITE_DURATION, 0, true, false));
 
         EntityEquipment eq = boss.getEquipment();
+        if (boss instanceof org.bukkit.entity.IronGolem golem) golem.setPlayerCreated(false);
         if (eq != null && type == BossType.VOID_EMPEROR) {
             eq.setItemInMainHand(new ItemStack(Material.NETHERITE_SWORD));
             eq.setHelmet(new ItemStack(Material.NETHERITE_HELMET));
@@ -134,9 +138,14 @@ public class BossManager {
         return plugin.getConfig().getDouble("bosses." + type.id() + "." + key, plugin.getConfig().getDouble("bosses." + key, def));
     }
 
-    /** The boss's size (entity scale), times the global size multiplier. */
+    /** How big the model is: bosses.<boss>.size (1 = normal) times the global size multiplier. */
+    public double modelScale(BossType type) {
+        return Math.max(0.2, Math.min(5, cfg(type, "size", 1.0) * sizeMult()));
+    }
+
+    /** The entity scale - chosen per boss so the hitbox matches the model at any size. */
     public double size(BossType type) {
-        return Math.max(0.3, Math.min(10, cfg(type, "size", type.scale) * sizeMult()));
+        return Math.max(0.1, Math.min(16, type.scale * modelScale(type)));
     }
 
     /** Damage of a boss's special attack (bosses.<boss>.special-damage), times the global damage multiplier. */
@@ -164,6 +173,12 @@ public class BossManager {
         active.put(boss.getUniqueId(), ab);
         plugin.bossRig().attach(boss, type);
         return ab;
+    }
+
+    public int aliveCount() {
+        int n = 0;
+        for (ActiveBoss ab : active.values()) if (ab.entity.isValid() && !ab.entity.isDead()) n++;
+        return n;
     }
 
     public ActiveBoss get(UUID uuid) {
@@ -202,6 +217,17 @@ public class BossManager {
             for (Player p : nearby) if (!ab.bar.getPlayers().contains(p)) ab.bar.addPlayer(p);
 
             ambient(ab);
+            // always go for players (the iron golem / hoglin base mobs would otherwise pick other targets)
+            if (boss instanceof Mob mob && boss.hasAI() && !(mob.getTarget() instanceof Player)) {
+                double fr = cfg(ab.type, "follow-range", 40);
+                Player best = null;
+                double bd = fr * fr;
+                for (Player p : targets(boss, fr)) {
+                    double d = p.getLocation().distanceSquared(boss.getLocation());
+                    if (d < bd) { bd = d; best = p; }
+                }
+                if (best != null) mob.setTarget(best);
+            }
             ab.seconds++;
             int interval = (int) Math.max(2, cfg(ab.type, "special-attack-interval", 6));
             if (!boss.hasAI()) continue;   // still in its entrance cutscene
@@ -209,8 +235,40 @@ public class BossManager {
         }
     }
 
+    private final Map<UUID, Long> lastHurtSound = new HashMap<>();
+
+    /** The base mob is silent (it's hidden under the model), so each boss makes its own sounds. */
+    public void hurtSound(LivingEntity boss, BossType type) {
+        long now = System.currentTimeMillis();
+        if (now - lastHurtSound.getOrDefault(boss.getUniqueId(), 0L) < 400) return;
+        lastHurtSound.put(boss.getUniqueId(), now);
+        Location l = boss.getLocation();
+        float pitch = (float) Math.max(0.4, 1.0 - size(type) * 0.12);
+        Sound s = switch (type) {
+            case VOID_EMPEROR -> Sound.ENTITY_WITHER_SKELETON_HURT;
+            case SOLAR_TITAN -> Sound.ENTITY_IRON_GOLEM_HURT;
+            case FROST_LEVIATHAN -> Sound.ENTITY_ELDER_GUARDIAN_HURT;
+            case NEBULA_SERPENT -> Sound.ENTITY_ENDER_DRAGON_HURT;
+            case COSMIC_DESTROYER -> Sound.ENTITY_RAVAGER_HURT;
+        };
+        l.getWorld().playSound(l, s, 2f, pitch);
+    }
+
+    private void ambientSound(ActiveBoss ab) {
+        Location l = ab.entity.getLocation();
+        Sound s = switch (ab.type) {
+            case VOID_EMPEROR -> Sound.ENTITY_WITHER_AMBIENT;
+            case SOLAR_TITAN -> Sound.ENTITY_BLAZE_AMBIENT;
+            case FROST_LEVIATHAN -> Sound.ENTITY_ELDER_GUARDIAN_AMBIENT;
+            case NEBULA_SERPENT -> Sound.ENTITY_ENDER_DRAGON_AMBIENT;
+            case COSMIC_DESTROYER -> Sound.ENTITY_RAVAGER_AMBIENT;
+        };
+        l.getWorld().playSound(l, s, 1.6f, 0.6f);
+    }
+
     private void ambient(ActiveBoss ab) {
-        Location c = ab.entity.getLocation().add(0, size(ab.type), 0);
+        if (ab.seconds % 5 == 2) ambientSound(ab);
+        Location c = ab.entity.getLocation().add(0, ab.entity.getHeight() * 0.6, 0);
         World w = c.getWorld();
         switch (ab.type) {
             case VOID_EMPEROR -> w.spawnParticle(Particle.PORTAL, c, 30, 0.6, 1, 0.6, 0.5);
@@ -284,16 +342,25 @@ public class BossManager {
                 }
             }
             case NEBULA_SERPENT -> {
-                w.playSound(loc, Sound.ENTITY_EVOKER_CAST_SPELL, 2f, 0.7f);
-                AttributeInstance max = boss.getAttribute(Attribute.MAX_HEALTH);
-                double maxHp = max == null ? boss.getHealth() : max.getValue();
-                boss.setHealth(Math.min(maxHp, boss.getHealth() + maxHp * cfg(ab.type, "heal-percent", 6) / 100.0));
-                w.spawnParticle(Particle.HEART, loc.clone().add(0, 3, 0), 6, 0.6, 0.4, 0.6, 0);
-                for (Player p : players) {
-                    p.addPotionEffect(new PotionEffect(PotionEffectType.NAUSEA, 100, 0));
+                // nebula breath: a cone of cosmic fire in front of the drake
+                w.playSound(loc, Sound.ENTITY_ENDER_DRAGON_SHOOT, 2f, 0.7f);
+                w.playSound(loc, Sound.ENTITY_BLAZE_SHOOT, 2f, 0.5f);
+                Vector fwd = loc.getDirection().setY(0);
+                if (fwd.lengthSquared() < 1e-4) fwd = new Vector(0, 0, 1);
+                fwd.normalize();
+                Location mouth = loc.clone().add(0, boss.getHeight() * 0.7, 0).add(fwd.clone().multiply(boss.getWidth() * 0.9));
+                for (int i = 1; i <= 10; i++) {
+                    Location c = mouth.clone().add(fwd.clone().multiply(i * 0.9)).subtract(0, i * 0.12, 0);
+                    w.spawnParticle(Particle.DUST, c, 12, i * 0.12, i * 0.08, i * 0.12, 0, new Particle.DustOptions(Color.fromRGB(247, 37, 133), 2.2f));
+                    w.spawnParticle(Particle.FLAME, c, 4, i * 0.1, i * 0.06, i * 0.1, 0.01);
+                }
+                for (Player p : targets(boss, cfg(ab.type, "special-radius", 12))) {
+                    Vector to = p.getLocation().toVector().subtract(loc.toVector()).setY(0);
+                    if (to.lengthSquared() > 1 && to.normalize().dot(fwd) < 0.4) continue;
                     p.addPotionEffect(new PotionEffect(PotionEffectType.WEAKNESS, 100, 0));
                     p.addPotionEffect(new PotionEffect(PotionEffectType.POISON, 60, 0));
-                    p.damage(special(ab.type, 4), boss);
+                    p.setFireTicks(60);
+                    p.damage(special(ab.type, 6), boss);
                 }
             }
             case COSMIC_DESTROYER -> {

@@ -78,10 +78,9 @@ public class Sidebar implements Listener, CommandExecutor {
             if (events.length() > 0) events.append(" <dark_gray>| ");
             events.append(e.color).append("<bold>").append(e.title).append("</bold>");
         }
-        String head = plugin.getConfig().getString("tablist.header-line",
-                "<gray>Money SMP with cosmic abilities");
-        Component header = plugin.mm("\n<gradient:#9b5de5:#f15bb5:#00bbf9><bold>✦ C O S M I C ✦</bold></gradient>\n" + head
-                + "\n<dark_gray>▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n");
+        String head = plugin.getConfig().getString("tablist.header-line", "");
+        Component header = plugin.mm("\n<gradient:#9b5de5:#f15bb5:#00bbf9><bold>✦ C O S M I C ✦</bold></gradient>\n"
+                + (head == null || head.isBlank() ? "" : head + "\n") + "<dark_gray>▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n");
         String footer = "\n<dark_gray>▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬"
                 + "\n<#f15bb5>Team: <white>" + (team == null ? "<gray>none <dark_gray>(/team create)" : team.name + " <gray>| Bank <gold>$" + plugin.economy().format(team.bank))
                 + "\n<#f15bb5>Cash: <gold>$" + plugin.economy().format(plugin.economy().balance(p.getUniqueId()))

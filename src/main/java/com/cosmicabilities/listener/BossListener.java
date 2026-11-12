@@ -48,6 +48,13 @@ public class BossListener implements Listener {
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onBossHurtSound(org.bukkit.event.entity.EntityDamageEvent event) {
+        if (!(event.getEntity() instanceof LivingEntity boss)) return;
+        com.cosmicabilities.boss.BossType type = plugin.bosses().typeOf(boss);
+        if (type != null) plugin.bosses().hurtSound(boss, type);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onBossDamaged(EntityDamageByEntityEvent event) {
         if (!(event.getEntity() instanceof LivingEntity boss)) return;
         if (plugin.bosses().typeOf(boss) == null) return;

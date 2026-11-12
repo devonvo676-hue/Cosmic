@@ -1,15 +1,25 @@
-# Cosmic Abilities 2.8 (Paper 1.21.11)
+# Cosmic Abilities 2.9 (Paper 1.21.11)
 
 ## Build the jar
 Upload this whole folder (including `.github`) to your GitHub repo. GitHub builds it automatically:
 **Actions** tab -> latest run -> **Artifacts** -> **CosmicAbilities** (jar + resource pack).
-Or on a PC with Java 21: `gradlew.bat build` -> `build/libs/CosmicAbilities-2.8.0.jar`.
+Or on a PC with Java 21: `gradlew.bat build` -> `build/libs/CosmicAbilities-2.9.0.jar`.
 
 ## Install
-1. Delete the old CosmicAbilities jar from `plugins/`, add `CosmicAbilities-2.8.0.jar`, restart.
+1. Delete the old CosmicAbilities jar from `plugins/`, add `CosmicAbilities-2.9.0.jar`, restart.
    Your existing config is kept and the new settings are added to it automatically. Player data carries over.
 2. Upload `CosmicAbilities-ResourcePack.zip` (direct download link, e.g. mc-packs.net), put the link and
    its SHA-1 in `config.yml` under `resource-pack`, then `/cosmic admin reload` and rejoin.
+
+## New in 2.9
+- Cleaner admin panel and settings with custom icons, grouped into sections (Game / Players / Economy / Server).
+- **Dragon's Awakening**: a real, glowing spectral Ender Dragon charges wherever you look (any angle), 10 hearts per bite,
+  and leaves damaging dragon breath behind it.
+- **Apocalypse** and **Serpent's Wrath** rebuilt: a modelled meteor crashing diagonally into a burning sigil, and a
+  serpent made from the drake's own head/neck models.
+- The Nebula Serpent is now the **Nebula Drake** (no more witch potions; its special is a breath attack).
+- Boss hitboxes match their models (size is now a multiplier, 1 = normal). Rounder models without flickering faces.
+- Tab list slogan removed (`tablist.header-line`).
 
 ## New in 2.8
 - Boss and Ender Dragon abilities go to **whoever did the most damage** (straight into their inventory).

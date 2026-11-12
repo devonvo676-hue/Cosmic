@@ -45,6 +45,16 @@ public final class Icons {
         return item;
     }
 
+    /** A button drawn with one of the pack's custom GUI icons (cosmic:gui_<icon>). */
+    public static ItemStack gui(CosmicAbilitiesPlugin plugin, String icon, String name, String... lore) {
+        ItemStack item = button(plugin, Material.PAPER, name, lore);
+        ItemMeta meta = item.getItemMeta();
+        meta.setItemModel(new org.bukkit.NamespacedKey("cosmic", "gui_" + icon));
+        meta.addItemFlags(org.bukkit.inventory.ItemFlag.values());
+        item.setItemMeta(meta);
+        return item;
+    }
+
     public static ItemStack button(CosmicAbilitiesPlugin plugin, Material material, String name, String... lore) {
         ItemStack item = new ItemStack(material);
         ItemMeta meta = item.getItemMeta();

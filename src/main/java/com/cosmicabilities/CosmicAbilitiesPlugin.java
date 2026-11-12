@@ -121,6 +121,13 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
             for (String k : new String[]{"health-multiplier", "damage-multiplier", "size-multiplier"}) getConfig().set("bosses." + k, 1.0);
             getConfig().set("migrations.boss-values-28", true);
         }
+        // 2.9: boss size is now a multiplier (1 = normal, hitbox follows the model); drop the old tab list slogan
+        if (!getConfig().getBoolean("migrations.boss-size-29", false)) {
+            for (com.cosmicabilities.boss.BossType t : com.cosmicabilities.boss.BossType.values()) getConfig().set("bosses." + t.id() + ".size", 1.0);
+            getConfig().set("bosses.size-multiplier", 1.0);
+            if ("<gray>Money SMP with cosmic abilities".equals(getConfig().getString("tablist.header-line"))) getConfig().set("tablist.header-line", "");
+            getConfig().set("migrations.boss-size-29", true);
+        }
         // 2.6: no more daily login cash - players earn cash from kills instead
         if (!getConfig().getBoolean("migrations.no-daily-cash", false)) {
             getConfig().set("economy.daily-reward", 0);

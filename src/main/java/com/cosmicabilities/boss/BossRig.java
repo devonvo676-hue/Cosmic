@@ -69,7 +69,7 @@ public class BossRig {
         EntityEquipment eq = boss.getEquipment();
         if (eq != null) eq.clear();
         Rig rig = new Rig(boss, type, design(type));
-        rig.size = (float) plugin.bosses().sizeMult();
+        rig.size = (float) plugin.bosses().modelScale(type);
         Location at = boss.getLocation();
         at.setYaw(0);
         at.setPitch(0);
