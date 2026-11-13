@@ -61,7 +61,7 @@ public class ConfigPanel implements Listener {
                     new Setting("death.lose-upgrade", "Lose upgrade on death", Kind.BOOL, 0, 0, 0, Material.SKELETON_SKULL, 1),
                     new Setting("reroll.craftable", "Cosmic Reroll craftable", Kind.BOOL, 0, 0, 0, Material.ECHO_SHARD, 1),
                     new Setting("bosses.min-players-to-damage", "Players needed for bosses", Kind.INT, 1, 1, 50, Material.WITHER_SKELETON_SKULL, 3),
-                    new Setting("ability-drops.dragon-chance", "Dragon gives Dragon's Awakening", Kind.DOUBLE, 0.1, 0, 1, Material.DRAGON_EGG, 1),
+                    new Setting("ability-drops.from-dragon", "Ender Dragon drops Dragon's Awakening", Kind.BOOL, 0, 0, 0, Material.DRAGON_EGG, 1),
                     new Setting("cosmic-tools.max-tree-blocks", "Cosmic Axe max logs", Kind.INT, 25, 10, 2000, Material.OAK_LOG, 200)),
             List.of(new Setting("afk.minutes-per-token", "Minutes per AFK token", Kind.INT, 5, 5, 600, Material.COMPASS, 30),
                     new Setting("afk.invulnerable", "AFK players protected", Kind.BOOL, 0, 0, 0, Material.TOTEM_OF_UNDYING, 1),

@@ -179,6 +179,7 @@ public class AbilityOrbs implements Listener {
     public void onDragonDeath(org.bukkit.event.entity.EntityDeathEvent event) {
         if (!(event.getEntity() instanceof org.bukkit.entity.EnderDragon dragon)) return;
         java.util.Map<UUID, Double> dmg = dragonDamage.remove(dragon.getUniqueId());
+        if (!plugin.getConfig().getBoolean("ability-drops.from-dragon", true)) return;
         if (ThreadLocalRandom.current().nextDouble() >= plugin.getConfig().getDouble("ability-drops.dragon-chance", 1.0)) return;
         UUID top = dmg == null ? null : dmg.entrySet().stream().max(java.util.Map.Entry.comparingByValue()).map(java.util.Map.Entry::getKey).orElse(null);
         if (top == null && dragon.getKiller() != null) top = dragon.getKiller().getUniqueId();
