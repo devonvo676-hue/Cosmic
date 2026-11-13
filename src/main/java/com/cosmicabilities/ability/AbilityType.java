@@ -70,7 +70,12 @@ public enum AbilityType {
             "Venom Nebula", "The final burst poisons enemies."),
     APOCALYPSE("Apocalypse", "Boss - Cosmic Destroyer", "#00e5ff", CosmicMaterial.ASTRAL_FRAGMENT, 50,
             "Marks a large circle on the ground. Cosmic energy gathers above it and after 2 seconds a gigantic celestial object crashes down, damaging everyone inside. (7 hearts)",
-            "Extinction", "Leaves a burning crater for a few seconds.");
+            "Extinction", "Leaves a burning crater for a few seconds."),
+
+    // ---- owner only (owner-items.players) ----
+    POOP("Poop", "Owner only", "#7a4a1e", CosmicMaterial.ASTRAL_FRAGMENT, 20,
+            "A fat poop meteor crashes down on the player you aim at and explodes brown everywhere. They can't see through the brown and are stuck in the poop.",
+            "Extra Chunky", "Bigger splash and they're stuck for longer.");
 
     /** Total hearts the boss / dragon abilities do by default (0 = normal ability: damage varies per hit). */
     public double defaultHearts() {
@@ -81,17 +86,19 @@ public enum AbilityType {
             case SHATTERFALL -> 6;
             case SERPENTS_WRATH -> 5;
             case APOCALYPSE -> 7;
+            case POOP -> 4;
             default -> 0;
         };
     }
 
-    public enum Source { NORMAL, DRAGON, BOSS }
+    public enum Source { NORMAL, DRAGON, BOSS, OWNER }
 
     /** Where this ability comes from: NORMAL abilities can be rolled; the rest only drop from the dragon / a boss. */
     public Source source() {
         return switch (this) {
             case DRAGON_AWAKENING -> Source.DRAGON;
             case RIFTBREAKER, STARPIERCER, SHATTERFALL, SERPENTS_WRATH, APOCALYPSE -> Source.BOSS;
+            case POOP -> Source.OWNER;
             default -> Source.NORMAL;
         };
     }

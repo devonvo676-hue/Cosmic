@@ -243,7 +243,7 @@ public class Teams implements Listener, CommandExecutor, TabCompleter {
         AbilityType fixed = AbilityType.fromId(id);
         if (fixed != null) return fixed;
         List<AbilityType> rare = new ArrayList<>();
-        for (AbilityType t : AbilityType.values()) if (t.exclusive()) rare.add(t);
+        for (AbilityType t : AbilityType.values()) if (t.source() == AbilityType.Source.BOSS || t.source() == AbilityType.Source.DRAGON) rare.add(t);
         return rare.get(ThreadLocalRandom.current().nextInt(rare.size()));
     }
 

@@ -28,7 +28,7 @@ import java.util.List;
 public class AdminPanel implements Listener {
     private static final int[] BOSS_SLOTS = {29, 30, 31, 32, 33};
     /** every ability (rows 1-2 plus the ends of row 3) */
-    private static final int[] ABILITY_SLOTS = {9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 35};
+    private static final int[] ABILITY_SLOTS = {9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 35, 36};
     private static final int[] MATERIAL_SLOTS = {38, 39, 40, 41, 42};
     private static final int INFO = 4, PISTOL = 45, TAG_ADMIN = 46, TAG_OWNER = 47, TAG_OFF = 48,
             RESET_CD = 50, MAX_TIER = 51, CLEAR_SLOT2 = 52, CLOSE = 53;
@@ -63,7 +63,7 @@ public class AdminPanel implements Listener {
                 "<gray>Slot 1: " + slotText(d, 1), "<gray>Slot 2: " + slotText(d, 2)));
 
         AbilityType[] types = AbilityType.values();
-        for (int i = 0; i < types.length; i++) {
+        for (int i = 0; i < types.length && i < ABILITY_SLOTS.length; i++) {
             inv.setItem(ABILITY_SLOTS[i], Icons.ability(plugin, types[i], List.of(
                     "<yellow>Left-click <gray>equip in slot 1",
                     "<yellow>Right-click <gray>equip in slot 2",

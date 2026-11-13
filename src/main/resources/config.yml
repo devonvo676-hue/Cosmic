@@ -44,6 +44,7 @@ ability-settings:
   shatterfall: {cooldown: 40, damage-multiplier: 1.0}
   serpents_wrath: {cooldown: 40, damage-multiplier: 1.0}
   apocalypse: {cooldown: 50, damage-multiplier: 1.0}
+  poop: {cooldown: 20, damage-multiplier: 1.0}
 
 # Short combat buff given every time an ability is cast (edit in game with /cconfig).
 # Format: effect:level:seconds  (strength:1:6 = Strength I for 6 seconds). Use [] for none.

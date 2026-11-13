@@ -61,6 +61,7 @@ public class AbilityEngine {
         abilities.put(AbilityType.SHATTERFALL, new ShatterfallAbility(plugin));
         abilities.put(AbilityType.SERPENTS_WRATH, new SerpentsWrathAbility(plugin));
         abilities.put(AbilityType.APOCALYPSE, new ApocalypseAbility(plugin));
+        abilities.put(AbilityType.POOP, new PoopAbility(plugin));
     }
 
     /** The single upgrade cuts the cooldown by upgrades.cooldown-reduction (default 30%). */
@@ -93,6 +94,10 @@ public class AbilityEngine {
         }
         if (plugin.status().isFrozen(player.getUniqueId())) {
             notify(player, plugin.mm("<aqua>You are frozen solid!"));
+            return;
+        }
+        if (s.ability().source() == AbilityType.Source.OWNER && !com.cosmicabilities.admin.Owner.allowed(plugin, player)) {
+            notify(player, plugin.mm("<red>Only the owner can use " + s.ability().colored() + "<red>."));
             return;
         }
         double remaining = remainingCooldown(player.getUniqueId(), slot);

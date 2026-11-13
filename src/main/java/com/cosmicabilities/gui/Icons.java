@@ -34,6 +34,8 @@ public final class Icons {
         lore.add(plugin.mm("<!italic><aqua>Upgrade: <white>" + pct + "% shorter cooldown <dark_gray>(Upgrade Token)"));
         if (type.source() == AbilityType.Source.DRAGON) {
             lore.add(plugin.mm("<!italic><gradient:#c77dff:#ff5ef7><bold>★ LEGENDARY</bold></gradient> <gray>- only dropped by the <light_purple>Ender Dragon"));
+        } else if (type.source() == AbilityType.Source.OWNER) {
+            lore.add(plugin.mm("<!italic><#7a4a1e><bold>★ OWNER ONLY"));
         } else if (type.source() == AbilityType.Source.BOSS) {
             com.cosmicabilities.boss.BossType b = com.cosmicabilities.boss.BossType.fromId(type.bossId());
             lore.add(plugin.mm("<!italic><gold><bold>★ BOSS ABILITY</bold> <gray>- only dropped by " + (b == null ? "a boss" : b.colored())));
