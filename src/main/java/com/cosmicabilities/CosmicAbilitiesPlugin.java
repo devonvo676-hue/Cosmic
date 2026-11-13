@@ -77,6 +77,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
     private com.cosmicabilities.admin.Suits suits;
     private com.cosmicabilities.admin.FighterJet jet;
     private com.cosmicabilities.admin.ArmorBay armorBay;
+    private com.cosmicabilities.gui.Minimap minimap;
     private com.cosmicabilities.command.SpawnCommands spawnCommands;
 
     @Override
@@ -143,6 +144,12 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
             getConfig().set("owner-items", null);   // v2tou is built in now
             getConfig().set("migrations.v30", true);
         }
+        // 3.4: time freeze became slow motion with no recharge after it ends
+        if (!getConfig().getBoolean("migrations.v34", false)) {
+            getConfig().set("ability-settings.lightspeed.freeze-cooldown-seconds", 0);
+            getConfig().set("ability-settings.lightspeed.slowmo-speed", 0.2);
+            getConfig().set("migrations.v34", true);
+        }
         // 2.6: no more daily login cash - players earn cash from kills instead
         if (!getConfig().getBoolean("migrations.no-daily-cash", false)) {
             getConfig().set("economy.daily-reward", 0);
@@ -164,6 +171,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
         suits = new com.cosmicabilities.admin.Suits(this);
         jet = new com.cosmicabilities.admin.FighterJet(this);
         armorBay = new com.cosmicabilities.admin.ArmorBay(this);
+        minimap = new com.cosmicabilities.gui.Minimap(this);
         spawnCommands = new com.cosmicabilities.command.SpawnCommands(this);
         status = new StatusManager(this);
         combat = new CombatTracker();
@@ -200,7 +208,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
 
         for (Listener l : new Listener[]{playerListener, new BossListener(this), new StatusListener(this), combat,
                 new KeybindListener(this), bossFightPanel, holdersPanel, keybindPanel, orbs, configPanel,
-                banPistol, adminPanel, abilitiesPanel, cutscenes, afk, afkShop, tools, recipes, roll, adminHub, menu, items, economy, coinflip, discord, ranks, sidebar, auctions, teams, rpg, cocaine, supplyDrops, killLog, configBrowser, suits, jet, armorBay}) {
+                banPistol, adminPanel, abilitiesPanel, cutscenes, afk, afkShop, tools, recipes, roll, adminHub, menu, items, economy, coinflip, discord, ranks, sidebar, auctions, teams, rpg, cocaine, supplyDrops, killLog, configBrowser, suits, jet, armorBay, minimap}) {
             getServer().getPluginManager().registerEvents(l, this);
         }
 
@@ -220,6 +228,8 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
             PluginCommand pc = getCommand(c);
             if (pc != null) pc.setExecutor(spawnCommands);
         }
+        PluginCommand mmc = getCommand("minimap");
+        if (mmc != null) mmc.setExecutor(minimap);
         PluginCommand klc = getCommand("killlog");
         if (klc != null) klc.setExecutor(killLog);
         PluginCommand supplyCmd = getCommand("supplydrop");
@@ -355,6 +365,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
     public com.cosmicabilities.admin.Suits suits() { return suits; }
     public com.cosmicabilities.admin.FighterJet jet() { return jet; }
     public com.cosmicabilities.admin.ArmorBay armorBay() { return armorBay; }
+    public com.cosmicabilities.gui.Minimap minimap() { return minimap; }
     public com.cosmicabilities.command.SpawnCommands spawnCommands() { return spawnCommands; }
 
     private void bind(String name, org.bukkit.command.CommandExecutor exec, org.bukkit.command.TabCompleter tab) {

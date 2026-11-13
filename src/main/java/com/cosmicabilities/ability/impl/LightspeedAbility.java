@@ -39,23 +39,20 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * v2tou only. First cast: lightning strikes and he suits up in the Lightspeed suit, then runs at incredible speed
- * with a lightning trail. Cast again while suited: time freezes for everyone else (the world stops, other players
- * can't move or act) while he keeps moving.
+ * with a lightning trail. Cast again while suited: time slows to a crawl for everything else - players, mobs,
+ * arrows, bullets and rockets all move in slow motion - while he keeps full speed.
  */
 public class LightspeedAbility extends CosmicAbility implements Listener {
     public static final String SUIT = "lightspeed";
-    private final NamespacedKey speedKey, stepKey, frozenKey, frozenJumpKey;
+    private final NamespacedKey speedKey, stepKey, frozenKey;
     private final Map<UUID, Long> runningUntil = new ConcurrentHashMap<>();
-    private final Set<UUID> frozenPlayers = ConcurrentHashMap.newKeySet();
-    private long lastFreeze;
     private boolean timeFrozen;
 
     public LightspeedAbility(CosmicAbilitiesPlugin plugin) {
         super(plugin, AbilityType.LIGHTSPEED);
         speedKey = new NamespacedKey(plugin, "lightspeed_speed");
         stepKey = new NamespacedKey(plugin, "lightspeed_step");
-        frozenKey = new NamespacedKey(plugin, "timefreeze_still");
-        frozenJumpKey = new NamespacedKey(plugin, "timefreeze_nojump");
+        frozenKey = new NamespacedKey(plugin, "timefreeze_slowmo");
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
     }
 
@@ -97,7 +94,7 @@ public class LightspeedAbility extends CosmicAbility implements Listener {
             if (t == 31) {
                 w.strikeLightningEffect(base);
                 Fx.safe(w, Particle.FLASH, base.clone().add(0, 1, 0), 1, 0, 0, 0, 0, Color.WHITE);
-                p.showTitle(Title.title(plugin.mm("<gradient:#ffe14d:#ffffff><bold>LIGHTSPEED"), plugin.mm("<gray>cast again to freeze time"),
+                p.showTitle(Title.title(plugin.mm("<gradient:#ffe14d:#ffffff><bold>LIGHTSPEED"), plugin.mm("<gray>cast again to slow time"),
                         Title.Times.times(Duration.ofMillis(100), Duration.ofMillis(1500), Duration.ofMillis(400))));
                 startRunning(p, over, seconds);
             }
@@ -160,82 +157,132 @@ public class LightspeedAbility extends CosmicAbility implements Listener {
         if (op != null) inst.addModifier(new AttributeModifier(key, amount, op, EquipmentSlotGroup.ANY));
     }
 
-    // ------------------------------------------------------------------ freeze time
+    // ------------------------------------------------------------------ slow motion ("time freeze")
+
+    /** 1 normally; the slow-motion factor (e.g. 0.2) while time is slowed. Timed things like bullets use it. */
+    private static volatile double timeScale = 1;
+    public static double timeScale() { return timeScale; }
+
+    private UUID slowCaster;
+    private long freezeReadyAt;
+    private final Set<UUID> slowedLiving = ConcurrentHashMap.newKeySet();
+    private final Map<UUID, Boolean> slowedProjectiles = new ConcurrentHashMap<>();   // id -> had gravity
+    private static final double SLOW_RADIUS = 160;
 
     private boolean freezeTime(Player p, AbilitySlot slot) {
         long now = System.currentTimeMillis();
-        double cd = plugin.getConfig().getDouble(cfg("freeze-cooldown-seconds"), 30);
-        if (timeFrozen || now - lastFreeze < cd * 1000) {
-            plugin.engine().notify(p, plugin.mm("<#ffe14d>Time freeze recharging: <white>"
-                    + Math.max(0, Math.round(cd - (now - lastFreeze) / 1000.0)) + "s"));
+        if (timeFrozen || now < freezeReadyAt) {
+            plugin.engine().notify(p, plugin.mm(timeFrozen ? "<#9bd7ff>Time is already slowed"
+                    : "<#ffe14d>Time slow recharging: <white>" + Math.max(1, Math.round((freezeReadyAt - now) / 1000.0)) + "s"));
             return false;
         }
-        lastFreeze = now;
+        double f = Math.max(0.05, Math.min(0.9, plugin.getConfig().getDouble(cfg("slowmo-speed"), 0.2)));
         timeFrozen = true;
+        timeScale = f;
+        slowCaster = p.getUniqueId();
         int seconds = (int) plugin.getConfig().getDouble(cfg("freeze-seconds"), 8) + (bonus(slot) ? 4 : 0);
-        World w = p.getWorld();
-        Bukkit.getServerTickManager().setFrozen(true);
         for (Player o : Bukkit.getOnlinePlayers()) {
             o.playSound(o.getLocation(), Sound.BLOCK_BEACON_DEACTIVATE, 1.5f, 0.5f);
             o.playSound(o.getLocation(), Sound.BLOCK_BELL_RESONATE, 1f, 0.5f);
-            if (o.equals(p)) continue;
-            frozenPlayers.add(o.getUniqueId());
-            modifier(o, Attribute.MOVEMENT_SPEED, frozenKey, -1, AttributeModifier.Operation.MULTIPLY_SCALAR_1);
-            modifier(o, Attribute.JUMP_STRENGTH, frozenJumpKey, -1, AttributeModifier.Operation.MULTIPLY_SCALAR_1);
-            o.setVelocity(new Vector());
         }
-        p.showTitle(Title.title(plugin.mm("<#9bd7ff><bold>TIME FROZEN"), plugin.mm("<gray>" + seconds + " seconds"),
+        slowNearby(p, f);
+        p.showTitle(Title.title(plugin.mm("<#9bd7ff><bold>TIME SLOWED"), plugin.mm("<gray>" + seconds + " seconds"),
                 Title.Times.times(Duration.ofMillis(100), Duration.ofMillis(1200), Duration.ofMillis(300))));
         Fx.wave(p.getLocation().add(0, 0.2, 0), "ring_cyan", 1f, 60f, 20);
         Fx.wave(p.getLocation().add(0, 1.2, 0), "ring_white", 1f, 40f, 14);
         every(seconds * 20, t -> {
-            // frozen-time shimmer around everyone else
-            for (UUID id : frozenPlayers) {
-                Player o = Bukkit.getPlayer(id);
-                if (o != null && t % 10 == 0) o.getWorld().spawnParticle(Particle.DUST, o.getLocation().add(0, 1, 0), 8, 0.4, 0.6, 0.4, 0,
+            Player c = Bukkit.getPlayer(slowCaster);
+            if (c == null || !timeFrozen) { unfreeze(); return false; }
+            slowProjectiles(c, f);
+            if (t % 10 == 0) slowNearby(c, f);
+            if (t % 10 == 0) for (UUID id : slowedLiving) {
+                org.bukkit.entity.Entity e = Bukkit.getEntity(id);
+                if (e instanceof Player o) o.getWorld().spawnParticle(Particle.DUST, o.getLocation().add(0, 1, 0), 6, 0.4, 0.6, 0.4, 0,
                         new Particle.DustOptions(Color.fromRGB(0x9bd7ff), 1f));
             }
-            if (t % 20 == 0) for (Player o : Bukkit.getOnlinePlayers()) o.playSound(o.getLocation(), Sound.BLOCK_NOTE_BLOCK_HAT, 0.5f, 0.5f);
+            if (t % 30 == 0) for (Player o : Bukkit.getOnlinePlayers()) {
+                o.playSound(o.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASEDRUM, 0.6f, 0.5f);   // slow heartbeat
+                o.playSound(o.getLocation(), Sound.BLOCK_NOTE_BLOCK_HAT, 0.4f, 0.5f);
+            }
             if (t >= seconds * 20 - 1) { unfreeze(); return false; }
             return true;
         });
         return true;
     }
 
+    private static final AttributeSpec[] SLOW_ATTRS = {
+            new AttributeSpec(Attribute.MOVEMENT_SPEED, 1), new AttributeSpec(Attribute.FLYING_SPEED, 1),
+            new AttributeSpec(Attribute.JUMP_STRENGTH, 1), new AttributeSpec(Attribute.GRAVITY, 2),
+            new AttributeSpec(Attribute.ATTACK_SPEED, 1), new AttributeSpec(Attribute.BLOCK_BREAK_SPEED, 1)};
+    /** power: velocities scale by f, accelerations (gravity) by f squared, so jumps keep their height but play slowly. */
+    private record AttributeSpec(Attribute attr, int power) {}
+
+    private void slowNearby(Player caster, double f) {
+        for (org.bukkit.entity.LivingEntity e : caster.getWorld().getLivingEntities()) {
+            if (e.equals(caster) || e instanceof org.bukkit.entity.ArmorStand || slowedLiving.contains(e.getUniqueId())) continue;
+            if (e.getLocation().distanceSquared(caster.getLocation()) > SLOW_RADIUS * SLOW_RADIUS) continue;
+            slowedLiving.add(e.getUniqueId());
+            for (AttributeSpec s : SLOW_ATTRS) {
+                AttributeInstance inst = e.getAttribute(s.attr());
+                if (inst == null) continue;
+                AttributeModifier old = inst.getModifier(frozenKey);
+                if (old != null) inst.removeModifier(old);
+                // transient: never saved, so a mob unloading mid-effect can't stay slow forever
+                inst.addTransientModifier(new AttributeModifier(frozenKey, Math.pow(f, s.power()) - 1,
+                        AttributeModifier.Operation.MULTIPLY_SCALAR_1, EquipmentSlotGroup.ANY));
+            }
+            e.setVelocity(e.getVelocity().multiply(f));
+        }
+    }
+
+    private void slowProjectiles(Player caster, double f) {
+        double drag = Math.pow(0.99, f - 1);   // the game still applies full drag every tick - give most of it back
+        for (org.bukkit.entity.Projectile pr : caster.getWorld().getEntitiesByClass(org.bukkit.entity.Projectile.class)) {
+            if (pr instanceof org.bukkit.entity.Fireball) continue;
+            UUID id = pr.getUniqueId();
+            if (!slowedProjectiles.containsKey(id)) {
+                if (pr.getLocation().distanceSquared(caster.getLocation()) > SLOW_RADIUS * SLOW_RADIUS) continue;
+                if (pr instanceof org.bukkit.entity.AbstractArrow a && a.isInBlock()) continue;
+                slowedProjectiles.put(id, pr.hasGravity());
+                pr.setGravity(false);
+                pr.setVelocity(pr.getVelocity().multiply(f));
+                continue;
+            }
+            if (pr instanceof org.bukkit.entity.AbstractArrow a && a.isInBlock()) continue;
+            Vector v = pr.getVelocity().multiply(drag);
+            if (slowedProjectiles.get(id)) v.setY(v.getY() - gravityOf(pr) * f * f);
+            pr.setVelocity(v);
+        }
+        slowedProjectiles.keySet().removeIf(id -> { org.bukkit.entity.Entity e = Bukkit.getEntity(id); return e == null || !e.isValid(); });
+    }
+
+    private static double gravityOf(org.bukkit.entity.Projectile pr) {
+        return pr instanceof org.bukkit.entity.AbstractArrow ? 0.05 : 0.03;
+    }
+
     public void unfreeze() {
         if (!timeFrozen) return;
+        double f = timeScale;
         timeFrozen = false;
-        Bukkit.getServerTickManager().setFrozen(false);
-        for (UUID id : frozenPlayers) {
-            Player o = Bukkit.getPlayer(id);
-            if (o == null) continue;
-            modifier(o, Attribute.MOVEMENT_SPEED, frozenKey, 0, null);
-            modifier(o, Attribute.JUMP_STRENGTH, frozenJumpKey, 0, null);
-            o.playSound(o.getLocation(), Sound.BLOCK_BEACON_ACTIVATE, 1f, 1.6f);
+        timeScale = 1;
+        slowCaster = null;
+        freezeReadyAt = System.currentTimeMillis() + (long) (plugin.getConfig().getDouble(cfg("freeze-cooldown-seconds"), 0) * 1000);
+        for (UUID id : slowedLiving) {
+            if (!(Bukkit.getEntity(id) instanceof org.bukkit.entity.LivingEntity e)) continue;
+            for (AttributeSpec s : SLOW_ATTRS) {
+                AttributeInstance inst = e.getAttribute(s.attr());
+                AttributeModifier old = inst == null ? null : inst.getModifier(frozenKey);
+                if (old != null) inst.removeModifier(old);
+            }
+            if (e instanceof Player o) o.playSound(o.getLocation(), Sound.BLOCK_BEACON_ACTIVATE, 1f, 1.6f);
         }
-        frozenPlayers.clear();
-    }
-
-    @EventHandler(priority = EventPriority.HIGHEST)
-    public void onFrozenMove(PlayerMoveEvent event) {
-        if (!frozenPlayers.contains(event.getPlayer().getUniqueId())) return;
-        Location from = event.getFrom(), to = event.getTo();
-        if (from.getX() != to.getX() || from.getY() != to.getY() || from.getZ() != to.getZ()) {
-            Location back = from.clone();
-            back.setYaw(to.getYaw());
-            back.setPitch(to.getPitch());
-            event.setTo(back);
+        slowedLiving.clear();
+        for (Map.Entry<UUID, Boolean> en : slowedProjectiles.entrySet()) {
+            if (!(Bukkit.getEntity(en.getKey()) instanceof org.bukkit.entity.Projectile pr) || !pr.isValid()) continue;
+            pr.setGravity(en.getValue());
+            pr.setVelocity(pr.getVelocity().multiply(1 / f));
         }
-    }
-
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void onFrozenAct(PlayerInteractEvent event) {
-        if (frozenPlayers.contains(event.getPlayer().getUniqueId())) event.setCancelled(true);
-    }
-
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void onFrozenHit(EntityDamageByEntityEvent event) {
-        if (frozenPlayers.contains(event.getDamager().getUniqueId())) event.setCancelled(true);
+        slowedProjectiles.clear();
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -247,14 +294,16 @@ public class LightspeedAbility extends CosmicAbility implements Listener {
     public void onQuit(PlayerQuitEvent event) {
         Player p = event.getPlayer();
         stopRunning(p);
-        if (frozenPlayers.remove(p.getUniqueId())) {
-            modifier(p, Attribute.MOVEMENT_SPEED, frozenKey, 0, null);
-            modifier(p, Attribute.JUMP_STRENGTH, frozenJumpKey, 0, null);
+        if (slowedLiving.remove(p.getUniqueId())) for (AttributeSpec s : SLOW_ATTRS) {
+            AttributeInstance inst = p.getAttribute(s.attr());
+            AttributeModifier old = inst == null ? null : inst.getModifier(frozenKey);
+            if (old != null) inst.removeModifier(old);
         }
     }
 
     public void shutdown() {
         unfreeze();
+        if (Bukkit.getServerTickManager().isFrozen()) Bukkit.getServerTickManager().setFrozen(false);
         for (UUID id : runningUntil.keySet().toArray(new UUID[0])) {
             Player p = Bukkit.getPlayer(id);
             if (p != null) stopRunning(p);

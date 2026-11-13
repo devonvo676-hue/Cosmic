@@ -108,6 +108,9 @@ commands:
   endseason:
     description: End the season now (admins)
     permission: cosmicabilities.admin
+  minimap:
+    description: v2tou's world map
+    usage: /minimap
   killlog:
     description: See who a player has been killing (admins)
     usage: /killlog <player>

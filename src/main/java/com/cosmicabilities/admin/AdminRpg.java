@@ -150,15 +150,17 @@ public class AdminRpg implements Listener {
         p.setVelocity(p.getVelocity().subtract(dir.clone().multiply(0.35)));
         new BukkitRunnable() {
             int t = 0;
+            double age = 0;   // advances slower while Lightspeed has time slowed
             @Override
             public void run() {
                 t++;
+                age += com.cosmicabilities.ability.impl.LightspeedAbility.timeScale();
                 if (!carrier.isValid()) { if (rocket.isValid()) rocket.remove(); cancel(); return; }
                 Location at = carrier.getLocation();
                 w.spawnParticle(Particle.FLAME, at, 3, 0.05, 0.05, 0.05, 0.02);
                 w.spawnParticle(Particle.CAMPFIRE_COSY_SMOKE, at, 2, 0.05, 0.05, 0.05, 0.01);
                 if (t % 4 == 0) w.playSound(at, Sound.ENTITY_FIREWORK_ROCKET_BLAST_FAR, 0.6f, 0.6f);
-                if (t > 120) {   // out of range: explode in the air
+                if (age > 120) {   // out of range: explode in the air
                     carrier.remove();
                     rocket.remove();
                     crater(at, p, mk2);

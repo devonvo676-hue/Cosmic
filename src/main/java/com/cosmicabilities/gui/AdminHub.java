@@ -306,6 +306,7 @@ public class AdminHub implements Listener {
             put(h, 9, plugin.cocaine().create(), "cocaine");
             put(h, 18, plugin.rpg().createMk2(), "rpg_mk2");
             put(h, 27, plugin.jet().create(), "jet");
+            put(h, 45, plugin.jet().createMk2(), "jet2");
             put(h, 36, plugin.armorBay().create(), "armor_bay");
         }
         put(h, 16, plugin.coinflip().coin("<gold><bold>+$100,000", "<gray>Click: give yourself $100,000", "<gray>Shift: $1,000,000"), "cash");
@@ -571,6 +572,7 @@ public class AdminHub implements Listener {
             case "cocaine" -> com.cosmicabilities.admin.Owner.allowed(plugin, admin) ? plugin.cocaine().create() : null;
             case "rpg_mk2" -> com.cosmicabilities.admin.Owner.allowed(plugin, admin) ? plugin.rpg().createMk2() : null;
             case "jet" -> com.cosmicabilities.admin.Owner.allowed(plugin, admin) ? plugin.jet().create() : null;
+            case "jet2" -> com.cosmicabilities.admin.Owner.allowed(plugin, admin) ? plugin.jet().createMk2() : null;
             case "armor_bay" -> com.cosmicabilities.admin.Owner.allowed(plugin, admin) ? plugin.armorBay().create() : null;
             default -> plugin.banPistol().create();
         };
@@ -1030,6 +1032,8 @@ public class AdminHub implements Listener {
         inv.setItem(11, plugin.rpg().createMk2());
         inv.setItem(12, plugin.jet().create());
         inv.setItem(13, plugin.armorBay().create());
+        inv.setItem(14, plugin.jet().createMk2());
+        inv.setItem(22, Icons.button(plugin, Material.FILLED_MAP, "<aqua><bold>Minimap", "<gray>The whole world, live players and", "<gray>your waypoints. Click to tp.", "", "<yellow>Click to open <gray>(or /minimap)"));
         inv.setItem(15, Icons.ability(plugin, com.cosmicabilities.ability.AbilityType.POOP, List.of("<yellow>Left <gray>slot 1  <yellow>Right <gray>slot 2")));
         inv.setItem(16, Icons.ability(plugin, com.cosmicabilities.ability.AbilityType.LIGHTSPEED, List.of("<yellow>Left <gray>slot 1  <yellow>Right <gray>slot 2")));
         inv.setItem(28, Icons.gui(plugin, "players", "<aqua><bold>Who else can use your stuff",
@@ -1056,6 +1060,8 @@ public class AdminHub implements Listener {
             case 11 -> admin.getInventory().addItem(plugin.rpg().createMk2());
             case 12 -> admin.getInventory().addItem(plugin.jet().create());
             case 13 -> admin.getInventory().addItem(plugin.armorBay().create());
+            case 14 -> admin.getInventory().addItem(plugin.jet().createMk2());
+            case 22 -> { plugin.minimap().open(admin); return; }
             case 15, 16 -> {
                 com.cosmicabilities.ability.AbilityType t = raw == 15 ? com.cosmicabilities.ability.AbilityType.POOP : com.cosmicabilities.ability.AbilityType.LIGHTSPEED;
                 com.cosmicabilities.data.PlayerData d = plugin.data().get(admin.getUniqueId());

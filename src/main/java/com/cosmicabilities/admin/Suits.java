@@ -47,8 +47,33 @@ public class Suits implements Listener {
         m.displayName(plugin.mm("<!italic>" + name));
         m.setUnbreakable(true);
         m.getPersistentDataContainer().set(key, PersistentDataType.STRING, suit);
+        // every piece has its own custom look in the inventory; suits with a 3D helmet wear the model itself on the head
+        String helmet3d = HELMET_MODELS.get(suit);
+        m.setItemModel(new NamespacedKey("cosmic", piece == Piece.HELMET && helmet3d != null ? helmet3d
+                : suit + "_" + piece.name().toLowerCase(java.util.Locale.ROOT)));
         it.setItemMeta(m);
+        if (piece == Piece.HELMET && helmet3d != null) {
+            return Bukkit.getUnsafe().modifyItemStack(it, "[minecraft:equippable={slot:\"head\"}]");
+        }
         return Bukkit.getUnsafe().modifyItemStack(it, "[minecraft:equippable={slot:\"" + piece.slot + "\",asset_id:\"cosmic:" + suit + "\"}]");
+    }
+
+    /** Suits whose helmet is a real 3D model instead of a flat armor layer. */
+    private static final Map<String, String> HELMET_MODELS = Map.of("nova_armor", "boss_fx_nova_helmet");
+
+    /** Takes one piece off again, giving back whatever was in that slot before the suit. */
+    public void unequip(Player p, Piece piece) {
+        PlayerInventory inv = p.getInventory();
+        ItemStack[] old = saved.get(p.getUniqueId());
+        int i = switch (piece) { case BOOTS -> 0; case LEGS -> 1; case CHEST -> 2; case HELMET -> 3; };
+        ItemStack back = old == null || old[i] == null ? null : old[i].clone();
+        switch (piece) {
+            case HELMET -> { if (suitOf(inv.getHelmet()) != null) inv.setHelmet(back); }
+            case CHEST -> { if (suitOf(inv.getChestplate()) != null) inv.setChestplate(back); }
+            case LEGS -> { if (suitOf(inv.getLeggings()) != null) inv.setLeggings(back); }
+            case BOOTS -> { if (suitOf(inv.getBoots()) != null) inv.setBoots(back); }
+        }
+        if (old != null) old[i] = null;   // given back already
     }
 
     public String suitOf(ItemStack it) {

@@ -414,10 +414,11 @@ public class BanPistol implements Listener {
         });
         int lifetime = (int) Math.ceil(plugin.getConfig().getDouble("ban-pistol.range", 64) / speed) + 2;
         new org.bukkit.scheduler.BukkitRunnable() {
-            int t = 0;
+            double t = 0;
             @Override
             public void run() {
-                if (!bullet.isValid() || t++ > lifetime) {
+                t += com.cosmicabilities.ability.impl.LightspeedAbility.timeScale();
+                if (!bullet.isValid() || t > lifetime) {
                     if (bullet.isValid()) bullet.remove();
                     cancel();
                     return;

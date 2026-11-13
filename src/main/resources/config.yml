@@ -45,7 +45,7 @@ ability-settings:
   serpents_wrath: {cooldown: 40, damage-multiplier: 1.0}
   apocalypse: {cooldown: 50, damage-multiplier: 1.0}
   poop: {cooldown: 20, damage-multiplier: 1.0, stuck-seconds: 5, crater-seconds: 60}
-  lightspeed: {cooldown: 5, run-seconds: 45, speed-multiplier: 4, freeze-seconds: 8, freeze-cooldown-seconds: 30}
+  lightspeed: {cooldown: 5, run-seconds: 45, speed-multiplier: 4, freeze-seconds: 8, freeze-cooldown-seconds: 0, slowmo-speed: 0.2}
 
 # Short combat buff given every time an ability is cast (edit in game with /cconfig).
 # Format: effect:level:seconds  (strength:1:6 = Strength I for 6 seconds). Use [] for none.
@@ -422,7 +422,12 @@ spawn:
 
 # ---------------------------------------------------------------- v2tou's fighter jet and Nova Armor
 jet:
-  max-speed: 3.0             # blocks per tick (3.0 = 216 km/h)
+  max-speed: 3.0             # afterburner speed, blocks per tick (3.0 = 216 km/h)
+  cruise-speed: 1.6          # normal speed
+  camera-distance: 11        # how far behind the jet the 3rd-person camera sits
+  invert-pitch: false        # true = W dives, S climbs
+  crash-power: 9             # explosion when the jet flies into something (TNT is 4)
+  mk2-fuse-seconds: 5        # Mk II sticky bombs: countdown after they stick in the ground
   bomb-cooldown-seconds: 1.5
   crater-radius: 20
   damage-radius: 30

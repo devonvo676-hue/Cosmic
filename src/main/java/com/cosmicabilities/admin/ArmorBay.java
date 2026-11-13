@@ -12,12 +12,8 @@ import org.bukkit.NamespacedKey;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.World;
-import org.bukkit.block.BlockFace;
-import org.bukkit.configuration.file.YamlConfiguration;
-import org.bukkit.entity.BlockDisplay;
 import org.bukkit.entity.Display;
 import org.bukkit.entity.Entity;
-import org.bukkit.entity.Interaction;
 import org.bukkit.entity.ItemDisplay;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
@@ -25,10 +21,10 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
-import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.event.player.PlayerToggleFlightEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
@@ -44,7 +40,6 @@ import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
 import java.io.File;
-import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -55,43 +50,44 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * v2tou's armor bay: place it, walk into it, and robotic arms build the Nova Armor onto him piece by piece
- * (an animation only he can see). Walk in again to take it off. In the suit he can fly (double-tap jump),
- * fire repulsor blasts from his hands (right-click with an empty hand) and shrug off falls.
- * Right-click the station to fold it back into the suitcase.
+ * v2tou's Nova Armor case. The case IS the suit: right-click it and it drops in front of him, pops open, and the
+ * armor flies out piece by piece and locks onto his body (everyone around sees it), then the case itself folds
+ * into the thruster pack on his back. Sneak + right-click with an empty hand to send the suit back into the case.
+ * Suited he can fly (double-tap jump), fire repulsor blasts from his hands (right-click with an empty hand),
+ * take far less damage and shrug off falls.
  */
 public class ArmorBay implements Listener {
     public static final String SUIT = "nova_armor";
-    private static final String TAG = "cosmic_armor_bay";
+    private static final String NAME = "<gradient:#7b2cbf:#00e5ff><bold>Nova Armor";
+    private static final float CASE_SCALE = 1.4f;
+    private static final Suits.Piece[] ORDER = {Suits.Piece.BOOTS, Suits.Piece.LEGS, Suits.Piece.CHEST, Suits.Piece.HELMET};
+    private static final double[] HEIGHT = {0.15, 0.75, 1.3, 1.8};
+    private static final String[] PIECE_NAMES = {"Boots", "Leg armor", "Chest plate", "Helmet"};
 
     private final CosmicAbilitiesPlugin plugin;
-    private final NamespacedKey itemKey, bayKey;
-    private final File file;
-    private final Map<String, Location> bays = new HashMap<>();          // id -> centre
+    private final NamespacedKey itemKey;
     private final Set<UUID> busy = ConcurrentHashMap.newKeySet();
-    private final Map<UUID, String> insideBay = new ConcurrentHashMap<>();
     private final Set<UUID> suited = ConcurrentHashMap.newKeySet();
+    private final Set<UUID> owedCase = ConcurrentHashMap.newKeySet();
+    private final Map<UUID, ItemDisplay> packs = new ConcurrentHashMap<>();
     private final Map<UUID, Long> lastBlast = new HashMap<>();
 
     public ArmorBay(CosmicAbilitiesPlugin plugin) {
         this.plugin = plugin;
         this.itemKey = new NamespacedKey(plugin, "armor_bay_item");
-        this.bayKey = new NamespacedKey(plugin, "armor_bay");
-        this.file = new File(plugin.getDataFolder(), "armor-bays.yml");
-        YamlConfiguration yml = YamlConfiguration.loadConfiguration(file);
-        for (String id : yml.getKeys(false)) {
-            Location l = yml.getLocation(id);
-            if (l != null) bays.put(id, l);
-        }
-        plugin.getServer().getScheduler().runTaskTimer(plugin, this::tick, 40L, 4L);
+        // the old placeable stations are gone - the case is the suit now
+        File old = new File(plugin.getDataFolder(), "armor-bays.yml");
+        if (old.exists() && !old.delete()) plugin.getLogger().warning("Couldn't delete old armor-bays.yml");
+        plugin.getServer().getScheduler().runTaskTimer(plugin, this::tick, 40L, 2L);
     }
 
     public ItemStack create() {
         ItemStack it = new ItemStack(Material.PAPER);
         ItemMeta m = it.getItemMeta();
         m.displayName(plugin.mm("<!italic><gradient:#7b2cbf:#00e5ff><bold>Nova Armor Case"));
-        m.lore(List.of(plugin.mm("<!italic><gray>Right click a block: it unfolds into the"), plugin.mm("<!italic><gray>armor station."),
-                plugin.mm("<!italic><gray>Walk in to suit up / take the suit off."), plugin.mm("<!italic><gray>Right click the station to pack it up."),
+        m.lore(List.of(plugin.mm("<!italic><gray>Right click: the case becomes your suit."),
+                plugin.mm("<!italic><gray>Suited: double-tap jump to fly,"), plugin.mm("<!italic><gray>right click an empty hand: repulsor."),
+                plugin.mm("<!italic><gray>Sneak + right click an empty hand:"), plugin.mm("<!italic><gray>the suit packs back into the case."),
                 plugin.mm("<!italic><dark_red>v2tou only")));
         m.setItemModel(new NamespacedKey("cosmic", "armor_bay_item"));
         m.getPersistentDataContainer().set(itemKey, PersistentDataType.BYTE, (byte) 1);
@@ -99,314 +95,184 @@ public class ArmorBay implements Listener {
         return it;
     }
 
-    private boolean isBayItem(ItemStack it) {
+    private boolean isCase(ItemStack it) {
         return it != null && it.hasItemMeta() && it.getItemMeta().getPersistentDataContainer().has(itemKey, PersistentDataType.BYTE);
     }
 
-    private void save() {
-        YamlConfiguration yml = new YamlConfiguration();
-        for (Map.Entry<String, Location> e : bays.entrySet()) yml.set(e.getKey(), e.getValue());
-        try { yml.save(file); } catch (IOException ex) { plugin.getLogger().warning("Couldn't save armor-bays.yml"); }
-    }
+    /** Kept for the plugin's start-up hook; there are no placed stations anymore. */
+    public void rebuildAll() {}
 
-    // ------------------------------------------------------------------ placing / removing
+    public boolean suited(UUID id) { return suited.contains(id); }
+
+    // ------------------------------------------------------------------ using the case
 
     @EventHandler(priority = EventPriority.HIGH)
-    public void onPlace(PlayerInteractEvent event) {
-        if (event.getHand() != EquipmentSlot.HAND || event.getAction() != Action.RIGHT_CLICK_BLOCK || event.getClickedBlock() == null) return;
+    public void onUse(PlayerInteractEvent event) {
+        if (event.getHand() != EquipmentSlot.HAND) return;
+        if (event.getAction() != Action.RIGHT_CLICK_AIR && event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
         Player p = event.getPlayer();
-        if (!isBayItem(p.getInventory().getItemInMainHand())) return;
-        event.setCancelled(true);
-        if (!Owner.allowed(plugin, p)) { p.getInventory().setItemInMainHand(null); return; }
-        Location at = event.getClickedBlock().getRelative(event.getBlockFace() == BlockFace.UP ? BlockFace.UP : BlockFace.UP).getLocation().add(0.5, 0, 0.5);
-        float yaw = Math.round(p.getLocation().getYaw() / 90f) * 90f + 180f;   // faces the player
-        at.setYaw(yaw);
-        at.setPitch(0);
-        String id = UUID.randomUUID().toString().substring(0, 8);
-        bays.put(id, at);
-        save();
-        build(id, at, true);
-        p.getInventory().getItemInMainHand().setAmount(p.getInventory().getItemInMainHand().getAmount() - 1);
-        p.playSound(at, Sound.BLOCK_ANVIL_PLACE, 0.6f, 1.6f);
-    }
-
-    private record Part(Material m, float x, float y, float z, float sx, float sy, float sz, boolean glow) {}
-
-    /** The station's pieces (bay-local coordinates, the bay faces +Z). */
-    private static final List<Part> PARTS = List.of(
-            new Part(Material.POLISHED_BLACKSTONE, -1.1f, 0, -1.1f, 2.2f, 0.18f, 2.2f, false),
-            new Part(Material.CYAN_STAINED_GLASS, -0.8f, 0.18f, -0.8f, 1.6f, 0.04f, 1.6f, true),
-            new Part(Material.NETHERITE_BLOCK, -1.15f, 0.18f, 0.55f, 0.3f, 2.6f, 0.3f, false),
-            new Part(Material.PURPLE_STAINED_GLASS, -1.05f, 0.4f, 0.5f, 0.1f, 2.2f, 0.05f, true),
-            new Part(Material.NETHERITE_BLOCK, 0.85f, 0.18f, 0.55f, 0.3f, 2.6f, 0.3f, false),
-            new Part(Material.PURPLE_STAINED_GLASS, 0.95f, 0.4f, 0.5f, 0.1f, 2.2f, 0.05f, true),
-            new Part(Material.NETHERITE_BLOCK, -1.15f, 2.75f, 0.5f, 2.3f, 0.3f, 0.35f, false),
-            new Part(Material.SEA_LANTERN, -0.5f, 2.62f, 0.55f, 1.0f, 0.12f, 0.2f, true));
-
-    private static Transformation shape(Part p, float yaw, float k) {
-        // k = 1: unfolded station; k = 0: folded up inside the suitcase (a 0.8 x 0.25 x 0.55 box on the floor)
-        float fx = p.x() * 0.3f, fy = 0.03f + Math.max(0, p.y()) * 0.06f, fz = -0.15f + p.z() * 0.12f;
-        float fsx = Math.min(p.sx(), 0.7f) * 0.9f, fsy = Math.min(p.sy(), 0.2f), fsz = Math.min(p.sz(), 0.45f);
-        float x = fx + (p.x() - fx) * k, y = fy + (p.y() - fy) * k, z = fz + (p.z() - fz) * k;
-        float sx = fsx + (p.sx() - fsx) * k, sy = fsy + (p.sy() - fsy) * k, sz = fsz + (p.sz() - fsz) * k;
-        Quaternionf r = new Quaternionf().rotateY(yaw);
-        return new Transformation(r.transform(new Vector3f(x, y, z)), r, new Vector3f(sx, sy, sz), new Quaternionf());
-    }
-
-    /**
-     * The station. With animate=true it starts as a closed suitcase that pops open and unfolds piece by piece
-     * (platform slides out, pillars telescope up, the arch locks across the top). Rebuilt on every restart.
-     */
-    private void build(String id, Location at, boolean animate) {
-        World w = at.getWorld();
-        if (w == null) return;
-        float yaw = (float) Math.toRadians(-at.getYaw());
-        Location base = at.clone(); base.setYaw(0); base.setPitch(0);
-        List<BlockDisplay> made = new ArrayList<>();
-        for (int i = 0; i < PARTS.size(); i++) {
-            Part pt = PARTS.get(i);
-            BlockDisplay d = w.spawn(base, BlockDisplay.class, e -> {
-                e.setBlock(pt.m().createBlockData());
-                e.setPersistent(false);
-                e.addScoreboardTag(TAG);
-                e.addScoreboardTag(Fx.KEEP);
-                e.getPersistentDataContainer().set(bayKey, PersistentDataType.STRING, id);
-                if (pt.glow()) e.setBrightness(new Display.Brightness(15, 15));
-                e.setTransformation(shape(pt, yaw, animate ? 0 : 1));
-            });
-            made.add(d);
+        ItemStack hand = p.getInventory().getItemInMainHand();
+        if (isCase(hand)) {
+            event.setCancelled(true);
+            if (!Owner.allowed(plugin, p)) { p.getInventory().setItemInMainHand(null); return; }
+            if (busy.contains(p.getUniqueId()) || suited.contains(p.getUniqueId()) || p.getGameMode() == GameMode.SPECTATOR) return;
+            hand.setAmount(hand.getAmount() - 1);
+            suitUp(p);
+            return;
         }
-        if (animate) {
-            List<BlockDisplay> lid = suitcase(base, yaw, id);
-            w.playSound(base, Sound.BLOCK_IRON_TRAPDOOR_OPEN, 1f, 0.8f);
-            // the lid flips open, then each piece unfolds in turn
-            Fx.animate(lid.get(1), 8, caseShape(yaw, 1, true), 4);
-            for (int i = 0; i < made.size(); i++) {
-                int delay = 12 + i * 5;
-                Fx.animate(made.get(i), 10, shape(PARTS.get(i), yaw, 1), delay);
-                final int n = i;
-                plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
-                    w.playSound(base, n % 2 == 0 ? Sound.BLOCK_PISTON_EXTEND : Sound.BLOCK_IRON_DOOR_OPEN, 0.9f, 0.9f + n * 0.08f);
-                    w.spawnParticle(Particle.ELECTRIC_SPARK, base.clone().add(0, 0.6, 0), 10, 0.5, 0.4, 0.5, 0.1);
-                }, delay);
-            }
-            int done = 12 + made.size() * 5 + 10;
-            for (BlockDisplay d : lid) { Fx.animate(d, 6, caseShape(yaw, 0.01f, false), done - 6); Fx.removeLater(d, done); }
-            plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
-                w.playSound(base, Sound.BLOCK_BEACON_ACTIVATE, 1f, 1.2f);
-                w.spawnParticle(Particle.END_ROD, base.clone().add(0, 1.4, 0), 40, 0.6, 1, 0.6, 0.05);
-                hitbox(id, base);
-            }, done);
-        } else {
-            hitbox(id, base);
+        if (hand.getType().isAir() && p.isSneaking() && suited.contains(p.getUniqueId()) && !busy.contains(p.getUniqueId())) {
+            event.setCancelled(true);
+            suitDown(p);
         }
     }
 
-    private void hitbox(String id, Location base) {
-        base.getWorld().spawn(base, Interaction.class, i -> {
-            i.setInteractionWidth(2.2f);
-            i.setInteractionHeight(0.3f);
-            i.setPersistent(false);
-            i.addScoreboardTag(TAG);
-            i.getPersistentDataContainer().set(bayKey, PersistentDataType.STRING, id);
+    private static ItemStack model(String name) {
+        ItemStack it = new ItemStack(Material.PAPER);
+        ItemMeta m = it.getItemMeta();
+        m.setItemModel(new NamespacedKey("cosmic", name));
+        it.setItemMeta(m);
+        return it;
+    }
+
+    private ItemDisplay display(Location at, ItemStack item, float scale, int tp) {
+        Location l = at.clone(); l.setYaw(0); l.setPitch(0);
+        return at.getWorld().spawn(l, ItemDisplay.class, d -> {
+            d.setItemStack(item);
+            d.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.FIXED);
+            d.setPersistent(false);
+            d.addScoreboardTag(Fx.TAG);
+            d.setTeleportDuration(tp);
+            d.setInterpolationDuration(tp);
+            d.setTransformation(new Transformation(new Vector3f(), new Quaternionf(), new Vector3f(scale, scale, scale), new Quaternionf()));
         });
     }
 
-    /** The suitcase shell: [0] body, [1] lid. */
-    private Transformation caseShape(float yaw, float size, boolean lidOpen) {
-        Quaternionf r = new Quaternionf().rotateY(yaw);
-        if (lidOpen) r = new Quaternionf(r).rotateX(-1.9f);
-        return new Transformation(r.transform(new Vector3f(-0.42f * size, 0.27f * size, -0.3f * size)), r, new Vector3f(0.84f * size, 0.06f * size, 0.6f * size), new Quaternionf());
+    private static Transformation shape(Quaternionf rot, float scale, Vector3f translation) {
+        return new Transformation(translation, rot, new Vector3f(scale, scale, scale), new Quaternionf());
     }
 
-    private List<BlockDisplay> suitcase(Location base, float yaw, String id) {
-        List<BlockDisplay> out = new ArrayList<>();
-        Quaternionf r = new Quaternionf().rotateY(yaw);
-        out.add(base.getWorld().spawn(base, BlockDisplay.class, e -> {
-            e.setBlock(Material.GRAY_CONCRETE.createBlockData());
-            e.setPersistent(false);
-            e.addScoreboardTag(Fx.TAG);
-            e.setTransformation(new Transformation(r.transform(new Vector3f(-0.42f, 0, -0.3f)), r, new Vector3f(0.84f, 0.27f, 0.6f), new Quaternionf()));
-        }));
-        out.add(base.getWorld().spawn(base, BlockDisplay.class, e -> {
-            e.setBlock(Material.LIGHT_GRAY_CONCRETE.createBlockData());
-            e.setPersistent(false);
-            e.addScoreboardTag(Fx.TAG);
-            e.setTransformation(caseShape(yaw, 1, false));
-        }));
-        out.add(base.getWorld().spawn(base, BlockDisplay.class, e -> {   // handle
-            e.setBlock(Material.BLACK_CONCRETE.createBlockData());
-            e.setPersistent(false);
-            e.addScoreboardTag(Fx.TAG);
-            e.setTransformation(new Transformation(r.transform(new Vector3f(-0.15f, 0.12f, 0.3f)), r, new Vector3f(0.3f, 0.06f, 0.06f), new Quaternionf()));
-        }));
-        return out;
+    private static void animate(Display d, int ticks, Transformation to) {
+        if (d == null || !d.isValid()) return;
+        d.setInterpolationDelay(0);
+        d.setInterpolationDuration(ticks);
+        d.setTransformation(to);
     }
 
-    /** Folds the station back into a suitcase and gives it back. */
-    private void pack(Player p, String id) {
-        Location at = bays.remove(id);
-        save();
-        if (at == null) return;
-        World w = at.getWorld();
-        float yaw = (float) Math.toRadians(-at.getYaw());
-        Location base = at.clone(); base.setYaw(0); base.setPitch(0);
-        List<BlockDisplay> parts = new ArrayList<>();
-        for (Entity e : w.getEntities()) {
-            if (!id.equals(e.getPersistentDataContainer().get(bayKey, PersistentDataType.STRING))) continue;
-            if (e instanceof BlockDisplay bd) parts.add(bd); else e.remove();
-        }
-        w.playSound(base, Sound.BLOCK_PISTON_CONTRACT, 1f, 0.9f);
-        for (int i = 0; i < parts.size(); i++) {
-            BlockDisplay d = parts.get(i);
-            int idx = Math.min(i, PARTS.size() - 1);
-            Fx.animate(d, 8, shape(PARTS.get(idx), yaw, 0), (parts.size() - i) * 3);
-        }
-        int done = parts.size() * 3 + 12;
-        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
-            parts.forEach(Entity::remove);
-            List<BlockDisplay> sc = suitcase(base, yaw, id);
-            w.playSound(base, Sound.BLOCK_IRON_TRAPDOOR_CLOSE, 1f, 0.8f);
-            for (BlockDisplay d : sc) { Fx.animate(d, 6, caseShape(yaw, 0.01f, false), 8); Fx.removeLater(d, 15); }
-            if (p.isOnline()) {
-                p.getInventory().addItem(create()).values().forEach(left -> w.dropItemNaturally(base, left));
-                p.playSound(p.getLocation(), Sound.ITEM_ARMOR_EQUIP_NETHERITE, 1f, 1.2f);
-            }
-        }, done);
+    /** The case lies on the ground in front of him, handle towards him. Lid hinge sits at the back top edge. */
+    private record CaseParts(ItemDisplay base, ItemDisplay lid, Quaternionf yaw, Location ground) {}
+
+    private CaseParts spawnCase(Location ground, float yawDeg, Location from) {
+        Quaternionf yaw = new Quaternionf().rotateY((float) Math.toRadians(-yawDeg));
+        ItemDisplay base = display(from, model("boss_fx_nova_case"), 0.05f, 6);
+        ItemDisplay lid = display(from, model("boss_fx_nova_lid"), 0.05f, 6);
+        base.setTransformation(shape(yaw, 0.05f, new Vector3f()));
+        lid.setTransformation(shape(yaw, 0.05f, new Vector3f()));
+        return new CaseParts(base, lid, yaw, ground);
     }
 
-    /** Respawns every saved bay (call once the worlds are loaded). */
-    public void rebuildAll() {
-        for (World w : Bukkit.getWorlds()) for (Entity e : w.getEntities()) if (e.getScoreboardTags().contains(TAG)) e.remove();
-        for (Map.Entry<String, Location> e : bays.entrySet()) build(e.getKey(), e.getValue(), false);
+    /** Lid local transform: open = degrees the lid is swung up around its hinge. */
+    private static Transformation lidShape(CaseParts c, float open, float scale) {
+        Vector3f hinge = new Quaternionf(c.yaw()).transform(new Vector3f(0, 3.0f / 16 * scale, -4.8f / 16 * scale));
+        Quaternionf r = new Quaternionf(c.yaw()).rotateX((float) Math.toRadians(-open));
+        return new Transformation(hinge, r, new Vector3f(scale, scale, scale), new Quaternionf());
     }
 
-    @EventHandler
-    public void onHitBay(io.papermc.paper.event.player.PrePlayerAttackEntityEvent event) {
-        if (event.getAttacked() instanceof Interaction i && i.getScoreboardTags().contains(TAG)) event.setCancelled(true);
-    }
-
-    /** Right-click the station to fold it back into the suitcase. */
-    @EventHandler
-    public void onRightClickBay(org.bukkit.event.player.PlayerInteractEntityEvent event) {
-        if (!(event.getRightClicked() instanceof Interaction i) || !i.getScoreboardTags().contains(TAG)) return;
-        event.setCancelled(true);
-        Player p = event.getPlayer();
-        if (event.getHand() != EquipmentSlot.HAND || !Owner.allowed(plugin, p) || busy.contains(p.getUniqueId())) return;
-        String id = i.getPersistentDataContainer().get(bayKey, PersistentDataType.STRING);
-        if (id != null) pack(p, id);
-    }
-
-    // ------------------------------------------------------------------ walking in
-
-    private void tick() {
-        thrusters();
-        for (Player p : Bukkit.getOnlinePlayers()) if (Owner.allowed(plugin, p)) check(p);
-    }
-
-    private void check(Player p) {
-        if (busy.contains(p.getUniqueId())) return;
-        String in = null;
-        for (Map.Entry<String, Location> e : bays.entrySet()) {
-            Location c = e.getValue();
-            if (c.getWorld() == null || !c.getWorld().equals(p.getWorld())) continue;
-            if (p.getLocation().distanceSquared(c) < 0.55 * 0.55 + 0.3 && Math.abs(p.getLocation().getY() - c.getY() - 0.2) < 0.6) { in = e.getKey(); break; }
-        }
-        String was = insideBay.get(p.getUniqueId());
-        if (in == null) { insideBay.remove(p.getUniqueId()); return; }
-        if (in.equals(was)) return;   // still standing in it since last time
-        insideBay.put(p.getUniqueId(), in);
-        if (suited.contains(p.getUniqueId())) suitDown(p, bays.get(in));
-        else suitUp(p, bays.get(in));
-    }
-
-    /** The suit-up sequence. Every effect here is only sent to (or only visible to) v2tou. */
-    private void suitUp(Player p, Location bay) {
-        busy.add(p.getUniqueId());
-        Location stand = bay.clone().add(0, 0.2, 0);
-        stand.setYaw(bay.getYaw() + 180f);   // facing out of the bay
-        stand.setPitch(0);
-        p.teleport(stand);
-        p.setVelocity(new Vector());
+    private void suitUp(Player p) {
+        UUID id = p.getUniqueId();
+        busy.add(id);
         World w = p.getWorld();
-        float yaw = (float) Math.toRadians(-bay.getYaw());
-        Vector right = new Vector(Math.cos(yaw), 0, -Math.sin(yaw));   // bay's local X
-        Vector back = new Vector(Math.sin(yaw), 0, Math.cos(yaw)).multiply(-1);
-        String[] names = {"Boots", "Leg plates", "Chest plate", "Helmet"};
-        com.cosmicabilities.admin.Suits.Piece[] pieces = {Suits.Piece.BOOTS, Suits.Piece.LEGS, Suits.Piece.CHEST, Suits.Piece.HELMET};
-        double[] heights = {0.15, 0.7, 1.3, 1.75};
-        List<Entity> mine = new ArrayList<>();
-        // two robotic arms that reach in from the pillars
-        BlockDisplay[] arms = new BlockDisplay[2];
-        for (int s = 0; s < 2; s++) {
-            int side = s == 0 ? -1 : 1;
-            Location a = bay.clone().add(right.clone().multiply(side * 1.0)).add(0, 1.2, 0);
-            a.setYaw(0); a.setPitch(0);
-            arms[s] = privateBlock(p, a, Material.NETHERITE_BLOCK, new Vector3f(0.12f, 0.12f, 0.9f));
-            mine.add(arms[s]);
-        }
-        p.showTitle(Title.title(plugin.mm("<gradient:#7b2cbf:#00e5ff><bold>NOVA ARMOR"), plugin.mm("<gray>assembling..."),
-                Title.Times.times(Duration.ofMillis(200), Duration.ofMillis(2400), Duration.ofMillis(400))));
-        p.playSound(p.getLocation(), Sound.BLOCK_BEACON_POWER_SELECT, 1f, 0.8f);
+        Location stand = p.getLocation().clone();
+        Vector look = flatLook(stand);
+        Location ground = spot(stand, look);
+        float caseYaw = stand.getYaw() + 180f;   // handle towards him, hinge on the far side
+        CaseParts c = spawnCase(ground, caseYaw, p.getLocation().add(0, 1.0, 0).add(look.clone().multiply(0.5)));
+        List<Entity> mine = new ArrayList<>(List.of(c.base(), c.lid()));
+        w.playSound(stand, Sound.ITEM_ARMOR_EQUIP_NETHERITE, 1f, 0.6f);
+        p.showTitle(Title.title(plugin.mm(NAME), plugin.mm("<gray>deploying..."),
+                Title.Times.times(Duration.ofMillis(150), Duration.ofMillis(2600), Duration.ofMillis(400))));
         new BukkitRunnable() {
             int t = 0;
             @Override
             public void run() {
-                if (!p.isOnline()) { mine.forEach(Entity::remove); busy.remove(p.getUniqueId()); cancel(); return; }
-                // keep him in place
-                if (p.getLocation().distanceSquared(stand) > 0.04) {
-                    Location keep = stand.clone(); keep.setYaw(p.getLocation().getYaw()); keep.setPitch(p.getLocation().getPitch());
-                    p.teleport(keep);
-                }
-                int stage = t / 22, k = t % 22;
-                if (stage < pieces.length) {
-                    double h = heights[stage];
-                    // arms swing to the height of the piece being fitted
-                    for (int s = 0; s < 2; s++) {
-                        int side = s == 0 ? -1 : 1;
-                        Location a = bay.clone().add(right.clone().multiply(side * (1.0 - Math.min(1, k / 8.0) * 0.55))).add(0, h + 0.1, 0);
-                        a.setYaw(0); a.setPitch(0);
-                        arms[s].teleport(a);
-                    }
-                    if (k == 0) {
-                        // the piece slides out from the back of the bay
-                        ItemDisplay piece = privateItem(p, bay.clone().add(back.clone().multiply(0.9)).add(0, h, 0),
-                                plugin.suits().piece(SUIT, "", pieces[stage]));
-                        mine.add(piece);
-                        Location target = stand.clone().add(0, h, 0);
-                        target.setYaw(0); target.setPitch(0);
-                        plugin.getServer().getScheduler().runTaskLater(plugin, () -> { if (piece.isValid()) piece.teleport(target); }, 2L);
-                        p.playSound(p.getLocation(), Sound.BLOCK_PISTON_EXTEND, 0.8f, 1.4f);
-                    }
-                    if (k > 8 && k < 18 && k % 2 == 0) {   // welding sparks, only for him
-                        Location spark = stand.clone().add(right.clone().multiply((k % 4 == 0 ? 0.35 : -0.35))).add(0, h, 0);
-                        p.spawnParticle(Particle.ELECTRIC_SPARK, spark, 8, 0.05, 0.05, 0.05, 0.15);
-                        p.spawnParticle(Particle.LAVA, spark, 1, 0, 0, 0, 0);
-                        p.playSound(spark, Sound.BLOCK_SMITHING_TABLE_USE, 0.5f, 1.8f);
-                    }
-                    if (k == 18) {
-                        plugin.suits().equip(p, SUIT, "<gradient:#7b2cbf:#00e5ff><bold>Nova Armor</bold> <gray>" + names[stage], pieces[stage]);
-                        p.playSound(p.getLocation(), Sound.ITEM_ARMOR_EQUIP_NETHERITE, 1f, 0.8f);
-                        p.playSound(p.getLocation(), Sound.BLOCK_IRON_TRAPDOOR_CLOSE, 1f, 0.6f);
-                        for (Entity e : new ArrayList<>(mine)) if (e instanceof ItemDisplay) { e.remove(); mine.remove(e); }
-                    }
-                } else if (t == pieces.length * 22 + 2) {
-                    // power-up: visor lights, glow lines, a pulse only he sees
-                    p.spawnParticle(Particle.END_ROD, stand.clone().add(0, 1, 0), 60, 0.3, 0.8, 0.3, 0.08);
-                    p.spawnParticle(Particle.DUST, stand.clone().add(0, 1.1, 0), 40, 0.25, 0.5, 0.25, 0, new Particle.DustOptions(Color.fromRGB(0x00e5ff), 1.2f));
-                    p.playSound(p.getLocation(), Sound.BLOCK_BEACON_ACTIVATE, 1f, 1.4f);
-                    p.playSound(p.getLocation(), Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 1f, 1.6f);
-                    p.showTitle(Title.title(plugin.mm("<#00e5ff><bold>SYSTEMS ONLINE"), plugin.mm("<gray>double-tap jump to fly  |  right-click empty hand: repulsor"),
-                            Title.Times.times(Duration.ofMillis(100), Duration.ofMillis(2200), Duration.ofMillis(500))));
-                } else if (t > pieces.length * 22 + 6) {
+                if (!p.isOnline() || p.isDead()) {
+                    // quitting gives the case back in onQuit; dying gives it back on respawn
                     mine.forEach(Entity::remove);
+                    if (p.isOnline() && busy.contains(id)) owedCase.add(id);
+                    busy.remove(id);
                     cancel();
-                    suited.add(p.getUniqueId());
-                    busy.remove(p.getUniqueId());
-                    if (p.getGameMode() == GameMode.SURVIVAL || p.getGameMode() == GameMode.ADVENTURE) p.setAllowFlight(true);
-                    p.setFlySpeed(0.12f);
-                    p.addPotionEffect(new PotionEffect(PotionEffectType.RESISTANCE, PotionEffect.INFINITE_DURATION, 1, false, false, true));
-                    p.addPotionEffect(new PotionEffect(PotionEffectType.FIRE_RESISTANCE, PotionEffect.INFINITE_DURATION, 0, false, false, true));
+                    return;
+                }
+                holdStill(p, stand);
+                if (t == 1) {   // tossed out of his hand, lands on the ground and grows to full size
+                    Location g = ground.clone(); g.setYaw(0); g.setPitch(0);
+                    c.base().teleport(g);
+                    c.lid().teleport(g);
+                    animate(c.base(), 6, shape(c.yaw(), CASE_SCALE, new Vector3f()));
+                    animate(c.lid(), 6, lidShape(c, 0, CASE_SCALE));
+                }
+                if (t == 7) {
+                    w.playSound(ground, Sound.BLOCK_ANVIL_LAND, 0.7f, 1.6f);
+                    w.spawnParticle(Particle.BLOCK, ground, 14, 0.4, 0.05, 0.4, 0, ground.clone().subtract(0, 0.5, 0).getBlock().getBlockData());
+                }
+                if (t == 12) {   // clasps release, lid swings open, light spills out
+                    w.playSound(ground, Sound.BLOCK_IRON_TRAPDOOR_OPEN, 1f, 0.7f);
+                    w.playSound(ground, Sound.BLOCK_BEACON_POWER_SELECT, 0.8f, 1.6f);
+                    animate(c.lid(), 8, lidShape(c, 115, CASE_SCALE));
+                }
+                if (t > 14 && t < 20) w.spawnParticle(Particle.END_ROD, ground.clone().add(0, 0.4, 0), 3, 0.3, 0.1, 0.3, 0.04);
+                // the four pieces leap out of the case, spin and clamp on, feet first
+                for (int i = 0; i < ORDER.length; i++) {
+                    int t0 = 20 + i * 9;
+                    if (t == t0) {
+                        ItemDisplay piece = display(ground.clone().add(0, 0.35, 0), plugin.suits().piece(SUIT, "", ORDER[i]), 0.55f, 7);
+                        mine.add(piece);
+                        Location target = stand.clone().add(0, HEIGHT[i], 0);
+                        piece.setTransformation(shape(new Quaternionf(), 0.55f, new Vector3f()));
+                        int idx = i;
+                        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+                            if (!piece.isValid()) return;
+                            Location tl = target.clone(); tl.setYaw(0); tl.setPitch(0);
+                            piece.teleport(tl);
+                            animate(piece, 7, shape(new Quaternionf().rotateY((float) Math.toRadians(-stand.getYaw()) + (float) Math.PI * 2),
+                                    idx == 3 ? 0.62f : 0.75f, new Vector3f()));
+                        }, 1L);
+                        w.playSound(ground, Sound.BLOCK_PISTON_EXTEND, 0.9f, 1.3f + i * 0.1f);
+                        w.spawnParticle(Particle.ELECTRIC_SPARK, ground.clone().add(0, 0.4, 0), 10, 0.2, 0.1, 0.2, 0.15);
+                    }
+                    if (t == t0 + 8) {
+                        for (Entity e : new ArrayList<>(mine)) if (e instanceof ItemDisplay d && d != c.base() && d != c.lid()) { e.remove(); mine.remove(e); }
+                        plugin.suits().equip(p, SUIT, NAME + " <gray>" + PIECE_NAMES[i], ORDER[i]);
+                        Location at = stand.clone().add(0, HEIGHT[i], 0);
+                        w.playSound(at, Sound.ITEM_ARMOR_EQUIP_NETHERITE, 1.2f, 0.8f);
+                        w.playSound(at, Sound.BLOCK_IRON_TRAPDOOR_CLOSE, 1f, 0.6f + i * 0.1f);
+                        w.spawnParticle(Particle.ELECTRIC_SPARK, at, 14, 0.3, 0.15, 0.3, 0.12);
+                        w.spawnParticle(Particle.DUST, at, 10, 0.3, 0.1, 0.3, 0, new Particle.DustOptions(Color.fromRGB(0x00e5ff), 1.1f));
+                    }
+                }
+                if (t == 58) {   // the empty case folds up and flies onto his back as the thruster pack
+                    w.playSound(ground, Sound.BLOCK_IRON_TRAPDOOR_CLOSE, 1f, 1.2f);
+                    animate(c.lid(), 5, lidShape(c, 0, CASE_SCALE));
+                }
+                if (t == 63) {
+                    Location back = stand.clone().add(0, 1.2, 0).subtract(look.clone().multiply(0.3)); back.setYaw(0); back.setPitch(0);
+                    c.base().teleport(back);
+                    c.lid().teleport(back);
+                    animate(c.base(), 6, shape(c.yaw(), 0.5f, new Vector3f()));
+                    animate(c.lid(), 6, lidShape(c, 0, 0.5f));
+                    w.playSound(stand, Sound.BLOCK_PISTON_CONTRACT, 1f, 1.5f);
+                }
+                if (t == 70) {
+                    mine.forEach(Entity::remove);
+                    w.spawnParticle(Particle.END_ROD, stand.clone().add(0, 1, 0), 50, 0.3, 0.8, 0.3, 0.08);
+                    w.spawnParticle(Particle.DUST, stand.clone().add(0, 1.1, 0), 40, 0.25, 0.5, 0.25, 0, new Particle.DustOptions(Color.fromRGB(0x00e5ff), 1.2f));
+                    w.playSound(stand, Sound.BLOCK_BEACON_ACTIVATE, 1f, 1.4f);
+                    w.playSound(stand, Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 1f, 1.6f);
+                    p.showTitle(Title.title(plugin.mm("<#00e5ff><bold>SYSTEMS ONLINE"), plugin.mm("<gray>double-tap jump: fly  |  empty hand: repulsor  |  sneak+click: pack up"),
+                            Title.Times.times(Duration.ofMillis(100), Duration.ofMillis(2400), Duration.ofMillis(500))));
+                    busy.remove(id);
+                    suited.add(id);
+                    powersOn(p);
+                    cancel();
                     return;
                 }
                 t++;
@@ -414,20 +280,112 @@ public class ArmorBay implements Listener {
         }.runTaskTimer(plugin, 1L, 1L);
     }
 
-    private void suitDown(Player p, Location bay) {
-        busy.add(p.getUniqueId());
-        Location stand = bay.clone().add(0, 0.2, 0);
-        p.playSound(p.getLocation(), Sound.BLOCK_PISTON_CONTRACT, 1f, 0.8f);
-        p.spawnParticle(Particle.ELECTRIC_SPARK, stand.clone().add(0, 1, 0), 40, 0.3, 0.7, 0.3, 0.1);
-        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
-            takeOff(p);
-            p.playSound(p.getLocation(), Sound.ITEM_ARMOR_EQUIP_NETHERITE, 1f, 0.6f);
-            busy.remove(p.getUniqueId());
-        }, 20L);
+    private void suitDown(Player p) {
+        UUID id = p.getUniqueId();
+        busy.add(id);
+        World w = p.getWorld();
+        Location stand = p.getLocation().clone();
+        Vector look = flatLook(stand);
+        Location groundF = spot(stand, look);
+        removePack(id);
+        // the pack on his back flies off and unfolds into the open case in front of him
+        CaseParts c = spawnCase(groundF, stand.getYaw() + 180f, stand.clone().add(0, 1.2, 0).subtract(look.clone().multiply(0.3)));
+        List<Entity> mine = new ArrayList<>(List.of(c.base(), c.lid()));
+        w.playSound(stand, Sound.BLOCK_PISTON_EXTEND, 1f, 1.2f);
+        new BukkitRunnable() {
+            int t = 0;
+            @Override
+            public void run() {
+                if (!p.isOnline()) { mine.forEach(Entity::remove); busy.remove(id); cancel(); return; }
+                holdStill(p, stand);
+                if (t == 1) {
+                    Location g = groundF.clone(); g.setYaw(0); g.setPitch(0);
+                    c.base().teleport(g);
+                    c.lid().teleport(g);
+                    animate(c.base(), 6, shape(c.yaw(), CASE_SCALE, new Vector3f()));
+                    animate(c.lid(), 6, lidShape(c, 115, CASE_SCALE));
+                }
+                // pieces come off top-down and drop back into the case
+                for (int k = 0; k < ORDER.length; k++) {
+                    int i = ORDER.length - 1 - k;
+                    int t0 = 8 + k * 7;
+                    if (t == t0) {
+                        Location from = stand.clone().add(0, HEIGHT[i], 0);
+                        ItemDisplay piece = display(from, plugin.suits().piece(SUIT, "", ORDER[i]), i == 3 ? 0.62f : 0.75f, 6);
+                        piece.setTransformation(shape(new Quaternionf().rotateY((float) Math.toRadians(-stand.getYaw())), i == 3 ? 0.62f : 0.75f, new Vector3f()));
+                        mine.add(piece);
+                        plugin.suits().unequip(p, ORDER[i]);
+                        w.playSound(from, Sound.BLOCK_IRON_TRAPDOOR_OPEN, 1f, 0.7f + i * 0.1f);
+                        w.spawnParticle(Particle.ELECTRIC_SPARK, from, 10, 0.3, 0.15, 0.3, 0.1);
+                        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+                            if (!piece.isValid()) return;
+                            Location into = groundF.clone().add(0, 0.3, 0); into.setYaw(0); into.setPitch(0);
+                            piece.teleport(into);
+                            animate(piece, 6, shape(new Quaternionf().rotateY((float) Math.PI * 2), 0.2f, new Vector3f()));
+                        }, 1L);
+                        plugin.getServer().getScheduler().runTaskLater(plugin, () -> { if (piece.isValid()) piece.remove(); }, 8L);
+                    }
+                }
+                if (t == 40) {
+                    animate(c.lid(), 6, lidShape(c, 0, CASE_SCALE));
+                    w.playSound(groundF, Sound.BLOCK_IRON_TRAPDOOR_CLOSE, 1f, 0.8f);
+                }
+                if (t == 47) {   // the case hops back up into his hand
+                    Location hand = stand.clone().add(0, 1.1, 0).add(look.clone().multiply(0.4)); hand.setYaw(0); hand.setPitch(0);
+                    c.base().teleport(hand);
+                    c.lid().teleport(hand);
+                    animate(c.base(), 6, shape(c.yaw(), 0.05f, new Vector3f()));
+                    animate(c.lid(), 6, lidShape(c, 0, 0.05f));
+                    w.playSound(stand, Sound.ENTITY_ITEM_PICKUP, 1f, 0.6f);
+                }
+                if (t == 54) {
+                    mine.forEach(Entity::remove);
+                    takeOff(p);
+                    giveCase(p);
+                    busy.remove(id);
+                    cancel();
+                    return;
+                }
+                t++;
+            }
+        }.runTaskTimer(plugin, 1L, 1L);
+    }
+
+    private static Vector flatLook(Location stand) {
+        Vector look = stand.getDirection().setY(0);
+        if (look.lengthSquared() < 1.0E-4) return new Vector(0, 0, 1);
+        return look.normalize();
+    }
+
+    /** Where the case lands: in front of him, or at his feet if that spot is blocked. */
+    private static Location spot(Location stand, Vector look) {
+        Location ground = stand.clone().add(look.clone().multiply(1.4));
+        return ground.getBlock().isPassable() ? ground : stand.clone();
+    }
+
+    private void holdStill(Player p, Location stand) {
+        if (p.getLocation().distanceSquared(stand) > 0.04) {
+            Location keep = stand.clone(); keep.setYaw(p.getLocation().getYaw()); keep.setPitch(p.getLocation().getPitch());
+            p.teleport(keep);
+        }
+        p.setVelocity(new Vector());
+    }
+
+    private void giveCase(Player p) {
+        if (!p.isOnline()) { owedCase.add(p.getUniqueId()); return; }
+        for (ItemStack left : p.getInventory().addItem(create()).values()) p.getWorld().dropItemNaturally(p.getLocation(), left);
+    }
+
+    private void powersOn(Player p) {
+        if (p.getGameMode() == GameMode.SURVIVAL || p.getGameMode() == GameMode.ADVENTURE) p.setAllowFlight(true);
+        p.setFlySpeed(0.12f);
+        p.addPotionEffect(new PotionEffect(PotionEffectType.RESISTANCE, PotionEffect.INFINITE_DURATION, 1, false, false, true));
+        p.addPotionEffect(new PotionEffect(PotionEffectType.FIRE_RESISTANCE, PotionEffect.INFINITE_DURATION, 0, false, false, true));
     }
 
     private void takeOff(Player p) {
-        if (!suited.remove(p.getUniqueId())) return;
+        removePack(p.getUniqueId());
+        if (!suited.remove(p.getUniqueId())) { plugin.suits().remove(p); return; }
         plugin.suits().remove(p);
         if (p.getGameMode() == GameMode.SURVIVAL || p.getGameMode() == GameMode.ADVENTURE) { p.setFlying(false); p.setAllowFlight(false); }
         p.setFlySpeed(0.1f);
@@ -435,41 +393,53 @@ public class ArmorBay implements Listener {
         p.removePotionEffect(PotionEffectType.FIRE_RESISTANCE);
     }
 
-    private BlockDisplay privateBlock(Player viewer, Location at, Material m, Vector3f scale) {
-        BlockDisplay d = at.getWorld().spawn(at, BlockDisplay.class, e -> {
-            e.setVisibleByDefault(false);
-            e.setBlock(m.createBlockData());
-            e.setPersistent(false);
-            e.addScoreboardTag(Fx.TAG);
-            e.setTeleportDuration(4);
-            e.setTransformation(new Transformation(new Vector3f(-scale.x / 2, -scale.y / 2, -scale.z / 2), new Quaternionf(), scale, new Quaternionf()));
-        });
-        viewer.showEntity(plugin, d);
-        return d;
+    // ------------------------------------------------------------------ thruster pack + flight
+
+    private void removePack(UUID id) {
+        ItemDisplay d = packs.remove(id);
+        if (d != null && d.isValid()) d.remove();
     }
 
-    private ItemDisplay privateItem(Player viewer, Location at, ItemStack item) {
-        Location l = at.clone(); l.setYaw(0); l.setPitch(0);
-        ItemDisplay d = at.getWorld().spawn(l, ItemDisplay.class, e -> {
-            e.setVisibleByDefault(false);
-            e.setItemStack(item);
-            e.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.FIXED);
-            e.setPersistent(false);
-            e.addScoreboardTag(Fx.TAG);
-            e.setTeleportDuration(14);
-            e.setBrightness(new Display.Brightness(15, 15));
-            e.setTransformation(new Transformation(new Vector3f(), new Quaternionf(), new Vector3f(0.7f, 0.7f, 0.7f), new Quaternionf()));
-        });
-        viewer.showEntity(plugin, d);
-        return d;
+    private void tick() {
+        for (UUID id : suited) {
+            Player p = Bukkit.getPlayer(id);
+            if (p == null) continue;
+            if (p.getGameMode() == GameMode.SPECTATOR || p.isDead()) { removePack(id); continue; }
+            if ((p.getGameMode() == GameMode.SURVIVAL || p.getGameMode() == GameMode.ADVENTURE) && !p.getAllowFlight()) p.setAllowFlight(true);
+            ItemDisplay pack = packs.get(id);
+            if (pack == null || !pack.isValid() || !p.getPassengers().contains(pack)) {
+                if (pack != null && pack.isValid()) pack.remove();
+                pack = display(p.getLocation().add(0, 1.8, 0), model("boss_fx_nova_pack"), 1f, 0);
+                pack.setInterpolationDuration(2);
+                p.addPassenger(pack);
+                packs.put(id, pack);
+            }
+            // sits on his back and turns with his body
+            float yaw = p.getBodyYaw();
+            Quaternionf r = new Quaternionf().rotateY((float) Math.toRadians(-yaw));
+            Vector3f back = r.transform(new Vector3f(0, 0, -0.31f));
+            double sneak = p.isSneaking() ? -0.25 : 0;
+            pack.setInterpolationDelay(0);
+            pack.setInterpolationDuration(2);
+            pack.setTransformation(new Transformation(new Vector3f(back.x, (float) (-0.62 + sneak), back.z), r, new Vector3f(1, 1, 1), new Quaternionf()));
+            if (p.isFlying()) {
+                Location nozzle = p.getLocation().add(back.x, 0.75 + sneak, back.z);
+                Vector side = new Vector(Math.cos(Math.toRadians(yaw)), 0, Math.sin(Math.toRadians(yaw))).multiply(0.13);
+                for (int s = -1; s <= 1; s += 2) {
+                    Location n = nozzle.clone().add(side.clone().multiply(s));
+                    p.getWorld().spawnParticle(Particle.FLAME, n, 2, 0.02, 0.02, 0.02, 0.01);
+                    p.getWorld().spawnParticle(Particle.DUST, n, 1, 0.02, 0.02, 0.02, 0, new Particle.DustOptions(Color.fromRGB(0x00e5ff), 0.8f));
+                }
+                Location feet = p.getLocation();
+                p.getWorld().spawnParticle(Particle.FLAME, feet, 2, 0.12, 0.02, 0.12, 0.01);
+            }
+        }
     }
-
-    // ------------------------------------------------------------------ suit powers
 
     @EventHandler
     public void onRepulsor(PlayerInteractEvent event) {
         Player p = event.getPlayer();
-        if (!suited.contains(p.getUniqueId()) || event.getHand() != EquipmentSlot.HAND) return;
+        if (!suited.contains(p.getUniqueId()) || event.getHand() != EquipmentSlot.HAND || p.isSneaking()) return;
         if (event.getAction() != Action.RIGHT_CLICK_AIR && event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
         if (!p.getInventory().getItemInMainHand().getType().isAir()) return;
         long now = System.currentTimeMillis();
@@ -501,17 +471,6 @@ public class ArmorBay implements Listener {
         }
     }
 
-    /** Boot thrusters while flying. */
-    public void thrusters() {
-        for (UUID id : suited) {
-            Player p = Bukkit.getPlayer(id);
-            if (p == null || !p.isFlying()) continue;
-            Location feet = p.getLocation();
-            p.getWorld().spawnParticle(Particle.FLAME, feet, 3, 0.12, 0.02, 0.12, 0.01);
-            p.getWorld().spawnParticle(Particle.DUST, feet, 2, 0.1, 0.02, 0.1, 0, new Particle.DustOptions(Color.fromRGB(0x00e5ff), 1f));
-        }
-    }
-
     @EventHandler(ignoreCancelled = true)
     public void onFall(EntityDamageEvent event) {
         if (event.getCause() == EntityDamageEvent.DamageCause.FALL && suited.contains(event.getEntity().getUniqueId())) event.setCancelled(true);
@@ -519,25 +478,44 @@ public class ArmorBay implements Listener {
 
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
-        takeOff(event.getPlayer());
-        insideBay.remove(event.getPlayer().getUniqueId());
-        busy.remove(event.getPlayer().getUniqueId());
+        Player p = event.getPlayer();
+        boolean had = suited.contains(p.getUniqueId()) || busy.contains(p.getUniqueId());
+        takeOff(p);
+        busy.remove(p.getUniqueId());
+        if (had) for (ItemStack left : p.getInventory().addItem(create()).values()) p.getWorld().dropItemNaturally(p.getLocation(), left);
     }
 
     @EventHandler
     public void onDeath(org.bukkit.event.entity.PlayerDeathEvent event) {
         Player p = event.getPlayer();
+        removePack(p.getUniqueId());
         if (suited.remove(p.getUniqueId())) {
             p.setFlySpeed(0.1f);
             if (p.getGameMode() == GameMode.SURVIVAL || p.getGameMode() == GameMode.ADVENTURE) p.setAllowFlight(false);
+            owedCase.add(p.getUniqueId());   // the case comes back when he respawns
         }
+    }
+
+    @EventHandler
+    public void onRespawn(PlayerRespawnEvent event) {
+        Player p = event.getPlayer();
+        if (owedCase.remove(p.getUniqueId())) plugin.getServer().getScheduler().runTask(plugin, () -> giveCase(p));
+    }
+
+    @EventHandler
+    public void onJoin(org.bukkit.event.player.PlayerJoinEvent event) {
+        Player p = event.getPlayer();
+        if (owedCase.remove(p.getUniqueId())) plugin.getServer().getScheduler().runTask(plugin, () -> giveCase(p));
     }
 
     public void shutdown() {
         for (UUID id : suited.toArray(new UUID[0])) {
             Player p = Bukkit.getPlayer(id);
-            if (p != null) takeOff(p);
+            if (p == null) continue;
+            takeOff(p);
+            for (ItemStack left : p.getInventory().addItem(create()).values()) p.getWorld().dropItemNaturally(p.getLocation(), left);
         }
-        for (World w : Bukkit.getWorlds()) for (Entity e : w.getEntities()) if (e.getScoreboardTags().contains(TAG)) e.remove();
+        for (ItemDisplay d : packs.values()) if (d.isValid()) d.remove();
+        packs.clear();
     }
 }
