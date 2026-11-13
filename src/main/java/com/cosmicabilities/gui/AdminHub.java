@@ -45,7 +45,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * announce, reload, unban, name tags, cooldowns and clean-up.
  */
 public class AdminHub implements Listener {
-    enum Page { HUB, GIVE, PLAYERS, PLAYER, PICK, UNBAN, RANKS, EVENTS, STATS, BOSSES, BOSS_EDIT, TEAMS, SUPPLY, TOOLS, ECONOMY }
+    enum Page { HUB, GIVE, PLAYERS, PLAYER, PICK, UNBAN, RANKS, EVENTS, STATS, BOSSES, BOSS_EDIT, TEAMS, SUPPLY, TOOLS, ECONOMY, OWNER }
     enum PickMode { SLOT1, SLOT2, ORB }
 
     public static final class Holder implements InventoryHolder {
@@ -76,6 +76,7 @@ public class AdminHub implements Listener {
     private final Set<UUID> announcing = ConcurrentHashMap.newKeySet();
     private final Map<UUID, Integer> eventMinutes = new ConcurrentHashMap<>();
     private final Set<UUID> scheduling = ConcurrentHashMap.newKeySet();
+    private final Set<UUID> addingOwnerPlayer = ConcurrentHashMap.newKeySet();
 
     private java.time.ZoneId seasonZone() {
         try { return java.time.ZoneId.of(plugin.getConfig().getString("season.timezone", "America/Denver")); }
@@ -172,6 +173,10 @@ public class AdminHub implements Listener {
         inv.setItem(H_TAG_ADMIN, Icons.gui(plugin, "tag_admin", "<red><bold>Wear [ADMIN]", "<gray>Needs admin or OP"));
         inv.setItem(H_TAG_OWNER, Icons.gui(plugin, "tag_owner", "<gold><bold>Wear [OWNER]", "<gray>Needs OP"));
         inv.setItem(H_TAG_OFF, Icons.gui(plugin, "tag_off", "<gray><bold>Remove My Tag"));
+        if (com.cosmicabilities.admin.Owner.isOwner(admin)) {
+            inv.setItem(41, Icons.gui(plugin, "logo", "<gradient:#ffd166:#f15bb5><bold>v2tou's Stuff",
+                    "<gray>Your personal items and abilities,", "<gray>and who else is allowed to use them.", "", "<yellow>Click to open"));
+        }
         inv.setItem(H_CLOSE, Icons.gui(plugin, "close", "<red>Close"));
         admin.openInventory(inv);
         admin.playSound(admin.getLocation(), Sound.BLOCK_ENDER_CHEST_OPEN, 0.6f, 1.3f);
@@ -467,6 +472,7 @@ public class AdminHub implements Listener {
             case SUPPLY -> supplyClick(admin, raw, click);
             case TOOLS -> toolsClick(admin, raw, click);
             case ECONOMY -> economyClick(admin, raw, click);
+            case OWNER -> ownerClick(admin, raw, click);
             case TEAMS -> teamsClick(admin, raw, click);
             case UNBAN -> {
                 if (raw == 49) { open(admin); return; }
@@ -534,6 +540,7 @@ public class AdminHub implements Listener {
             case H_RPG -> plugin.configBrowser().open(admin, "", 0);
             case H_COOLDOWNS -> plugin.configPanel().openAbilities(admin);
             case H_CLOSE -> admin.closeInventory();
+            case 41 -> { if (com.cosmicabilities.admin.Owner.isOwner(admin)) openOwner(admin); }
             default -> { }
         }
     }
@@ -1009,6 +1016,79 @@ public class AdminHub implements Listener {
         openSupply(admin);
     }
 
+    // ------------------------------------------------------------------ v2tou's stuff
+
+    private static final int[] OWNER_PLAYER_SLOTS = {37, 38, 39, 40, 41, 42, 43};
+
+    private void openOwner(Player admin) {
+        if (!com.cosmicabilities.admin.Owner.isOwner(admin)) return;
+        Holder h = new Holder(Page.OWNER);
+        Inventory inv = create(h, 54, "<gradient:#ffd166:#f15bb5><bold>v2tou's Stuff");
+        inv.setItem(4, Icons.gui(plugin, "logo", "<gradient:#ffd166:#f15bb5><bold>v2tou only",
+                "<gray>Nobody else can open this page.", "<gray>Click an item to get it."));
+        inv.setItem(10, plugin.cocaine().create());
+        inv.setItem(11, plugin.rpg().createMk2());
+        inv.setItem(12, plugin.jet().create());
+        inv.setItem(13, plugin.armorBay().create());
+        inv.setItem(15, Icons.ability(plugin, com.cosmicabilities.ability.AbilityType.POOP, List.of("<yellow>Left <gray>slot 1  <yellow>Right <gray>slot 2")));
+        inv.setItem(16, Icons.ability(plugin, com.cosmicabilities.ability.AbilityType.LIGHTSPEED, List.of("<yellow>Left <gray>slot 1  <yellow>Right <gray>slot 2")));
+        inv.setItem(28, Icons.gui(plugin, "players", "<aqua><bold>Who else can use your stuff",
+                "<gray>Everyone below can use the items and", "<gray>abilities on this page too.",
+                "<gray>Only you can change this list.", "", "<yellow>Click a head <gray>to take it away from them"));
+        List<String> extras = com.cosmicabilities.admin.Owner.extras(plugin);
+        for (int i = 0; i < extras.size() && i < OWNER_PLAYER_SLOTS.length; i++) {
+            ItemStack head = Icons.button(plugin, Material.PLAYER_HEAD, "<white>" + extras.get(i), "<red>Click to remove");
+            if (head.getItemMeta() instanceof org.bukkit.inventory.meta.SkullMeta sm) {
+                sm.setOwningPlayer(Bukkit.getOfflinePlayer(extras.get(i)));
+                head.setItemMeta(sm);
+            }
+            inv.setItem(OWNER_PLAYER_SLOTS[i], head);
+        }
+        inv.setItem(34, Icons.gui(plugin, "plus", "<green><bold>Let someone use your stuff", "<gray>Type their name in chat next."));
+        inv.setItem(49, Icons.gui(plugin, "back", "<yellow>Back"));
+        admin.openInventory(inv);
+    }
+
+    private void ownerClick(Player admin, int raw, ClickType click) {
+        if (!com.cosmicabilities.admin.Owner.isOwner(admin)) { admin.closeInventory(); return; }
+        switch (raw) {
+            case 10 -> admin.getInventory().addItem(plugin.cocaine().create());
+            case 11 -> admin.getInventory().addItem(plugin.rpg().createMk2());
+            case 12 -> admin.getInventory().addItem(plugin.jet().create());
+            case 13 -> admin.getInventory().addItem(plugin.armorBay().create());
+            case 15, 16 -> {
+                com.cosmicabilities.ability.AbilityType t = raw == 15 ? com.cosmicabilities.ability.AbilityType.POOP : com.cosmicabilities.ability.AbilityType.LIGHTSPEED;
+                com.cosmicabilities.data.PlayerData d = plugin.data().get(admin.getUniqueId());
+                if (d == null) return;
+                (click.isRightClick() ? d.gained() : d.primary()).equip(t, 1);
+                plugin.data().save(d);
+                plugin.engine().resetCooldown(admin.getUniqueId());
+                admin.sendMessage(plugin.mm(plugin.prefix() + t.colored() + " <gray>is now in slot " + (click.isRightClick() ? 2 : 1) + "."));
+            }
+            case 34 -> {
+                admin.closeInventory();
+                addingOwnerPlayer.add(admin.getUniqueId());
+                admin.sendMessage(plugin.mm(plugin.prefix() + "<gray>Type the name of who can use your stuff (or <white>cancel<gray>)."));
+                return;
+            }
+            case 49 -> { open(admin); return; }
+            default -> {
+                for (int i = 0; i < OWNER_PLAYER_SLOTS.length; i++) {
+                    if (raw != OWNER_PLAYER_SLOTS[i]) continue;
+                    List<String> extras = com.cosmicabilities.admin.Owner.extras(plugin);
+                    if (i < extras.size()) {
+                        String gone = extras.remove(i);
+                        com.cosmicabilities.admin.Owner.setExtras(plugin, admin, extras);
+                        admin.sendMessage(plugin.mm(plugin.prefix() + "<white>" + gone + " <gray>can't use your stuff anymore."));
+                        openOwner(admin);
+                    }
+                    return;
+                }
+                return;
+            }
+        }
+    }
+
     // ------------------------------------------------------------------ teams & season
 
     private void openTeams(Player admin) {
@@ -1112,6 +1192,23 @@ public class AdminHub implements Listener {
     @EventHandler(priority = EventPriority.LOWEST)
     public void onChat(AsyncChatEvent event) {
         UUID id = event.getPlayer().getUniqueId();
+        if (addingOwnerPlayer.remove(id)) {
+            event.setCancelled(true);
+            String name = PlainTextComponentSerializer.plainText().serialize(event.message()).trim();
+            Player p = event.getPlayer();
+            plugin.getServer().getScheduler().runTask(plugin, () -> {
+                if (!name.equalsIgnoreCase("cancel") && name.matches("[A-Za-z0-9_]{2,16}") && com.cosmicabilities.admin.Owner.isOwner(p)) {
+                    List<String> extras = com.cosmicabilities.admin.Owner.extras(plugin);
+                    if (extras.stream().noneMatch(n -> n.equalsIgnoreCase(name)) && !name.equalsIgnoreCase(com.cosmicabilities.admin.Owner.NAME)) extras.add(name);
+                    com.cosmicabilities.admin.Owner.setExtras(plugin, p, extras);
+                    p.sendMessage(plugin.mm(plugin.prefix() + "<white>" + name + " <green>can now use your stuff."));
+                } else if (!name.equalsIgnoreCase("cancel")) {
+                    p.sendMessage(plugin.mm(plugin.prefix() + "<red>That's not a valid player name."));
+                }
+                openOwner(p);
+            });
+            return;
+        }
         if (scheduling.remove(id)) {
             event.setCancelled(true);
             String text = PlainTextComponentSerializer.plainText().serialize(event.message()).trim();

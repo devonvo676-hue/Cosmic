@@ -58,7 +58,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * v2tou's armor bay: place it, walk into it, and robotic arms build the Nova Armor onto him piece by piece
  * (an animation only he can see). Walk in again to take it off. In the suit he can fly (double-tap jump),
  * fire repulsor blasts from his hands (right-click with an empty hand) and shrug off falls.
- * Sneak + left-click the bay to pick it back up.
+ * Right-click the station to fold it back into the suitcase.
  */
 public class ArmorBay implements Listener {
     public static final String SUIT = "nova_armor";
@@ -89,9 +89,10 @@ public class ArmorBay implements Listener {
     public ItemStack create() {
         ItemStack it = new ItemStack(Material.PAPER);
         ItemMeta m = it.getItemMeta();
-        m.displayName(plugin.mm("<!italic><gradient:#7b2cbf:#00e5ff><bold>Nova Armor Bay"));
-        m.lore(List.of(plugin.mm("<!italic><gray>Right click a block to place it."), plugin.mm("<!italic><gray>Walk into it to suit up / take the suit off."),
-                plugin.mm("<!italic><gray>Sneak + hit it to pick it back up."), plugin.mm("<!italic><dark_red>v2tou only")));
+        m.displayName(plugin.mm("<!italic><gradient:#7b2cbf:#00e5ff><bold>Nova Armor Case"));
+        m.lore(List.of(plugin.mm("<!italic><gray>Right click a block: it unfolds into the"), plugin.mm("<!italic><gray>armor station."),
+                plugin.mm("<!italic><gray>Walk in to suit up / take the suit off."), plugin.mm("<!italic><gray>Right click the station to pack it up."),
+                plugin.mm("<!italic><dark_red>v2tou only")));
         m.setItemModel(new NamespacedKey("cosmic", "armor_bay_item"));
         m.getPersistentDataContainer().set(itemKey, PersistentDataType.BYTE, (byte) 1);
         it.setItemMeta(m);
@@ -124,27 +125,85 @@ public class ArmorBay implements Listener {
         String id = UUID.randomUUID().toString().substring(0, 8);
         bays.put(id, at);
         save();
-        build(id, at);
+        build(id, at, true);
         p.getInventory().getItemInMainHand().setAmount(p.getInventory().getItemInMainHand().getAmount() - 1);
-        p.playSound(at, Sound.BLOCK_ANVIL_PLACE, 0.8f, 1.4f);
-        p.playSound(at, Sound.BLOCK_BEACON_ACTIVATE, 1f, 1.2f);
+        p.playSound(at, Sound.BLOCK_ANVIL_PLACE, 0.6f, 1.6f);
     }
 
-    /** The bay itself: a glowing platform, two pillars with an arch, and a hitbox. Rebuilt on every restart. */
-    private void build(String id, Location at) {
+    private record Part(Material m, float x, float y, float z, float sx, float sy, float sz, boolean glow) {}
+
+    /** The station's pieces (bay-local coordinates, the bay faces +Z). */
+    private static final List<Part> PARTS = List.of(
+            new Part(Material.POLISHED_BLACKSTONE, -1.1f, 0, -1.1f, 2.2f, 0.18f, 2.2f, false),
+            new Part(Material.CYAN_STAINED_GLASS, -0.8f, 0.18f, -0.8f, 1.6f, 0.04f, 1.6f, true),
+            new Part(Material.NETHERITE_BLOCK, -1.15f, 0.18f, 0.55f, 0.3f, 2.6f, 0.3f, false),
+            new Part(Material.PURPLE_STAINED_GLASS, -1.05f, 0.4f, 0.5f, 0.1f, 2.2f, 0.05f, true),
+            new Part(Material.NETHERITE_BLOCK, 0.85f, 0.18f, 0.55f, 0.3f, 2.6f, 0.3f, false),
+            new Part(Material.PURPLE_STAINED_GLASS, 0.95f, 0.4f, 0.5f, 0.1f, 2.2f, 0.05f, true),
+            new Part(Material.NETHERITE_BLOCK, -1.15f, 2.75f, 0.5f, 2.3f, 0.3f, 0.35f, false),
+            new Part(Material.SEA_LANTERN, -0.5f, 2.62f, 0.55f, 1.0f, 0.12f, 0.2f, true));
+
+    private static Transformation shape(Part p, float yaw, float k) {
+        // k = 1: unfolded station; k = 0: folded up inside the suitcase (a 0.8 x 0.25 x 0.55 box on the floor)
+        float fx = p.x() * 0.3f, fy = 0.03f + Math.max(0, p.y()) * 0.06f, fz = -0.15f + p.z() * 0.12f;
+        float fsx = Math.min(p.sx(), 0.7f) * 0.9f, fsy = Math.min(p.sy(), 0.2f), fsz = Math.min(p.sz(), 0.45f);
+        float x = fx + (p.x() - fx) * k, y = fy + (p.y() - fy) * k, z = fz + (p.z() - fz) * k;
+        float sx = fsx + (p.sx() - fsx) * k, sy = fsy + (p.sy() - fsy) * k, sz = fsz + (p.sz() - fsz) * k;
+        Quaternionf r = new Quaternionf().rotateY(yaw);
+        return new Transformation(r.transform(new Vector3f(x, y, z)), r, new Vector3f(sx, sy, sz), new Quaternionf());
+    }
+
+    /**
+     * The station. With animate=true it starts as a closed suitcase that pops open and unfolds piece by piece
+     * (platform slides out, pillars telescope up, the arch locks across the top). Rebuilt on every restart.
+     */
+    private void build(String id, Location at, boolean animate) {
         World w = at.getWorld();
         if (w == null) return;
         float yaw = (float) Math.toRadians(-at.getYaw());
         Location base = at.clone(); base.setYaw(0); base.setPitch(0);
-        part(id, base, Material.POLISHED_BLACKSTONE, -1.1f, 0, -1.1f, 2.2f, 0.18f, 2.2f, yaw, false);
-        part(id, base, Material.CYAN_STAINED_GLASS, -0.8f, 0.18f, -0.8f, 1.6f, 0.04f, 1.6f, yaw, true);
-        for (int side = -1; side <= 1; side += 2) {
-            part(id, base, Material.NETHERITE_BLOCK, side * 1.0f - 0.15f, 0.18f, 0.55f, 0.3f, 2.6f, 0.3f, yaw, false);
-            part(id, base, Material.PURPLE_STAINED_GLASS, side * 1.0f - 0.05f, 0.4f, 0.5f, 0.1f, 2.2f, 0.05f, yaw, true);
+        List<BlockDisplay> made = new ArrayList<>();
+        for (int i = 0; i < PARTS.size(); i++) {
+            Part pt = PARTS.get(i);
+            BlockDisplay d = w.spawn(base, BlockDisplay.class, e -> {
+                e.setBlock(pt.m().createBlockData());
+                e.setPersistent(false);
+                e.addScoreboardTag(TAG);
+                e.addScoreboardTag(Fx.KEEP);
+                e.getPersistentDataContainer().set(bayKey, PersistentDataType.STRING, id);
+                if (pt.glow()) e.setBrightness(new Display.Brightness(15, 15));
+                e.setTransformation(shape(pt, yaw, animate ? 0 : 1));
+            });
+            made.add(d);
         }
-        part(id, base, Material.NETHERITE_BLOCK, -1.15f, 2.75f, 0.5f, 2.3f, 0.3f, 0.35f, yaw, false);
-        part(id, base, Material.SEA_LANTERN, -0.5f, 2.62f, 0.55f, 1.0f, 0.12f, 0.2f, yaw, true);
-        w.spawn(base.clone().add(0, 0, 0), Interaction.class, i -> {
+        if (animate) {
+            List<BlockDisplay> lid = suitcase(base, yaw, id);
+            w.playSound(base, Sound.BLOCK_IRON_TRAPDOOR_OPEN, 1f, 0.8f);
+            // the lid flips open, then each piece unfolds in turn
+            Fx.animate(lid.get(1), 8, caseShape(yaw, 1, true), 4);
+            for (int i = 0; i < made.size(); i++) {
+                int delay = 12 + i * 5;
+                Fx.animate(made.get(i), 10, shape(PARTS.get(i), yaw, 1), delay);
+                final int n = i;
+                plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+                    w.playSound(base, n % 2 == 0 ? Sound.BLOCK_PISTON_EXTEND : Sound.BLOCK_IRON_DOOR_OPEN, 0.9f, 0.9f + n * 0.08f);
+                    w.spawnParticle(Particle.ELECTRIC_SPARK, base.clone().add(0, 0.6, 0), 10, 0.5, 0.4, 0.5, 0.1);
+                }, delay);
+            }
+            int done = 12 + made.size() * 5 + 10;
+            for (BlockDisplay d : lid) { Fx.animate(d, 6, caseShape(yaw, 0.01f, false), done - 6); Fx.removeLater(d, done); }
+            plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+                w.playSound(base, Sound.BLOCK_BEACON_ACTIVATE, 1f, 1.2f);
+                w.spawnParticle(Particle.END_ROD, base.clone().add(0, 1.4, 0), 40, 0.6, 1, 0.6, 0.05);
+                hitbox(id, base);
+            }, done);
+        } else {
+            hitbox(id, base);
+        }
+    }
+
+    private void hitbox(String id, Location base) {
+        base.getWorld().spawn(base, Interaction.class, i -> {
             i.setInteractionWidth(2.2f);
             i.setInteractionHeight(0.3f);
             i.setPersistent(false);
@@ -153,49 +212,100 @@ public class ArmorBay implements Listener {
         });
     }
 
-    private void part(String id, Location at, Material m, float x, float y, float z, float sx, float sy, float sz, float yaw, boolean glow) {
-        at.getWorld().spawn(at, BlockDisplay.class, d -> {
-            d.setBlock(m.createBlockData());
-            d.setPersistent(false);
-            d.addScoreboardTag(TAG);
-            d.addScoreboardTag(Fx.KEEP);
-            d.getPersistentDataContainer().set(bayKey, PersistentDataType.STRING, id);
-            if (glow) d.setBrightness(new Display.Brightness(15, 15));
-            Quaternionf r = new Quaternionf().rotateY(yaw);
-            Vector3f tr = r.transform(new Vector3f(x, y, z));
-            d.setTransformation(new Transformation(tr, r, new Vector3f(sx, sy, sz), new Quaternionf()));
-        });
+    /** The suitcase shell: [0] body, [1] lid. */
+    private Transformation caseShape(float yaw, float size, boolean lidOpen) {
+        Quaternionf r = new Quaternionf().rotateY(yaw);
+        if (lidOpen) r = new Quaternionf(r).rotateX(-1.9f);
+        return new Transformation(r.transform(new Vector3f(-0.42f * size, 0.27f * size, -0.3f * size)), r, new Vector3f(0.84f * size, 0.06f * size, 0.6f * size), new Quaternionf());
+    }
+
+    private List<BlockDisplay> suitcase(Location base, float yaw, String id) {
+        List<BlockDisplay> out = new ArrayList<>();
+        Quaternionf r = new Quaternionf().rotateY(yaw);
+        out.add(base.getWorld().spawn(base, BlockDisplay.class, e -> {
+            e.setBlock(Material.GRAY_CONCRETE.createBlockData());
+            e.setPersistent(false);
+            e.addScoreboardTag(Fx.TAG);
+            e.setTransformation(new Transformation(r.transform(new Vector3f(-0.42f, 0, -0.3f)), r, new Vector3f(0.84f, 0.27f, 0.6f), new Quaternionf()));
+        }));
+        out.add(base.getWorld().spawn(base, BlockDisplay.class, e -> {
+            e.setBlock(Material.LIGHT_GRAY_CONCRETE.createBlockData());
+            e.setPersistent(false);
+            e.addScoreboardTag(Fx.TAG);
+            e.setTransformation(caseShape(yaw, 1, false));
+        }));
+        out.add(base.getWorld().spawn(base, BlockDisplay.class, e -> {   // handle
+            e.setBlock(Material.BLACK_CONCRETE.createBlockData());
+            e.setPersistent(false);
+            e.addScoreboardTag(Fx.TAG);
+            e.setTransformation(new Transformation(r.transform(new Vector3f(-0.15f, 0.12f, 0.3f)), r, new Vector3f(0.3f, 0.06f, 0.06f), new Quaternionf()));
+        }));
+        return out;
+    }
+
+    /** Folds the station back into a suitcase and gives it back. */
+    private void pack(Player p, String id) {
+        Location at = bays.remove(id);
+        save();
+        if (at == null) return;
+        World w = at.getWorld();
+        float yaw = (float) Math.toRadians(-at.getYaw());
+        Location base = at.clone(); base.setYaw(0); base.setPitch(0);
+        List<BlockDisplay> parts = new ArrayList<>();
+        for (Entity e : w.getEntities()) {
+            if (!id.equals(e.getPersistentDataContainer().get(bayKey, PersistentDataType.STRING))) continue;
+            if (e instanceof BlockDisplay bd) parts.add(bd); else e.remove();
+        }
+        w.playSound(base, Sound.BLOCK_PISTON_CONTRACT, 1f, 0.9f);
+        for (int i = 0; i < parts.size(); i++) {
+            BlockDisplay d = parts.get(i);
+            int idx = Math.min(i, PARTS.size() - 1);
+            Fx.animate(d, 8, shape(PARTS.get(idx), yaw, 0), (parts.size() - i) * 3);
+        }
+        int done = parts.size() * 3 + 12;
+        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+            parts.forEach(Entity::remove);
+            List<BlockDisplay> sc = suitcase(base, yaw, id);
+            w.playSound(base, Sound.BLOCK_IRON_TRAPDOOR_CLOSE, 1f, 0.8f);
+            for (BlockDisplay d : sc) { Fx.animate(d, 6, caseShape(yaw, 0.01f, false), 8); Fx.removeLater(d, 15); }
+            if (p.isOnline()) {
+                p.getInventory().addItem(create()).values().forEach(left -> w.dropItemNaturally(base, left));
+                p.playSound(p.getLocation(), Sound.ITEM_ARMOR_EQUIP_NETHERITE, 1f, 1.2f);
+            }
+        }, done);
     }
 
     /** Respawns every saved bay (call once the worlds are loaded). */
     public void rebuildAll() {
         for (World w : Bukkit.getWorlds()) for (Entity e : w.getEntities()) if (e.getScoreboardTags().contains(TAG)) e.remove();
-        for (Map.Entry<String, Location> e : bays.entrySet()) build(e.getKey(), e.getValue());
+        for (Map.Entry<String, Location> e : bays.entrySet()) build(e.getKey(), e.getValue(), false);
     }
 
     @EventHandler
     public void onHitBay(io.papermc.paper.event.player.PrePlayerAttackEntityEvent event) {
-        if (!(event.getAttacked() instanceof Interaction i) || !i.getScoreboardTags().contains(TAG)) return;
+        if (event.getAttacked() instanceof Interaction i && i.getScoreboardTags().contains(TAG)) event.setCancelled(true);
+    }
+
+    /** Right-click the station to fold it back into the suitcase. */
+    @EventHandler
+    public void onRightClickBay(org.bukkit.event.player.PlayerInteractEntityEvent event) {
+        if (!(event.getRightClicked() instanceof Interaction i) || !i.getScoreboardTags().contains(TAG)) return;
         event.setCancelled(true);
         Player p = event.getPlayer();
-        if (!p.isSneaking() || !Owner.allowed(plugin, p)) return;
+        if (event.getHand() != EquipmentSlot.HAND || !Owner.allowed(plugin, p) || busy.contains(p.getUniqueId())) return;
         String id = i.getPersistentDataContainer().get(bayKey, PersistentDataType.STRING);
-        if (id == null) return;
-        bays.remove(id);
-        save();
-        for (Entity e : i.getWorld().getEntities()) {
-            if (id.equals(e.getPersistentDataContainer().get(bayKey, PersistentDataType.STRING))) e.remove();
-        }
-        p.getInventory().addItem(create());
-        p.playSound(p.getLocation(), Sound.BLOCK_ANVIL_BREAK, 0.8f, 1.4f);
+        if (id != null) pack(p, id);
     }
 
     // ------------------------------------------------------------------ walking in
 
     private void tick() {
         thrusters();
-        Player p = Bukkit.getPlayerExact(Owner.NAME);
-        if (p == null || busy.contains(p.getUniqueId())) return;
+        for (Player p : Bukkit.getOnlinePlayers()) if (Owner.allowed(plugin, p)) check(p);
+    }
+
+    private void check(Player p) {
+        if (busy.contains(p.getUniqueId())) return;
         String in = null;
         for (Map.Entry<String, Location> e : bays.entrySet()) {
             Location c = e.getValue();
