@@ -3,14 +3,18 @@ package com.cosmicabilities.gui;
 import com.cosmicabilities.CosmicAbilitiesPlugin;
 import com.cosmicabilities.admin.Owner;
 import io.papermc.paper.event.player.AsyncChatEvent;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
+import org.bukkit.Chunk;
+import org.bukkit.DyeColor;
 import org.bukkit.HeightMap;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.Sound;
 import org.bukkit.World;
-import org.bukkit.WorldBorder;
 import org.bukkit.block.Block;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -21,75 +25,149 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.inventory.ClickType;
+import org.bukkit.event.block.Action;
+import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.event.inventory.InventoryDragEvent;
-import org.bukkit.inventory.Inventory;
-import org.bukkit.inventory.InventoryHolder;
+import org.bukkit.event.inventory.InventoryType;
+import org.bukkit.event.player.PlayerDropItemEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerRespawnEvent;
+import org.bukkit.event.world.ChunkLoadEvent;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.SkullMeta;
+import org.bukkit.inventory.meta.MapMeta;
+import org.bukkit.map.MapCanvas;
+import org.bukkit.map.MapCursor;
+import org.bukkit.map.MapCursorCollection;
+import org.bukkit.map.MapPalette;
+import org.bukkit.map.MapRenderer;
+import org.bukkit.map.MapView;
+import org.bukkit.map.MinecraftFont;
+import org.bukkit.persistence.PersistentDataType;
 import org.jetbrains.annotations.NotNull;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Base64;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.zip.GZIPInputStream;
+import java.util.zip.GZIPOutputStream;
 
 /**
- * /minimap - v2tou only. A 9 x 5 map of the world drawn from the real terrain (each square shows the block on top
- * of that area), with every online player's head where they are and his waypoints.
- * Click a player's head or a waypoint to teleport there. Click terrain to zoom in on it, right-click terrain to
- * teleport there, shift-click terrain to drop a waypoint. Arrows pan, the magnifiers zoom.
+ * v2tou's minimap: a live map that sits in his offhand (bottom corner of the screen) and follows him around,
+ * drawn from the real terrain with height shading. Every online player is on it with their name, and so are his
+ * waypoints. /minimap turns it on and off.
+ *
+ * Holding it in the main hand (press F to swap it over) gives a red X pointer you move by turning your head:
+ *   LEFT CLICK on a player / waypoint      teleport there
+ *   SNEAK + LEFT CLICK on empty ground     drop a waypoint there (name it in chat)
+ *   SNEAK + LEFT CLICK on a waypoint       delete it
+ *   RIGHT CLICK / SNEAK + RIGHT CLICK      zoom in / out (zoomed all the way out it shows the whole explored world)
  */
 public class Minimap implements Listener, CommandExecutor {
-    private static final int COLS = 9, ROWS = 5;
-    private static final int[] ZOOMS = {8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192};   // blocks per square
-
-    private enum Kind { TERRAIN, PLAYER, WAYPOINT }
-    private record Cell(Kind kind, int x, int z, String ref) {}
-
-    private static final class View implements InventoryHolder {
-        Inventory inv;
-        String world;
-        int cx, cz, zoom;
-        boolean list;
-        final Map<Integer, Cell> cells = new java.util.HashMap<>();
-        @Override public @NotNull Inventory getInventory() { return inv; }
-    }
+    private static final int[] ZOOMS = {1, 2, 4, 8, 16, 32, 64};   // blocks per pixel
+    private static final int N = 128;
+    private static final int UNKNOWN = 0, UNGENERATED = -2;
 
     private final CosmicAbilitiesPlugin plugin;
-    private final File file;
+    private final NamespacedKey itemKey, savedOffhandKey, wantsKey;
+    private final File wpFile, cacheFile;
     private final Map<String, Location> waypoints = new LinkedHashMap<>();
-    private final Map<String, Material> terrain = new ConcurrentHashMap<>();   // "world:x:z" -> top block
-    private final Map<UUID, View> last = new ConcurrentHashMap<>();
-    private final Map<UUID, Location> naming = new ConcurrentHashMap<>();       // waiting for a waypoint name in chat
+    private final Map<UUID, Location> naming = new ConcurrentHashMap<>();
+    private final Map<UUID, View> views = new ConcurrentHashMap<>();
+    /** world -> chunk key -> (colour id << 16 | height), sampled at each chunk's centre. Lets the zoomed-out map show the whole world. */
+    private final Map<String, Map<Long, Integer>> chunkCache = new ConcurrentHashMap<>();
+    private final Set<String> pending = ConcurrentHashMap.newKeySet();
+    private int asyncBudget;
+    private MapView mapView;
+
+    // colours: id -> 3 shades (dark, normal, light) as map palette bytes
+    private final List<byte[]> palette = new ArrayList<>();
+    private final Map<Integer, Integer> rgbToId = new ConcurrentHashMap<>();
+    private final Map<Material, Integer> materialId = new EnumMap<>(Material.class);
+    private byte dark, fog, white, black;
+
+    private static final class View {
+        String world;
+        int zoom = 1, ox = Integer.MIN_VALUE, oz, z = -1;
+        final int[] col = new int[N * N];
+        final int[] h = new int[N * N];
+        boolean pointer;
+        float anchorYaw, anchorPitch;
+        int px = 64, py = 64;
+        String hoverKind, hoverRef;
+        int hoverX, hoverZ;
+    }
 
     public Minimap(CosmicAbilitiesPlugin plugin) {
         this.plugin = plugin;
-        this.file = new File(plugin.getDataFolder(), "waypoints.yml");
-        YamlConfiguration yml = YamlConfiguration.loadConfiguration(file);
+        this.itemKey = new NamespacedKey(plugin, "minimap");
+        this.savedOffhandKey = new NamespacedKey(plugin, "minimap_saved_offhand");
+        this.wantsKey = new NamespacedKey(plugin, "minimap_on");
+        this.wpFile = new File(plugin.getDataFolder(), "waypoints.yml");
+        this.cacheFile = new File(plugin.getDataFolder(), "minimap-cache.bin");
+        YamlConfiguration yml = YamlConfiguration.loadConfiguration(wpFile);
         ConfigurationSection sec = yml.getConfigurationSection("waypoints");
         if (sec != null) for (String k : sec.getKeys(false)) {
             Location l = sec.getLocation(k);
             if (l != null) waypoints.put(k, l);
         }
-        // the map refreshes while it's open so players move around on it
-        plugin.getServer().getScheduler().runTaskTimer(plugin, () -> {
-            for (Player p : Bukkit.getOnlinePlayers()) {
-                if (p.getOpenInventory().getTopInventory().getHolder() instanceof View v && !v.list) draw(p, v);
-            }
-        }, 40L, 40L);
+        initPalette();
+        loadCache();
+        mapView = Bukkit.createMap(Bukkit.getWorlds().get(0));
+        for (MapRenderer r : new ArrayList<>(mapView.getRenderers())) mapView.removeRenderer(r);
+        mapView.setTrackingPosition(false);
+        mapView.setUnlimitedTracking(false);
+        mapView.addRenderer(new Renderer());
+        plugin.getServer().getScheduler().runTaskTimer(plugin, () -> asyncBudget = 6, 1L, 1L);
+        plugin.getServer().getScheduler().runTaskTimer(plugin, this::saveCache, 20L * 300, 20L * 300);
+        plugin.getServer().getScheduler().runTask(plugin, () -> { for (Player p : Bukkit.getOnlinePlayers()) fixItems(p); });
     }
 
-    private void save() {
-        YamlConfiguration yml = new YamlConfiguration();
-        for (Map.Entry<String, Location> e : waypoints.entrySet()) yml.set("waypoints." + e.getKey(), e.getValue());
-        try { yml.save(file); } catch (IOException ex) { plugin.getLogger().warning("Couldn't save waypoints.yml"); }
+    // ------------------------------------------------------------------ the item
+
+    private boolean isMap(ItemStack it) {
+        return it != null && it.getType() == Material.FILLED_MAP && it.hasItemMeta()
+                && it.getItemMeta().getPersistentDataContainer().has(itemKey, PersistentDataType.BYTE);
+    }
+
+    private ItemStack mapItem() {
+        ItemStack it = new ItemStack(Material.FILLED_MAP);
+        MapMeta m = (MapMeta) it.getItemMeta();
+        m.setMapView(mapView);
+        m.displayName(plugin.mm("<!italic><aqua><bold>Minimap"));
+        m.lore(List.of(plugin.mm("<!italic><gray>Hold it in your main hand (F) to point:"),
+                plugin.mm("<!italic><yellow>Click <gray>a player / waypoint: teleport"),
+                plugin.mm("<!italic><yellow>Sneak + click <gray>ground: new waypoint"),
+                plugin.mm("<!italic><yellow>Sneak + click <gray>a waypoint: delete it"),
+                plugin.mm("<!italic><yellow>Right click <gray>zoom in, <yellow>sneak <gray>zoom out"),
+                plugin.mm("<!italic><dark_red>v2tou only")));
+        m.getPersistentDataContainer().set(itemKey, PersistentDataType.BYTE, (byte) 1);
+        it.setItemMeta(m);
+        return it;
+    }
+
+    /** The map's id changes every restart: point any minimap he's carrying at the current one. */
+    private void fixItems(Player p) {
+        ItemStack[] all = p.getInventory().getContents();
+        for (ItemStack it : all) {
+            if (!isMap(it)) continue;
+            if (!Owner.isOwner(p)) { it.setAmount(0); continue; }
+            MapMeta m = (MapMeta) it.getItemMeta();
+            if (m.getMapView() == null || m.getMapView().getId() != mapView.getId()) { m.setMapView(mapView); it.setItemMeta(m); }
+        }
     }
 
     @Override
@@ -102,327 +180,391 @@ public class Minimap implements Listener, CommandExecutor {
         return true;
     }
 
+    /** /minimap: on (map goes into the offhand, whatever was there is kept safe) or off (it comes back). */
     public void open(Player p) {
         if (!Owner.isOwner(p)) return;
-        View v = last.get(p.getUniqueId());
-        if (v == null || v.world == null || Bukkit.getWorld(v.world) == null) {
-            v = new View();
-            World w = p.getWorld();
-            v.world = w.getName();
-            // start zoomed out far enough to see the whole world inside the border (if it's a sensible size)
-            WorldBorder b = w.getWorldBorder();
-            if (b.getSize() <= 120_000) {
-                v.cx = b.getCenter().getBlockX();
-                v.cz = b.getCenter().getBlockZ();
-                v.zoom = 0;
-                while (v.zoom < ZOOMS.length - 1 && ZOOMS[v.zoom] * COLS < b.getSize()) v.zoom++;
-            } else {
-                v.cx = p.getLocation().getBlockX();
-                v.cz = p.getLocation().getBlockZ();
-                v.zoom = 7;
-            }
-        }
-        View nv = new View();
-        nv.world = v.world; nv.cx = v.cx; nv.cz = v.cz; nv.zoom = v.zoom;
-        last.put(p.getUniqueId(), nv);
-        nv.inv = Bukkit.createInventory(nv, 54, plugin.mm(title(nv)));
-        draw(p, nv);
-        p.openInventory(nv.inv);
-    }
-
-    private String title(View v) {
-        return "<dark_aqua><bold>Minimap</bold> <dark_gray>" + v.world + " | " + ZOOMS[v.zoom] + " blocks/square";
-    }
-
-    private int originX(View v) { return v.cx - ZOOMS[v.zoom] * COLS / 2; }
-    private int originZ(View v) { return v.cz - ZOOMS[v.zoom] * ROWS / 2; }
-
-    private void draw(Player viewer, View v) {
-        World w = Bukkit.getWorld(v.world);
-        if (w == null) return;
-        int size = ZOOMS[v.zoom];
-        int ox = originX(v), oz = originZ(v);
-        v.cells.clear();
-        v.list = false;
-        // terrain first
-        for (int r = 0; r < ROWS; r++) for (int c = 0; c < COLS; c++) {
-            int x = ox + c * size + size / 2, z = oz + r * size + size / 2;
-            int slot = r * 9 + c;
-            v.cells.put(slot, new Cell(Kind.TERRAIN, x, z, null));
-            v.inv.setItem(slot, terrainItem(w, x, z, size, viewer));
-        }
-        // waypoints on top of terrain
-        for (Map.Entry<String, Location> e : waypoints.entrySet()) {
-            Location l = e.getValue();
-            if (l.getWorld() == null || !l.getWorld().equals(w)) continue;
-            int slot = slotOf(v, l.getBlockX(), l.getBlockZ());
-            if (slot < 0) continue;
-            v.cells.put(slot, new Cell(Kind.WAYPOINT, l.getBlockX(), l.getBlockZ(), e.getKey()));
-            v.inv.setItem(slot, Icons.button(plugin, Material.RECOVERY_COMPASS, "<gold><bold>" + e.getKey(),
-                    "<gray>" + l.getBlockX() + ", " + l.getBlockY() + ", " + l.getBlockZ(), "",
-                    "<yellow>Click <gray>teleport here", "<yellow>Shift + right click <gray>delete"));
-        }
-        // live players on top of everything
-        Map<Integer, List<Player>> here = new java.util.HashMap<>();
-        for (Player o : w.getPlayers()) {
-            int slot = slotOf(v, o.getLocation().getBlockX(), o.getLocation().getBlockZ());
-            if (slot >= 0) here.computeIfAbsent(slot, k -> new ArrayList<>()).add(o);
-        }
-        for (Map.Entry<Integer, List<Player>> e : here.entrySet()) {
-            List<Player> ps = e.getValue();
-            Player first = ps.contains(viewer) && ps.size() > 1 ? ps.stream().filter(o -> !o.equals(viewer)).findFirst().orElse(viewer) : ps.get(0);
-            List<String> lore = new ArrayList<>();
-            lore.add("<gray>" + first.getLocation().getBlockX() + ", " + first.getLocation().getBlockY() + ", " + first.getLocation().getBlockZ());
-            lore.add("<gray>Health: <red>" + Math.round(first.getHealth()) / 2.0 + " hearts");
-            if (ps.size() > 1) {
-                lore.add("");
-                lore.add("<gray>Also here:");
-                for (Player o : ps) if (!o.equals(first)) lore.add("<white> " + o.getName());
-                lore.add("<dark_gray>(zoom in to tell them apart)");
-            }
-            lore.add("");
-            lore.add(first.equals(viewer) ? "<aqua>That's you" : "<yellow>Click <gray>teleport to " + first.getName());
-            ItemStack head = Icons.button(plugin, Material.PLAYER_HEAD, (first.equals(viewer) ? "<aqua><bold>" : "<green><bold>") + first.getName(),
-                    lore.toArray(new String[0]));
-            if (head.getItemMeta() instanceof SkullMeta sm) { sm.setOwningPlayer(first); head.setItemMeta(sm); }
-            v.cells.put(e.getKey(), new Cell(Kind.PLAYER, first.getLocation().getBlockX(), first.getLocation().getBlockZ(), first.getUniqueId().toString()));
-            v.inv.setItem(e.getKey(), head);
-        }
-        // controls
-        int step = size * 3;
-        v.inv.setItem(45, Icons.button(plugin, Material.ARROW, "<yellow>West", "<gray>Move " + step + " blocks west"));
-        v.inv.setItem(46, Icons.button(plugin, Material.ARROW, "<yellow>North", "<gray>Move " + step + " blocks north"));
-        v.inv.setItem(47, Icons.button(plugin, Material.ARROW, "<yellow>South", "<gray>Move " + step + " blocks south"));
-        v.inv.setItem(48, Icons.button(plugin, Material.ARROW, "<yellow>East", "<gray>Move " + step + " blocks east"));
-        v.inv.setItem(49, Icons.button(plugin, Material.COMPASS, "<aqua><bold>Centre on me",
-                "<gray>Map centre: <white>" + v.cx + ", " + v.cz, "<gray>Showing <white>" + size * COLS + " x " + size * ROWS + " <gray>blocks",
-                "", "<yellow>Click <gray>centre on you", "<yellow>Right click <gray>next world"));
-        v.inv.setItem(50, Icons.button(plugin, Material.SPYGLASS, "<green>Zoom in", "<gray>" + (v.zoom > 0 ? ZOOMS[v.zoom - 1] + " blocks/square" : "Max zoom")));
-        v.inv.setItem(51, Icons.button(plugin, Material.FILLED_MAP, "<green>Zoom out", "<gray>" + (v.zoom < ZOOMS.length - 1 ? ZOOMS[v.zoom + 1] + " blocks/square" : "Whole world")));
-        v.inv.setItem(52, Icons.button(plugin, Material.LODESTONE, "<gold><bold>Set waypoint here", "<gray>Saves where you're standing.", "<gray>You'll name it in chat.",
-                "", "<dark_gray>Tip: shift-click any square on", "<dark_gray>the map to drop one there."));
-        v.inv.setItem(53, Icons.button(plugin, Material.BOOK, "<gold><bold>All waypoints (" + waypoints.size() + ")", "<gray>Every waypoint in every world."));
-    }
-
-    private int slotOf(View v, int x, int z) {
-        int size = ZOOMS[v.zoom];
-        int c = Math.floorDiv(x - originX(v), size), r = Math.floorDiv(z - originZ(v), size);
-        if (c < 0 || c >= COLS || r < 0 || r >= ROWS) return -1;
-        return r * 9 + c;
-    }
-
-    /** The top block in the middle of a square. Unvisited land shows as fog; chunks load in the background. */
-    private ItemStack terrainItem(World w, int x, int z, int size, Player viewer) {
-        String k = w.getName() + ":" + x + ":" + z;
-        Material m = terrain.get(k);
-        String coords = "<dark_gray>" + x + ", " + z;
-        if (m == null) {
-            if (w.isChunkLoaded(x >> 4, z >> 4)) {
-                m = top(w, x, z);
-                cache(k, m);
-            } else {
-                terrain.put(k, Material.STRUCTURE_VOID);   // loading...
-                w.getChunkAtAsync(x >> 4, z >> 4, false).thenAccept(chunk -> {
-                    if (chunk == null) { cache(k, Material.BLACK_STAINED_GLASS_PANE); return; }
-                    cache(k, top(w, x, z));
-                    if (viewer.getOpenInventory().getTopInventory().getHolder() instanceof View v && !v.list) draw(viewer, v);
-                });
-                return Icons.button(plugin, Material.LIGHT_GRAY_STAINED_GLASS_PANE, "<gray>Loading...", coords);
-            }
-        }
-        if (m == Material.STRUCTURE_VOID) return Icons.button(plugin, Material.LIGHT_GRAY_STAINED_GLASS_PANE, "<gray>Loading...", coords);
-        if (m == Material.BLACK_STAINED_GLASS_PANE) return Icons.button(plugin, m, "<dark_gray>Unexplored", coords,
-                "", "<yellow>Right click <gray>teleport (generates it)");
-        return Icons.button(plugin, m, "<white>" + pretty(m), coords, "",
-                "<yellow>Click <gray>zoom in here", "<yellow>Right click <gray>teleport here", "<yellow>Shift click <gray>set a waypoint here");
-    }
-
-    private void cache(String k, Material m) {
-        if (terrain.size() > 30_000) terrain.clear();
-        terrain.put(k, m);
-    }
-
-    private static Material top(World w, int x, int z) {
-        Block b = w.getHighestBlockAt(x, z, HeightMap.WORLD_SURFACE);
-        Material m = b.getType();
-        String n = m.name();
-        if (n.contains("WATER") || m == Material.KELP || m == Material.KELP_PLANT || m == Material.SEAGRASS || m == Material.TALL_SEAGRASS
-                || m == Material.BUBBLE_COLUMN) return Material.BLUE_STAINED_GLASS;
-        if (m == Material.LAVA) return Material.MAGMA_BLOCK;
-        if (m == Material.SNOW) return Material.SNOW_BLOCK;
-        if (!m.isItem() || m.isAir()) {
-            Material below = b.getRelative(0, -1, 0).getType();
-            return below.isItem() && !below.isAir() ? below : Material.STONE;
-        }
-        return m;
-    }
-
-    private static String pretty(Material m) {
-        if (m == Material.BLUE_STAINED_GLASS) return "Water";
-        String s = m.name().toLowerCase(Locale.ROOT).replace('_', ' ');
-        return Character.toUpperCase(s.charAt(0)) + s.substring(1);
-    }
-
-    // ------------------------------------------------------------------ waypoint list page
-
-    private void openList(Player p) {
-        View v = new View();
-        View cur = last.get(p.getUniqueId());
-        if (cur != null) { v.world = cur.world; v.cx = cur.cx; v.cz = cur.cz; v.zoom = cur.zoom; }
-        v.list = true;
-        v.inv = Bukkit.createInventory(v, 54, plugin.mm("<gold><bold>Waypoints"));
-        int i = 0;
-        for (Map.Entry<String, Location> e : waypoints.entrySet()) {
-            if (i >= 45) break;
-            Location l = e.getValue();
-            v.cells.put(i, new Cell(Kind.WAYPOINT, l.getBlockX(), l.getBlockZ(), e.getKey()));
-            v.inv.setItem(i++, Icons.button(plugin, Material.RECOVERY_COMPASS, "<gold><bold>" + e.getKey(),
-                    "<gray>" + (l.getWorld() == null ? "?" : l.getWorld().getName()) + "  " + l.getBlockX() + ", " + l.getBlockY() + ", " + l.getBlockZ(),
-                    "", "<yellow>Click <gray>teleport here", "<yellow>Right click <gray>show on the map", "<yellow>Shift + right click <gray>delete"));
-        }
-        if (waypoints.isEmpty()) v.inv.setItem(22, Icons.button(plugin, Material.PAPER, "<gray>No waypoints yet",
-                "<gray>Use <white>Set waypoint here <gray>on the map,", "<gray>or shift-click a square."));
-        v.inv.setItem(49, Icons.button(plugin, Material.FILLED_MAP, "<yellow>Back to the map"));
-        p.openInventory(v.inv);
-    }
-
-    // ------------------------------------------------------------------ clicks
-
-    @EventHandler(priority = EventPriority.HIGHEST)
-    public void onClick(InventoryClickEvent event) {
-        if (!(event.getView().getTopInventory().getHolder() instanceof View v)) return;
-        event.setCancelled(true);
-        if (!(event.getWhoClicked() instanceof Player p) || !Owner.isOwner(p)) { event.getWhoClicked().closeInventory(); return; }
-        int slot = event.getRawSlot();
-        if (slot < 0 || slot >= 54) return;
-        ClickType click = event.getClick();
-        if (v.list) { listClick(p, v, slot, click); return; }
-        World w = Bukkit.getWorld(v.world);
-        if (w == null) { p.closeInventory(); return; }
-        int size = ZOOMS[v.zoom];
-        if (slot >= 45) {
-            switch (slot) {
-                case 45 -> v.cx -= size * 3;
-                case 46 -> v.cz -= size * 3;
-                case 47 -> v.cz += size * 3;
-                case 48 -> v.cx += size * 3;
-                case 49 -> {
-                    if (click.isRightClick()) {
-                        List<World> worlds = Bukkit.getWorlds();
-                        World next = worlds.get((worlds.indexOf(w) + 1) % worlds.size());
-                        v.world = next.getName();
-                        v.cx = next.getSpawnLocation().getBlockX();
-                        v.cz = next.getSpawnLocation().getBlockZ();
-                    } else {
-                        v.world = p.getWorld().getName();
-                        v.cx = p.getLocation().getBlockX();
-                        v.cz = p.getLocation().getBlockZ();
-                    }
-                }
-                case 50 -> v.zoom = Math.max(0, v.zoom - 1);
-                case 51 -> v.zoom = Math.min(ZOOMS.length - 1, v.zoom + 1);
-                case 52 -> { askName(p, p.getLocation()); return; }
-                case 53 -> { openList(p); return; }
-                default -> { return; }
-            }
-            p.playSound(p.getLocation(), Sound.UI_BUTTON_CLICK, 0.6f, 1.2f);
-            reopen(p, v);
+        boolean had = false;
+        for (ItemStack it : p.getInventory().getContents()) if (isMap(it)) { it.setAmount(0); had = true; }
+        if (had) {
+            p.getPersistentDataContainer().remove(wantsKey);
+            restoreOffhand(p);
+            p.sendMessage(plugin.mm(plugin.prefix() + "<gray>Minimap <red>off<gray>."));
             return;
         }
-        Cell cell = v.cells.get(slot);
-        if (cell == null) return;
-        switch (cell.kind()) {
-            case PLAYER -> {
-                Player target = Bukkit.getPlayer(UUID.fromString(cell.ref()));
-                if (target == null || target.equals(p)) return;
-                p.closeInventory();
-                p.teleport(target.getLocation());
-                p.playSound(p.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 1f, 1.2f);
-                p.sendMessage(plugin.mm(plugin.prefix() + "<gray>Teleported to <white>" + target.getName() + "<gray>."));
-            }
-            case WAYPOINT -> {
-                if (click == ClickType.SHIFT_RIGHT) { deleteWaypoint(p, cell.ref()); draw(p, v); return; }
-                Location l = waypoints.get(cell.ref());
-                if (l == null || l.getWorld() == null) return;
-                p.closeInventory();
-                p.teleport(l);
-                p.playSound(p.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 1f, 1.2f);
-                p.sendMessage(plugin.mm(plugin.prefix() + "<gray>Teleported to waypoint <gold>" + cell.ref() + "<gray>."));
-            }
-            case TERRAIN -> {
-                if (click.isShiftClick()) {
-                    int y = w.isChunkLoaded(cell.x() >> 4, cell.z() >> 4) ? w.getHighestBlockYAt(cell.x(), cell.z()) + 1 : 100;
-                    askName(p, new Location(w, cell.x() + 0.5, y, cell.z() + 0.5, p.getLocation().getYaw(), 0));
-                } else if (click.isRightClick()) {
-                    p.closeInventory();
-                    teleportToColumn(p, w, cell.x(), cell.z());
-                } else {
-                    v.cx = cell.x();
-                    v.cz = cell.z();
-                    v.zoom = Math.max(0, v.zoom - 2);
-                    p.playSound(p.getLocation(), Sound.UI_BUTTON_CLICK, 0.6f, 1.4f);
-                    reopen(p, v);
-                }
-            }
+        p.getPersistentDataContainer().set(wantsKey, PersistentDataType.BYTE, (byte) 1);
+        giveMap(p);
+        p.sendMessage(plugin.mm(plugin.prefix() + "<gray>Minimap <green>on<gray>. Press <white>F <gray>to hold it and point/click on it."));
+        p.playSound(p.getLocation(), Sound.UI_CARTOGRAPHY_TABLE_TAKE_RESULT, 1f, 1.2f);
+    }
+
+    private void giveMap(Player p) {
+        ItemStack off = p.getInventory().getItemInOffHand();
+        if (!off.getType().isAir() && !isMap(off)) {
+            p.getPersistentDataContainer().set(savedOffhandKey, PersistentDataType.STRING, Base64.getEncoder().encodeToString(off.serializeAsBytes()));
+        }
+        p.getInventory().setItemInOffHand(mapItem());
+    }
+
+    private void restoreOffhand(Player p) {
+        String raw = p.getPersistentDataContainer().get(savedOffhandKey, PersistentDataType.STRING);
+        p.getPersistentDataContainer().remove(savedOffhandKey);
+        if (raw == null) return;
+        try {
+            ItemStack back = ItemStack.deserializeBytes(Base64.getDecoder().decode(raw));
+            if (p.getInventory().getItemInOffHand().getType().isAir()) p.getInventory().setItemInOffHand(back);
+            else for (ItemStack left : p.getInventory().addItem(back).values()) p.getWorld().dropItemNaturally(p.getLocation(), left);
+        } catch (RuntimeException e) {
+            plugin.getLogger().warning("Couldn't give back " + p.getName() + "'s offhand item: " + e.getMessage());
         }
     }
 
-    private void listClick(Player p, View v, int slot, ClickType click) {
-        if (slot == 49) { open(p); return; }
-        Cell cell = v.cells.get(slot);
-        if (cell == null) return;
-        Location l = waypoints.get(cell.ref());
-        if (l == null || l.getWorld() == null) return;
-        if (click == ClickType.SHIFT_RIGHT) { deleteWaypoint(p, cell.ref()); openList(p); return; }
-        if (click.isRightClick()) {
-            View m = last.computeIfAbsent(p.getUniqueId(), k -> new View());
-            m.world = l.getWorld().getName();
-            m.cx = l.getBlockX();
-            m.cz = l.getBlockZ();
-            if (m.zoom == 0) m.zoom = 4;
-            open(p);
-            return;
-        }
-        p.closeInventory();
-        p.teleport(l);
-        p.playSound(p.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 1f, 1.2f);
-        p.sendMessage(plugin.mm(plugin.prefix() + "<gray>Teleported to waypoint <gold>" + cell.ref() + "<gray>."));
+    // ------------------------------------------------------------------ colours
+
+    private void initPalette() {
+        dark = color(new java.awt.Color(18, 18, 24));
+        fog = color(new java.awt.Color(36, 36, 44));
+        white = color(java.awt.Color.WHITE);
+        black = color(java.awt.Color.BLACK);
+        palette.add(null);   // id 0 = unknown
     }
 
-    private void reopen(Player p, View v) {
-        // the size in the title changes with the zoom, so open a fresh view in place
-        View nv = new View();
-        nv.world = v.world; nv.cx = v.cx; nv.cz = v.cz; nv.zoom = v.zoom;
-        nv.inv = Bukkit.createInventory(nv, 54, plugin.mm(title(nv)));
-        last.put(p.getUniqueId(), nv);
-        draw(p, nv);
-        p.openInventory(nv.inv);
-    }
+    @SuppressWarnings("deprecation")
+    private static byte color(java.awt.Color c) { return MapPalette.matchColor(c); }
 
-    private void teleportToColumn(Player p, World w, int x, int z) {
-        p.sendMessage(plugin.mm(plugin.prefix() + "<gray>Teleporting to <white>" + x + ", " + z + "<gray>..."));
-        w.getChunkAtAsync(x >> 4, z >> 4).thenAccept(chunk -> {
-            if (!p.isOnline()) return;
-            int y = w.getHighestBlockYAt(x, z, HeightMap.MOTION_BLOCKING_NO_LEAVES) + 1;
-            p.teleport(new Location(w, x + 0.5, y, z + 0.5, p.getLocation().getYaw(), p.getLocation().getPitch()));
-            p.playSound(p.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 1f, 1.2f);
-            cache(w.getName() + ":" + x + ":" + z, top(w, x, z));
+    private int idFor(int r, int g, int b) {
+        int rgb = (r << 16) | (g << 8) | b;
+        return rgbToId.computeIfAbsent(rgb, k -> {
+            byte[] shades = new byte[3];
+            double[] f = {0.78, 1.0, 1.14};
+            for (int i = 0; i < 3; i++) shades[i] = color(new java.awt.Color(Math.min(255, (int) (r * f[i])), Math.min(255, (int) (g * f[i])), Math.min(255, (int) (b * f[i]))));
+            synchronized (palette) { palette.add(shades); return palette.size() - 1; }
         });
     }
 
-    private void deleteWaypoint(Player p, String name) {
-        if (waypoints.remove(name) != null) {
-            save();
-            p.sendMessage(plugin.mm(plugin.prefix() + "<gray>Deleted waypoint <gold>" + name + "<gray>."));
-            p.playSound(p.getLocation(), Sound.BLOCK_ANVIL_BREAK, 0.6f, 1.4f);
+    private int classify(Material m) {
+        Integer cached = materialId.get(m);
+        if (cached != null) return cached;
+        int id = classifyRaw(m);
+        materialId.put(m, id);
+        return id;
+    }
+
+    private int classifyRaw(Material m) {
+        String n = m.name();
+        if (n.contains("WATER") || n.contains("KELP") || n.contains("SEAGRASS") || m == Material.BUBBLE_COLUMN) return idFor(52, 90, 220);
+        if (m == Material.LAVA) return idFor(232, 96, 24);
+        if (m == Material.MAGMA_BLOCK) return idFor(170, 60, 24);
+        for (DyeColor dc : DyeColor.values()) if (n.startsWith(dc.name() + "_")) {
+            org.bukkit.Color c = dc.getColor();
+            return idFor(c.getRed(), c.getGreen(), c.getBlue());
+        }
+        if (n.contains("LEAVES")) return idFor(44, 118, 34);
+        if (n.contains("ICE")) return idFor(150, 180, 250);
+        if (n.contains("SNOW")) return idFor(245, 248, 252);
+        if (m == Material.GRASS_BLOCK || n.contains("MOSS") || n.contains("GRASS") || n.contains("FERN") || n.contains("VINE")
+                || n.contains("TULIP") || n.contains("DAISY") || n.contains("POPPY") || n.contains("DANDELION") || n.contains("BUSH")
+                || n.contains("LILY") || n.contains("SAPLING") || n.contains("AZALEA")) return idFor(108, 168, 58);
+        if (n.equals("RED_SAND") || n.contains("RED_SANDSTONE")) return idFor(196, 108, 48);
+        if (n.contains("SAND")) return idFor(226, 212, 156);
+        if (n.contains("DIRT") || n.contains("MUD") || n.contains("PODZOL") || n.contains("MYCELIUM") || n.contains("FARMLAND") || n.contains("PATH")
+                || n.contains("ROOTED")) return idFor(134, 96, 64);
+        if (n.contains("GRAVEL")) return idFor(136, 130, 126);
+        if (n.contains("CLAY")) return idFor(158, 164, 178);
+        if (n.contains("TERRACOTTA")) return idFor(156, 92, 66);
+        if (n.contains("DEEPSLATE") || n.contains("BLACKSTONE") || n.contains("BASALT")) return idFor(78, 78, 84);
+        if (n.contains("NETHERRACK") || n.startsWith("NETHER_") || n.contains("CRIMSON")) return idFor(112, 34, 34);
+        if (n.contains("WARPED")) return idFor(40, 120, 110);
+        if (n.contains("SOUL")) return idFor(82, 64, 50);
+        if (n.contains("END_STONE") || n.contains("PURPUR")) return idFor(218, 216, 160);
+        if (n.contains("OBSIDIAN")) return idFor(30, 22, 44);
+        if (n.contains("LOG") || n.contains("WOOD") || n.contains("PLANKS") || n.contains("STEM") || n.contains("FENCE") || n.contains("DOOR")
+                || n.contains("BAMBOO") || n.contains("BOOKSHELF") || n.contains("CHEST") || n.contains("BARREL")) return idFor(146, 112, 68);
+        if (n.contains("GLASS")) return idFor(196, 216, 226);
+        if (n.contains("BRICK")) return idFor(150, 84, 70);
+        if (n.contains("COPPER")) return idFor(186, 110, 80);
+        if (n.contains("STONE") || n.contains("COBBLE") || n.contains("ANDESITE") || n.contains("DIORITE") || n.contains("GRANITE")
+                || n.contains("TUFF") || n.contains("ORE") || n.contains("CALCITE")) return idFor(118, 118, 120);
+        return idFor(128, 128, 128);
+    }
+
+    // ------------------------------------------------------------------ terrain sampling + cache
+
+    private static long chunkKey(int cx, int cz) { return ((long) cx << 32) ^ (cz & 0xffffffffL); }
+
+    private int sampleBlock(World w, int x, int z) {
+        Block b = w.getHighestBlockAt(x, z, HeightMap.WORLD_SURFACE);
+        return (classify(b.getType()) << 16) | (b.getY() & 0xffff);
+    }
+
+    @EventHandler
+    public void onChunkLoad(ChunkLoadEvent event) {
+        Chunk c = event.getChunk();
+        World w = c.getWorld();
+        chunkCache.computeIfAbsent(w.getName(), k -> new ConcurrentHashMap<>())
+                .put(chunkKey(c.getX(), c.getZ()), sampleBlock(w, (c.getX() << 4) + 8, (c.getZ() << 4) + 8));
+    }
+
+    /** Colour + height at a map pixel; UNKNOWN while it's still being looked up. */
+    private int sample(World w, int x, int z, int zoom) {
+        int cx = x >> 4, cz = z >> 4;
+        if (zoom <= 8 && w.isChunkLoaded(cx, cz)) return sampleBlock(w, x, z);
+        Map<Long, Integer> cache = chunkCache.computeIfAbsent(w.getName(), k -> new ConcurrentHashMap<>());
+        Integer v = cache.get(chunkKey(cx, cz));
+        if (v != null) return v;
+        String key = w.getName() + ":" + cx + ":" + cz;
+        if (asyncBudget > 0 && pending.add(key)) {
+            asyncBudget--;
+            w.getChunkAtAsync(cx, cz, false).whenComplete((chunk, err) -> {
+                pending.remove(key);
+                if (chunk == null) cache.put(chunkKey(cx, cz), UNGENERATED);   // never been generated: stays dark
+            });
+        }
+        return UNKNOWN;
+    }
+
+    private void loadCache() {
+        if (!cacheFile.exists()) return;
+        try (DataInputStream in = new DataInputStream(new GZIPInputStream(new FileInputStream(cacheFile)))) {
+            int worlds = in.readInt();
+            for (int i = 0; i < worlds; i++) {
+                String name = in.readUTF();
+                int n = in.readInt();
+                Map<Long, Integer> m = chunkCache.computeIfAbsent(name, k -> new ConcurrentHashMap<>());
+                List<String> names = new ArrayList<>();
+                int pn = in.readInt();
+                for (int j = 0; j < pn; j++) names.add(in.readUTF());
+                for (int j = 0; j < n; j++) {
+                    long k = in.readLong();
+                    int v = in.readInt();
+                    if (v == UNGENERATED) continue;   // may have been generated since
+                    int matIdx = v >>> 16;
+                    Material mat = matIdx < names.size() ? Material.matchMaterial(names.get(matIdx)) : null;
+                    if (mat == null) continue;
+                    m.put(k, (classify(mat) << 16) | (v & 0xffff));
+                }
+            }
+        } catch (IOException | RuntimeException e) {
+            plugin.getLogger().warning("Minimap cache unreadable, starting fresh: " + e.getMessage());
         }
     }
 
-    private void askName(Player p, Location at) {
-        p.closeInventory();
-        naming.put(p.getUniqueId(), at);
-        p.sendMessage(plugin.mm(plugin.prefix() + "<gold>Type a name for the waypoint <gray>at <white>" + at.getBlockX() + ", " + at.getBlockY() + ", "
-                + at.getBlockZ() + " <gray>(or <white>cancel<gray>)."));
+    /** Saved by material name (colour ids are rebuilt each start). */
+    public void saveCache() {
+        Map<Integer, Material> idToMat = new java.util.HashMap<>();
+        for (Map.Entry<Material, Integer> e : materialId.entrySet()) idToMat.putIfAbsent(e.getValue(), e.getKey());
+        try (DataOutputStream out = new DataOutputStream(new GZIPOutputStream(new FileOutputStream(cacheFile)))) {
+            out.writeInt(chunkCache.size());
+            for (Map.Entry<String, Map<Long, Integer>> w : chunkCache.entrySet()) {
+                out.writeUTF(w.getKey());
+                Map<Long, Integer> m = w.getValue();
+                List<String> names = new ArrayList<>();
+                Map<Integer, Integer> remap = new java.util.HashMap<>();
+                List<long[]> rows = new ArrayList<>();
+                for (Map.Entry<Long, Integer> e : m.entrySet()) {
+                    int v = e.getValue();
+                    if (v == UNGENERATED) continue;
+                    Material mat = idToMat.get(v >>> 16);
+                    if (mat == null) continue;
+                    int idx = remap.computeIfAbsent(v >>> 16, k -> { names.add(mat.name()); return names.size() - 1; });
+                    rows.add(new long[]{e.getKey(), (idx << 16) | (v & 0xffff)});
+                }
+                out.writeInt(rows.size());
+                out.writeInt(names.size());
+                for (String s : names) out.writeUTF(s);
+                for (long[] r : rows) { out.writeLong(r[0]); out.writeInt((int) r[1]); }
+            }
+        } catch (IOException e) {
+            plugin.getLogger().warning("Couldn't save the minimap cache: " + e.getMessage());
+        }
+    }
+
+    // ------------------------------------------------------------------ drawing
+
+    private final class Renderer extends MapRenderer {
+        Renderer() { super(true); }
+
+        @Override
+        public void render(@NotNull MapView map, @NotNull MapCanvas canvas, @NotNull Player player) {
+            MapCursorCollection cursors = new MapCursorCollection();
+            if (!Owner.isOwner(player)) {
+                for (int y = 0; y < N; y++) for (int x = 0; x < N; x++) canvas.setPixel(x, y, black);
+                canvas.setCursors(cursors);
+                return;
+            }
+            View v = views.computeIfAbsent(player.getUniqueId(), k -> new View());
+            World w = player.getWorld();
+            int zoom = ZOOMS[v.zoom];
+            Location loc = player.getLocation();
+            int ox = Math.floorDiv(loc.getBlockX(), zoom) - 64, oz = Math.floorDiv(loc.getBlockZ(), zoom) - 64;
+            shift(v, w.getName(), ox, oz, zoom);
+            // fill in what's missing, then keep refreshing a slice every tick so changes show up
+            int budget = 2500;
+            for (int i = 0; i < N * N && budget > 0; i++) {
+                if (v.col[i] != UNKNOWN) continue;
+                int s = sample(w, (ox + i % N) * zoom + zoom / 2, (oz + i / N) * zoom + zoom / 2, zoom);
+                if (s != UNKNOWN) { v.col[i] = s == UNGENERATED ? UNGENERATED : s >>> 16; v.h[i] = s == UNGENERATED ? 0 : (short) (s & 0xffff); }
+                budget--;
+            }
+            for (int k = 0; k < 300; k++) {
+                int i = (int) ((player.getTicksLived() * 300L + k) % (N * N));
+                int s = sample(w, (ox + i % N) * zoom + zoom / 2, (oz + i / N) * zoom + zoom / 2, zoom);
+                if (s != UNKNOWN && s != UNGENERATED) { v.col[i] = s >>> 16; v.h[i] = (short) (s & 0xffff); }
+            }
+            for (int i = 0; i < N * N; i++) {
+                int id = v.col[i];
+                byte px;
+                if (id == UNKNOWN) px = fog;
+                else if (id == UNGENERATED || id >= palette.size()) px = dark;
+                else {
+                    int north = i >= N ? v.h[i - N] : v.h[i];
+                    int shade = v.col[Math.max(0, i - N)] <= 0 ? 1 : v.h[i] > north ? 2 : v.h[i] < north ? 0 : 1;
+                    px = palette.get(id)[shade];
+                }
+                canvas.setPixel(i % N, i / N, px);
+            }
+            // pointer (main hand)
+            boolean main = isMap(player.getInventory().getItemInMainHand());
+            if (main && !v.pointer) { v.anchorYaw = loc.getYaw(); v.anchorPitch = loc.getPitch(); }
+            v.pointer = main;
+            v.hoverKind = null;
+            if (main) {
+                v.px = clamp(64 + Math.round(wrap(loc.getYaw() - v.anchorYaw) * 2.2f));
+                v.py = clamp(64 + Math.round((loc.getPitch() - v.anchorPitch) * 2.2f));
+                v.hoverX = (ox + v.px) * zoom + zoom / 2;
+                v.hoverZ = (oz + v.py) * zoom + zoom / 2;
+            }
+            int best = 26;   // squared pixel distance for hovering
+            // waypoints
+            for (Map.Entry<String, Location> e : waypoints.entrySet()) {
+                Location l = e.getValue();
+                if (l.getWorld() == null || !l.getWorld().equals(w)) continue;
+                int x = Math.floorDiv(l.getBlockX(), zoom) - ox, y = Math.floorDiv(l.getBlockZ(), zoom) - oz;
+                if (x < 0 || x >= N || y < 0 || y >= N) continue;
+                if (main) {
+                    int d = (x - v.px) * (x - v.px) + (y - v.py) * (y - v.py);
+                    if (d < best) { best = d; v.hoverKind = "wp"; v.hoverRef = e.getKey(); }
+                }
+                cursors.addCursor(new MapCursor(pos(x), pos(y), (byte) 8, MapCursor.Type.BANNER_YELLOW, true,
+                        Component.text(e.getKey(), NamedTextColor.GOLD)));
+            }
+            // other players
+            for (Player o : w.getPlayers()) {
+                if (o.equals(player)) continue;
+                Location ol = o.getLocation();
+                int x = Math.floorDiv(ol.getBlockX(), zoom) - ox, y = Math.floorDiv(ol.getBlockZ(), zoom) - oz;
+                boolean in = x >= 0 && x < N && y >= 0 && y < N;
+                if (in && main) {
+                    int d = (x - v.px) * (x - v.px) + (y - v.py) * (y - v.py);
+                    if (d < best) { best = d; v.hoverKind = "player"; v.hoverRef = o.getUniqueId().toString(); }
+                }
+                cursors.addCursor(new MapCursor(pos(clamp(x)), pos(clamp(y)), dir(ol.getYaw()),
+                        in ? MapCursor.Type.FRAME : MapCursor.Type.PLAYER_OFF_MAP, true, Component.text(o.getName(), NamedTextColor.GREEN)));
+            }
+            // him, in the middle
+            cursors.addCursor(new MapCursor(pos(64), pos(64), dir(loc.getYaw()), MapCursor.Type.PLAYER, true));
+            if (main) {
+                Component cap = null;
+                if ("player".equals(v.hoverKind)) {
+                    Player o = Bukkit.getPlayer(UUID.fromString(v.hoverRef));
+                    cap = Component.text("Click: TP to " + (o == null ? "?" : o.getName()), NamedTextColor.WHITE);
+                } else if ("wp".equals(v.hoverKind)) {
+                    cap = Component.text("Click: TP to " + v.hoverRef, NamedTextColor.WHITE);
+                }
+                cursors.addCursor(new MapCursor(pos(v.px), pos(v.py), (byte) 0, MapCursor.Type.RED_X, true, cap));
+            }
+            canvas.setCursors(cursors);
+            // corner text: zoom and position
+            String z = "1:" + zoom;
+            canvas.drawText(3, 3, MinecraftFont.Font, "§" + (black & 0xff) + ";" + z);
+            canvas.drawText(2, 2, MinecraftFont.Font, "§" + (white & 0xff) + ";" + z);
+            String xz = loc.getBlockX() + " " + loc.getBlockZ();
+            canvas.drawText(3, N - 9, MinecraftFont.Font, "§" + (black & 0xff) + ";" + xz);
+            canvas.drawText(2, N - 10, MinecraftFont.Font, "§" + (white & 0xff) + ";" + xz);
+        }
+    }
+
+    /** Moves the stored picture along when he walks so only the new edge needs sampling. */
+    private static void shift(View v, String world, int ox, int oz, int zoom) {
+        if (!world.equals(v.world) || zoom != v.z || v.ox == Integer.MIN_VALUE || Math.abs(ox - v.ox) >= N || Math.abs(oz - v.oz) >= N) {
+            java.util.Arrays.fill(v.col, UNKNOWN);
+            java.util.Arrays.fill(v.h, 0);
+        } else if (ox != v.ox || oz != v.oz) {
+            int dx = ox - v.ox, dz = oz - v.oz;
+            int[] col = new int[N * N], h = new int[N * N];
+            for (int y = 0; y < N; y++) {
+                int sy = y + dz;
+                if (sy < 0 || sy >= N) continue;
+                for (int x = 0; x < N; x++) {
+                    int sx = x + dx;
+                    if (sx < 0 || sx >= N) continue;
+                    col[y * N + x] = v.col[sy * N + sx];
+                    h[y * N + x] = v.h[sy * N + sx];
+                }
+            }
+            System.arraycopy(col, 0, v.col, 0, N * N);
+            System.arraycopy(h, 0, v.h, 0, N * N);
+        }
+        v.world = world; v.z = zoom; v.ox = ox; v.oz = oz;
+    }
+
+    private static int clamp(int p) { return Math.max(0, Math.min(N - 1, p)); }
+    private static byte pos(int pixel) { return (byte) Math.max(-128, Math.min(127, pixel * 2 - 127)); }
+    private static byte dir(float yaw) { return (byte) (((int) ((yaw + (yaw < 0 ? -8.0 : 8.0)) * 16.0 / 360.0)) & 15); }
+    private static float wrap(float a) {
+        a %= 360;
+        if (a > 180) a -= 360;
+        if (a < -180) a += 360;
+        return a;
+    }
+
+    // ------------------------------------------------------------------ clicking on the map
+
+    @EventHandler(priority = EventPriority.LOW)
+    public void onUse(PlayerInteractEvent event) {
+        Player p = event.getPlayer();
+        if (event.getHand() != EquipmentSlot.HAND || !isMap(p.getInventory().getItemInMainHand())) return;
+        event.setCancelled(true);
+        if (!Owner.isOwner(p)) { p.getInventory().setItemInMainHand(null); return; }
+        View v = views.computeIfAbsent(p.getUniqueId(), k -> new View());
+        Action a = event.getAction();
+        if (a == Action.RIGHT_CLICK_AIR || a == Action.RIGHT_CLICK_BLOCK) {
+            v.zoom = p.isSneaking() ? Math.min(ZOOMS.length - 1, v.zoom + 1) : Math.max(0, v.zoom - 1);
+            p.playSound(p.getLocation(), Sound.UI_CARTOGRAPHY_TABLE_TAKE_RESULT, 0.6f, 0.8f + v.zoom * 0.1f);
+            p.sendActionBar(plugin.mm("<aqua>Zoom <white>1:" + ZOOMS[v.zoom] + (v.zoom == ZOOMS.length - 1 ? " <gray>(whole world)" : "")));
+            return;
+        }
+        if (a != Action.LEFT_CLICK_AIR && a != Action.LEFT_CLICK_BLOCK) return;
+        World w = p.getWorld();
+        if ("player".equals(v.hoverKind)) {
+            Player o = Bukkit.getPlayer(UUID.fromString(v.hoverRef));
+            if (o == null) return;
+            p.teleport(o.getLocation());
+            p.playSound(p.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 1f, 1.2f);
+            p.sendMessage(plugin.mm(plugin.prefix() + "<gray>Teleported to <white>" + o.getName() + "<gray>."));
+        } else if ("wp".equals(v.hoverKind)) {
+            String name = v.hoverRef;
+            if (p.isSneaking()) {
+                if (waypoints.remove(name) != null) {
+                    saveWaypoints();
+                    p.sendMessage(plugin.mm(plugin.prefix() + "<gray>Deleted waypoint <gold>" + name + "<gray>."));
+                    p.playSound(p.getLocation(), Sound.BLOCK_ANVIL_BREAK, 0.6f, 1.4f);
+                }
+                return;
+            }
+            Location l = waypoints.get(name);
+            if (l == null || l.getWorld() == null) return;
+            p.teleport(l);
+            p.playSound(p.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 1f, 1.2f);
+            p.sendMessage(plugin.mm(plugin.prefix() + "<gray>Teleported to waypoint <gold>" + name + "<gray>."));
+        } else if (p.isSneaking() && v.pointer) {
+            int x = v.hoverX, z = v.hoverZ;
+            int y = w.isChunkLoaded(x >> 4, z >> 4) ? w.getHighestBlockYAt(x, z) + 1 : p.getLocation().getBlockY();
+            naming.put(p.getUniqueId(), new Location(w, x + 0.5, y, z + 0.5, p.getLocation().getYaw(), 0));
+            p.sendMessage(plugin.mm(plugin.prefix() + "<gold>Type a name for the waypoint <gray>at <white>" + x + ", " + z
+                    + " <gray>(or <white>cancel<gray>)."));
+        } else {
+            p.sendActionBar(plugin.mm("<gray>Point the <red>X <gray>at a player or waypoint. <yellow>Sneak+click <gray>ground for a new waypoint."));
+        }
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
@@ -437,16 +579,53 @@ public class Minimap implements Listener, CommandExecutor {
             String name = raw.replaceAll("[^A-Za-z0-9 _\\-]", "").trim();
             if (name.length() > 24) name = name.substring(0, 24);
             if (name.isEmpty()) name = "Waypoint " + (waypoints.size() + 1);
-            name = name.replace('.', '_');
             waypoints.put(name, at);
-            save();
-            p.sendMessage(plugin.mm(plugin.prefix() + "<green>Saved waypoint <gold>" + name + "<green>. <gray>Open <white>/minimap <gray>to see it."));
+            saveWaypoints();
+            p.sendMessage(plugin.mm(plugin.prefix() + "<green>Saved waypoint <gold>" + name + "<green>."));
             p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_CHIME, 1f, 1.4f);
         });
     }
 
+    private void saveWaypoints() {
+        YamlConfiguration yml = new YamlConfiguration();
+        for (Map.Entry<String, Location> e : waypoints.entrySet()) yml.set("waypoints." + e.getKey(), e.getValue());
+        try { yml.save(wpFile); } catch (IOException ex) { plugin.getLogger().warning("Couldn't save waypoints.yml"); }
+    }
+
+    // ------------------------------------------------------------------ keeping it his
+
+    @EventHandler(ignoreCancelled = true)
+    public void onDrop(PlayerDropItemEvent event) {
+        if (isMap(event.getItemDrop().getItemStack())) event.setCancelled(true);
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onMove(InventoryClickEvent event) {
+        if (event.getView().getTopInventory().getType() == InventoryType.CRAFTING) return;   // his own inventory is fine
+        if (isMap(event.getCurrentItem()) || isMap(event.getCursor())) event.setCancelled(true);
+        if (event.getClick() == org.bukkit.event.inventory.ClickType.NUMBER_KEY && event.getWhoClicked() instanceof Player p
+                && isMap(p.getInventory().getItem(event.getHotbarButton()))) event.setCancelled(true);
+    }
+
     @EventHandler
-    public void onDrag(InventoryDragEvent event) {
-        if (event.getView().getTopInventory().getHolder() instanceof View) event.setCancelled(true);
+    public void onDeath(PlayerDeathEvent event) {
+        event.getDrops().removeIf(this::isMap);
+    }
+
+    @EventHandler
+    public void onRespawn(PlayerRespawnEvent event) {
+        Player p = event.getPlayer();
+        if (Owner.isOwner(p) && p.getPersistentDataContainer().has(wantsKey, PersistentDataType.BYTE)) {
+            plugin.getServer().getScheduler().runTask(plugin, () -> {
+                boolean has = false;
+                for (ItemStack it : p.getInventory().getContents()) if (isMap(it)) has = true;
+                if (!has) p.getInventory().setItemInOffHand(mapItem());
+            });
+        }
+    }
+
+    @EventHandler
+    public void onJoin(PlayerJoinEvent event) {
+        fixItems(event.getPlayer());
     }
 }

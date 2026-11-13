@@ -1033,7 +1033,7 @@ public class AdminHub implements Listener {
         inv.setItem(12, plugin.jet().create());
         inv.setItem(13, plugin.armorBay().create());
         inv.setItem(14, plugin.jet().createMk2());
-        inv.setItem(22, Icons.button(plugin, Material.FILLED_MAP, "<aqua><bold>Minimap", "<gray>The whole world, live players and", "<gray>your waypoints. Click to tp.", "", "<yellow>Click to open <gray>(or /minimap)"));
+        inv.setItem(22, Icons.button(plugin, Material.FILLED_MAP, "<aqua><bold>Minimap", "<gray>A live map in your offhand with every", "<gray>player and your waypoints.", "", "<yellow>Click to turn on/off <gray>(or /minimap)"));
         inv.setItem(15, Icons.ability(plugin, com.cosmicabilities.ability.AbilityType.POOP, List.of("<yellow>Left <gray>slot 1  <yellow>Right <gray>slot 2")));
         inv.setItem(16, Icons.ability(plugin, com.cosmicabilities.ability.AbilityType.LIGHTSPEED, List.of("<yellow>Left <gray>slot 1  <yellow>Right <gray>slot 2")));
         inv.setItem(28, Icons.gui(plugin, "players", "<aqua><bold>Who else can use your stuff",
@@ -1061,7 +1061,7 @@ public class AdminHub implements Listener {
             case 12 -> admin.getInventory().addItem(plugin.jet().create());
             case 13 -> admin.getInventory().addItem(plugin.armorBay().create());
             case 14 -> admin.getInventory().addItem(plugin.jet().createMk2());
-            case 22 -> { plugin.minimap().open(admin); return; }
+            case 22 -> { admin.closeInventory(); plugin.minimap().open(admin); return; }
             case 15, 16 -> {
                 com.cosmicabilities.ability.AbilityType t = raw == 15 ? com.cosmicabilities.ability.AbilityType.POOP : com.cosmicabilities.ability.AbilityType.LIGHTSPEED;
                 com.cosmicabilities.data.PlayerData d = plugin.data().get(admin.getUniqueId());

@@ -432,5 +432,17 @@ jet:
   crater-radius: 20
   damage-radius: 30
   break-blocks: true
+mech:                        # v2tou's Nova Mech (the case)
+  walk-speed: 0.24
+  run-speed: 0.45
+  jump-power: 1.0
+  cannon-damage: 14
+  cannon-power: 3.5          # explosion where the arm cannon hits
+  cannon-cooldown-ticks: 14
+  missiles: 6
+  missile-power: 2.5
+  missile-cooldown-ticks: 60
+  stomp-damage: 8            # landing from a jump
+  break-blocks: true
 nova-armor:
   repulsor-damage: 8         # HP per repulsor blast

@@ -291,6 +291,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
         if (engine != null) engine.shutdownAbilities();
         if (jet != null) jet.shutdown();
         if (armorBay != null) armorBay.shutdown();
+        if (minimap != null) minimap.saveCache();
         if (suits != null) suits.shutdown();
         if (cutscenes != null) cutscenes.shutdown();
         if (status != null) status.shutdown();

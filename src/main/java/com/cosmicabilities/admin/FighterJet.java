@@ -87,6 +87,8 @@ public class FighterJet implements Listener {
     private final Map<UUID, Jet> jets = new ConcurrentHashMap<>();          // pilot -> jet
     private final Set<Jet> pilotless = ConcurrentHashMap.newKeySet();     // jets flying on after an ejection
     private final Set<UUID> safe = ConcurrentHashMap.newKeySet();         // no fall / blast damage (parachuting)
+    /** Open parachutes: pilot -> {chute, sneak released since it opened (0/1), cut away (0/1)}. */
+    private final Map<UUID, Object[]> chutes = new ConcurrentHashMap<>();
 
     public FighterJet(CosmicAbilitiesPlugin plugin) {
         this.plugin = plugin;
@@ -405,12 +407,32 @@ public class FighterJet implements Listener {
         });
         w.playSound(p.getLocation(), Sound.ITEM_ARMOR_EQUIP_ELYTRA, 1.5f, 0.7f);
         w.playSound(p.getLocation(), Sound.ENTITY_PHANTOM_FLAP, 1.5f, 0.6f);
+        Object[] state = {chute, Boolean.FALSE, Boolean.FALSE};
+        chutes.put(id, state);
+        p.sendActionBar(plugin.mm("<yellow>SNEAK <gray>or <yellow>F <gray>to cut the parachute loose"));
         new BukkitRunnable() {
             int t = 0, landed = -1;
             @Override
             public void run() {
                 t++;
-                if (!p.isOnline() || p.isDead() || !chute.isValid() || t > 20 * 120) { chute.remove(); safe.remove(id); cancel(); return; }
+                if (!p.isOnline() || p.isDead() || !chute.isValid() || t > 20 * 120) { chute.remove(); safe.remove(id); chutes.remove(id, state); cancel(); return; }
+                if (state[2] == Boolean.TRUE) {   // cut loose: the canopy tumbles away upwards and he drops
+                    chutes.remove(id, state);
+                    safe.remove(id);
+                    p.removePotionEffect(PotionEffectType.SLOW_FALLING);
+                    Location up = chute.getLocation().add(0, 6, 0);
+                    chute.setTeleportDuration(20);
+                    chute.teleport(up);
+                    chute.setInterpolationDelay(0);
+                    chute.setInterpolationDuration(20);
+                    chute.setTransformation(new Transformation(new Vector3f(), new Quaternionf().rotateX(2.4f).rotateZ(1.2f),
+                            new Vector3f(1.0f, 1.0f, 1.0f), new Quaternionf()));
+                    w.playSound(p.getLocation(), Sound.ENTITY_SHEEP_SHEAR, 1.5f, 0.8f);
+                    w.playSound(p.getLocation(), Sound.ENTITY_PHANTOM_FLAP, 1.2f, 0.5f);
+                    Fx.removeLater(chute, 22);
+                    cancel();
+                    return;
+                }
                 if (t == 6) {   // canopy pops open
                     chute.setInterpolationDelay(0);
                     chute.setInterpolationDuration(6);
@@ -431,7 +453,7 @@ public class FighterJet implements Listener {
                     chute.setTransformation(new Transformation(new Vector3f(0, -1.6f, 0), new Quaternionf().rotateX(1.3f),
                             new Vector3f(1.2f, 0.05f, 1.2f), new Quaternionf()));
                 }
-                if (landed >= 0 && t - landed > 16) { chute.remove(); safe.remove(id); cancel(); }
+                if (landed >= 0 && t - landed > 16) { chute.remove(); safe.remove(id); chutes.remove(id, state); cancel(); }
             }
         }.runTaskTimer(plugin, 1L, 1L);
     }
@@ -483,6 +505,12 @@ public class FighterJet implements Listener {
 
     @EventHandler
     public void onInput(PlayerInputEvent event) {
+        Object[] chute = chutes.get(event.getPlayer().getUniqueId());
+        if (chute != null) {
+            // the sneak that ejected him is still held - it has to be let go and pressed again to cut away
+            if (!event.getInput().isSneak()) chute[1] = Boolean.TRUE;
+            else if (chute[1] == Boolean.TRUE) chute[2] = Boolean.TRUE;
+        }
         Jet jet = jets.get(event.getPlayer().getUniqueId());
         if (jet == null || jet.ejectedAt >= 0) return;
         Input in = event.getInput();
@@ -493,6 +521,15 @@ public class FighterJet implements Listener {
         jet.boost = in.isSprint();
         if (in.isJump()) bomb(event.getPlayer(), jet);
         if (in.isSneak()) eject(event.getPlayer());
+    }
+
+    /** F (swap hands) also cuts the parachute loose instantly. */
+    @EventHandler(ignoreCancelled = true)
+    public void onSwapHands(org.bukkit.event.player.PlayerSwapHandItemsEvent event) {
+        Object[] chute = chutes.get(event.getPlayer().getUniqueId());
+        if (chute == null) return;
+        event.setCancelled(true);
+        chute[2] = Boolean.TRUE;
     }
 
     /** Sneaking would normally stop spectating the camera - eject instead. */
