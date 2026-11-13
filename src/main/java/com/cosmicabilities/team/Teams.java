@@ -63,6 +63,9 @@ public class Teams implements Listener, CommandExecutor, TabCompleter {
     private final Map<UUID, List<String>> pendingRewards = new HashMap<>();
     private long seasonStart;
     private int season = 1;
+    /** the countdown only runs once an admin starts the season (or its scheduled start time arrives) */
+    private boolean started;
+    private long scheduledStart;   // 0 = not scheduled
 
     public Teams(CosmicAbilitiesPlugin plugin) {
         this.plugin = plugin;
@@ -78,6 +81,8 @@ public class Teams implements Listener, CommandExecutor, TabCompleter {
         YamlConfiguration yml = YamlConfiguration.loadConfiguration(file);
         season = yml.getInt("season.number", 1);
         seasonStart = yml.getLong("season.start", System.currentTimeMillis());
+        started = yml.getBoolean("season.started", false);
+        scheduledStart = yml.getLong("season.scheduled-start", 0);
         ConfigurationSection ts = yml.getConfigurationSection("teams");
         if (ts != null) for (String key : ts.getKeys(false)) {
             ConfigurationSection s = ts.getConfigurationSection(key);
@@ -101,6 +106,8 @@ public class Teams implements Listener, CommandExecutor, TabCompleter {
         YamlConfiguration yml = new YamlConfiguration();
         yml.set("season.number", season);
         yml.set("season.start", seasonStart);
+        yml.set("season.started", started);
+        yml.set("season.scheduled-start", scheduledStart);
         for (Team t : teams.values()) {
             String b = "teams." + t.name.toLowerCase(Locale.ROOT) + ".";
             yml.set(b + "name", t.name);
@@ -139,6 +146,58 @@ public class Teams implements Listener, CommandExecutor, TabCompleter {
 
     public long seasonEndsAt() {
         return seasonStart + plugin.getConfig().getLong("season.days", 14) * 86_400_000L;
+    }
+
+    public boolean started() { return started; }
+    public long scheduledStart() { return scheduledStart; }
+
+    /** "ends in 13d 4h", "starts in 2h 10m" or "hasn't started". */
+    public String statusText() {
+        if (started) return "ends in " + timeLeft();
+        if (scheduledStart > 0) return "starts in " + fmtDuration(scheduledStart - System.currentTimeMillis());
+        return "hasn't started";
+    }
+
+    private static String fmtDuration(long ms) {
+        ms = Math.max(0, ms);
+        long d = ms / 86_400_000L, h = ms / 3_600_000L % 24, m = ms / 60_000L % 60, sec = ms / 1000 % 60;
+        if (d > 0) return d + "d " + h + "h";
+        if (h > 0) return h + "h " + m + "m";
+        return m + "m " + sec + "s";
+    }
+
+    /** Starts the season (and its countdown) right now. */
+    public void startSeason() {
+        started = true;
+        scheduledStart = 0;
+        seasonStart = System.currentTimeMillis();
+        save();
+        long days = plugin.getConfig().getLong("season.days", 14);
+        Bukkit.broadcast(plugin.mm(plugin.prefix() + "<green><bold>SEASON " + season + " HAS STARTED!</bold> <gray>It lasts <white>" + days
+                + " days<gray>. The richest team bank at the end wins a rare cosmic ability. <yellow>/team create"));
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            p.showTitle(Title.title(plugin.mm("<gradient:#ffd166:#f15bb5><bold>SEASON " + season), plugin.mm("<gray>has started - " + days + " days"),
+                    Title.Times.times(java.time.Duration.ofMillis(300), java.time.Duration.ofMillis(3000), java.time.Duration.ofMillis(800))));
+            p.playSound(p.getLocation(), org.bukkit.Sound.UI_TOAST_CHALLENGE_COMPLETE, 1f, 1f);
+        }
+    }
+
+    /** Starts the season automatically at this time (epoch ms); 0 cancels. */
+    public void scheduleStart(long at) {
+        scheduledStart = at;
+        save();
+    }
+
+    /** Back to season 1, not started: every bank, kill count and waiting reward is cleared. */
+    public void resetToSeasonOne() {
+        season = 1;
+        started = false;
+        scheduledStart = 0;
+        seasonStart = System.currentTimeMillis();
+        for (Team t : teams.values()) { t.bank = 0; t.kills = 0; }
+        pendingRewards.clear();
+        save();
+        Bukkit.broadcast(plugin.mm(plugin.prefix() + "<gold>Seasons were reset. <gray>Season 1 starts soon."));
     }
 
     public String timeLeft() {
@@ -206,6 +265,10 @@ public class Teams implements Listener, CommandExecutor, TabCompleter {
 
     /** Every minute: end the season automatically when its time is up. */
     public void tick() {
+        if (!started) {
+            if (scheduledStart > 0 && System.currentTimeMillis() >= scheduledStart) startSeason();
+            return;
+        }
         if (plugin.getConfig().getBoolean("season.auto-end", true) && System.currentTimeMillis() >= seasonEndsAt()) endSeason(null);
     }
 
@@ -387,7 +450,7 @@ public class Teams implements Listener, CommandExecutor, TabCompleter {
         p.sendMessage(plugin.mm("<aqua><bold>" + t.name + "</bold> <gray>- #" + place + " this season"));
         p.sendMessage(plugin.mm("<gray>Bank: <yellow>$" + plugin.economy().format(t.bank) + "   <gray>Kills: <white>" + t.kills
                 + "   <gray>Friendly fire: " + (t.friendlyFire ? "<red>ON" : "<green>OFF")));
-        p.sendMessage(plugin.mm("<gray>Season " + season + " ends in <white>" + timeLeft()));
+        p.sendMessage(plugin.mm("<gray>Season " + season + " " + statusText()));
         List<String> names = new ArrayList<>();
         for (UUID u : t.members) names.add((u.equals(t.leader) ? "<gold>★" : "<white>") + name(u));
         p.sendMessage(plugin.mm("<gray>Members: " + String.join("<gray>, ", names)));
@@ -395,7 +458,7 @@ public class Teams implements Listener, CommandExecutor, TabCompleter {
 
     private void top(CommandSender s) {
         s.sendMessage(plugin.mm(""));
-        s.sendMessage(plugin.mm("<gradient:#ffd166:#f15bb5><bold>✦ RICHEST TEAMS ✦</bold></gradient> <gray>Season " + season + " - ends in <white>" + timeLeft()));
+        s.sendMessage(plugin.mm("<gradient:#ffd166:#f15bb5><bold>✦ RICHEST TEAMS ✦</bold></gradient> <gray>Season " + season + " <white>" + statusText()));
         List<Team> r = ranking();
         String[] medal = {"<#ffd700>①", "<#c0c0c0>②", "<#cd7f32>③"};
         for (int i = 0; i < Math.min(10, r.size()); i++) {

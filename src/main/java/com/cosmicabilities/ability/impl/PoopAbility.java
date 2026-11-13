@@ -67,10 +67,20 @@ public class PoopAbility extends CosmicAbility implements Listener {
     public boolean cast(Player player, AbilitySlot slot) {
         World w = player.getWorld();
         double range = plugin.getConfig().getDouble("ability-settings." + type.id() + ".range", 40);
-        var ray = w.rayTraceEntities(player.getEyeLocation(), player.getEyeLocation().getDirection(), range, 1.5,
-                e -> e instanceof LivingEntity && !e.equals(player));
-        LivingEntity target = ray != null && ray.getHitEntity() instanceof LivingEntity le ? le : null;
-        Location aim = target != null ? target.getLocation() : Targets.targetPoint(player, range);
+        // always the closest other player
+        Player target = null;
+        double best = range * range;
+        for (Player o : w.getPlayers()) {
+            if (o.equals(player) || o.isDead() || o.getGameMode() == org.bukkit.GameMode.SPECTATOR) continue;
+            if (plugin.afk().isAfk(o.getUniqueId())) continue;
+            double d = o.getLocation().distanceSquared(player.getLocation());
+            if (d < best) { best = d; target = o; }
+        }
+        if (target == null) {
+            plugin.engine().notify(player, plugin.mm("<#7a4a1e>Nobody close enough to poop on."));
+            return false;
+        }
+        Location aim = target.getLocation();
         boolean chunky = bonus(slot);
         float size = chunky ? 3.6f : 2.8f;
         Location sky = aim.clone().add(0, 26, 0);
@@ -80,8 +90,9 @@ public class PoopAbility extends CosmicAbility implements Listener {
         w.playSound(aim, Sound.ENTITY_PLAYER_BURP, 2f, 0.5f);
         w.playSound(aim, Sound.ITEM_TRIDENT_THUNDER, 1f, 1.8f);
         int fall = 16;
+        final Player victim = target;
         every(fall + 1, t -> {
-            Location goal = target != null && target.isValid() ? target.getLocation() : aim;
+            Location goal = victim.isValid() ? victim.getLocation() : aim;
             double k = Math.min(1, t / (double) fall);
             Location at = sky.clone();
             at.setX(goal.getX()); at.setZ(goal.getZ());
@@ -95,7 +106,7 @@ public class PoopAbility extends CosmicAbility implements Listener {
             if (t % 4 == 0) w.playSound(at, Sound.BLOCK_HONEY_BLOCK_SLIDE, 1.5f, 0.5f);
             if (t >= fall) {
                 poop.remove();
-                splat(player, goal, target, chunky);
+                splat(player, goal, victim, chunky);
                 return false;
             }
             return true;
@@ -111,6 +122,7 @@ public class PoopAbility extends CosmicAbility implements Listener {
         w.playSound(at, Sound.ENTITY_SLIME_SQUISH, 3f, 0.4f);
         w.playSound(at, Sound.BLOCK_MUD_BREAK, 3f, 0.5f);
         w.playSound(at, Sound.ENTITY_SNIFFER_DIGGING, 2f, 0.6f);
+        crater(at, chunky ? 4.5 : 3.3);
         w.spawnParticle(Particle.DUST, at.clone().add(0, 1, 0), 250, radius / 2, 1.2, radius / 2, 0, new Particle.DustOptions(Color.fromRGB(BROWN), 2.8f));
         w.spawnParticle(Particle.DUST, at.clone().add(0, 1, 0), 120, radius / 2, 1.5, radius / 2, 0, new Particle.DustOptions(Color.fromRGB(0x3d2410), 2f));
         w.spawnParticle(Particle.BLOCK, at.clone().add(0, 0.5, 0), 150, radius / 2, 0.8, radius / 2, 0.4, Material.MUD.createBlockData());
@@ -131,6 +143,38 @@ public class PoopAbility extends CosmicAbility implements Listener {
             stick(e, seconds);
             if (e instanceof Player p) brownScreen(p, seconds);
         }
+    }
+
+    /** A bowl-shaped crater lined with brown poo. It goes back to normal after ability-settings.poop.crater-seconds (0 = stays). */
+    private void crater(Location at, double radius) {
+        World w = at.getWorld();
+        ThreadLocalRandom r = ThreadLocalRandom.current();
+        org.bukkit.block.Block center = at.getBlock();
+        while (center.isPassable() && center.getY() > w.getMinHeight()) center = center.getRelative(0, -1, 0);
+        List<org.bukkit.block.BlockState> original = new ArrayList<>();
+        Material[] poo = {Material.MUD, Material.BROWN_CONCRETE, Material.BROWN_TERRACOTTA, Material.PACKED_MUD, Material.BROWN_CONCRETE_POWDER, Material.COARSE_DIRT};
+        int R = (int) Math.ceil(radius) + 1;
+        for (int x = -R; x <= R; x++) for (int z = -R; z <= R; z++) for (int y = -R; y <= 2; y++) {
+            org.bukkit.block.Block b = center.getRelative(x, y, z);
+            Material m = b.getType();
+            if (m == Material.BEDROCK || m == Material.BARRIER || m.getHardness() < 0 || b.getState() instanceof org.bukkit.block.Container
+                    || m == Material.END_PORTAL_FRAME || m == Material.END_PORTAL || m == Material.NETHER_PORTAL) continue;
+            double depth = radius * 0.55 * (1 - (x * x + z * z) / (radius * radius));   // bowl
+            double dist = Math.sqrt(x * x + z * z);
+            boolean inBowl = dist <= radius && y > -depth && y <= 1;
+            boolean lining = dist <= radius + 0.8 && !inBowl && y <= 0 && y > -depth - 1.6 && !m.isAir() && m.isSolid();
+            if (inBowl && !m.isAir()) {
+                original.add(b.getState());
+                b.setType(Material.AIR, false);
+            } else if (lining) {
+                original.add(b.getState());
+                b.setType(poo[r.nextInt(poo.length)], false);
+            }
+        }
+        double keep = plugin.getConfig().getDouble("ability-settings." + type.id() + ".crater-seconds", 60);
+        if (keep > 0) later((long) (keep * 20), () -> {
+            for (int i = original.size() - 1; i >= 0; i--) original.get(i).update(true, false);
+        });
     }
 
     /** Stuck in a poop pile: can't walk or jump, with a brown mound around their legs. */

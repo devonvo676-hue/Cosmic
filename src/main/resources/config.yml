@@ -44,7 +44,7 @@ ability-settings:
   shatterfall: {cooldown: 40, damage-multiplier: 1.0}
   serpents_wrath: {cooldown: 40, damage-multiplier: 1.0}
   apocalypse: {cooldown: 50, damage-multiplier: 1.0}
-  poop: {cooldown: 20, damage-multiplier: 1.0}
+  poop: {cooldown: 20, damage-multiplier: 1.0, stuck-seconds: 5, crater-seconds: 60}
 
 # Short combat buff given every time an ability is cast (edit in game with /cconfig).
 # Format: effect:level:seconds  (strength:1:6 = Strength I for 6 seconds). Use [] for none.
@@ -352,6 +352,7 @@ teams:
 season:
   days: 14                 # the richest team bank when it ends wins
   auto-end: true
+  timezone: "America/Denver"   # for scheduling the season start in /adminpanel -> Teams & Season
   reward: random-rare      # random-rare = a random boss/dragon ability, or an ability id like dragon_wrath
 
 # ---------------------------------------------------------------- daily events (/adminpanel -> Daily Events)

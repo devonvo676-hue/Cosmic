@@ -251,7 +251,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
         getServer().getScheduler().runTaskTimer(this, sidebar::tick, 40L, 20L);
         getServer().getScheduler().runTaskTimer(this, auctions::expire, 1200L, 1200L);
         getServer().getScheduler().runTaskTimer(this, events::tick, 20L, 20L);
-        getServer().getScheduler().runTaskTimer(this, teams::tick, 1200L, 1200L);
+        getServer().getScheduler().runTaskTimer(this, teams::tick, 20L, 20L);
         for (Player online : getServer().getOnlinePlayers()) rankTags.refresh(online);
         getServer().getScheduler().runTaskTimer(this, engine::tickHud, 20L, 10L);
         getServer().getScheduler().runTaskTimer(this, bossManager::tick, 20L, 20L);

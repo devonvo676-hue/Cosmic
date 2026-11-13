@@ -86,7 +86,7 @@ public class Sidebar implements Listener, CommandExecutor {
                         + " <gray>| Kills <white>" + team.kills)
                 + "\n<#f15bb5>Cash: <gold>$" + plugin.economy().format(plugin.economy().balance(p.getUniqueId()))
                 + "  <#f15bb5>Ping: <white>" + p.getPing() + "ms  <#f15bb5>Online: <white>" + Bukkit.getOnlinePlayers().size()
-                + "\n<#00bbf9>Season " + plugin.teams().season() + " <gray>ends in <white>" + plugin.teams().timeLeft()
+                + "\n<#00bbf9>Season " + plugin.teams().season() + " <gray>" + plugin.teams().statusText()
                 + (events.length() > 0 ? "\n<yellow>Events: " + events : "")
                 + "\n" + plugin.getConfig().getString("tablist.footer-line", "<dark_gray>play.cosmic.net") + "\n";
         p.sendPlayerListHeaderAndFooter(header, plugin.mm(footer));
@@ -130,7 +130,8 @@ public class Sidebar implements Listener, CommandExecutor {
                 icon("cosmic", "item/team_shield", false).append(plugin.mm(" <white>" + (team == null ? "<gray>None" : team.name))),
                 icon("minecraft", "item/gold_ingot", false).append(plugin.mm(" <white>Bank: " + value + (team == null ? "-" : "$" + plugin.economy().format(team.bank)))),
                 icon("minecraft", "item/iron_sword", false).append(plugin.mm(" <white>Team kills: " + value + (team == null ? "-" : team.kills))),
-                icon("minecraft", "item/clock_00", false).append(plugin.mm(" <white>Season " + plugin.teams().season() + ": " + value + plugin.teams().timeLeft())),
+                icon("minecraft", "item/clock_00", false).append(plugin.mm(" <white>Season " + plugin.teams().season() + ": " + value + (plugin.teams().started() ? plugin.teams().timeLeft()
+                        : plugin.teams().scheduledStart() > 0 ? "starts soon" : "not started"))),
                 Component.text("   "),
                 plugin.mm(accent + "<bold>Server"),
                 icon("minecraft", "item/redstone", false).append(plugin.mm(" <white>Ping: " + value + p.getPing() + " ms")),

@@ -74,7 +74,7 @@ public enum AbilityType {
 
     // ---- owner only (owner-items.players) ----
     POOP("Poop", "Owner only", "#7a4a1e", CosmicMaterial.ASTRAL_FRAGMENT, 20,
-            "A fat poop meteor crashes down on the player you aim at and explodes brown everywhere. They can't see through the brown and are stuck in the poop.",
+            "A fat poop meteor crashes down on the closest player, blasts a crater of brown poo and explodes brown everywhere. They can't see through the brown and are stuck in the poop.",
             "Extra Chunky", "Bigger splash and they're stuck for longer.");
 
     /** Total hearts the boss / dragon abilities do by default (0 = normal ability: damage varies per hit). */

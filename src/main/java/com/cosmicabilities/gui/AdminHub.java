@@ -75,6 +75,39 @@ public class AdminHub implements Listener {
     private final CosmicAbilitiesPlugin plugin;
     private final Set<UUID> announcing = ConcurrentHashMap.newKeySet();
     private final Map<UUID, Integer> eventMinutes = new ConcurrentHashMap<>();
+    private final Set<UUID> scheduling = ConcurrentHashMap.newKeySet();
+
+    private java.time.ZoneId seasonZone() {
+        try { return java.time.ZoneId.of(plugin.getConfig().getString("season.timezone", "America/Denver")); }
+        catch (RuntimeException e) { return java.time.ZoneId.systemDefault(); }
+    }
+
+    /** Reads things like "2026-11-14 18:00", "11/14 6pm", "11/14 18:30", "tomorrow 6pm", "6pm". */
+    private Long parseStart(String text) {
+        java.time.ZoneId zone = seasonZone();
+        java.time.ZonedDateTime now = java.time.ZonedDateTime.now(zone);
+        String s = text.trim().toLowerCase(java.util.Locale.ROOT).replace(" at ", " ");
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile(
+                "^(?:(tomorrow|today)|(?:(\\d{4})-)?(\\d{1,2})[-/](\\d{1,2}))?\\s*(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)?$").matcher(s);
+        if (!m.matches()) return null;
+        int hour = Integer.parseInt(m.group(5));
+        int minute = m.group(6) == null ? 0 : Integer.parseInt(m.group(6));
+        if (m.group(7) != null) {
+            if (hour == 12) hour = 0;
+            if (m.group(7).equals("pm")) hour += 12;
+        }
+        if (hour > 23 || minute > 59) return null;
+        java.time.LocalDate date = now.toLocalDate();
+        if ("tomorrow".equals(m.group(1))) date = date.plusDays(1);
+        else if (m.group(3) != null) {
+            int year = m.group(2) != null ? Integer.parseInt(m.group(2)) : now.getYear();
+            date = java.time.LocalDate.of(year, Integer.parseInt(m.group(3)), Integer.parseInt(m.group(4)));
+            if (m.group(2) == null && date.isBefore(now.toLocalDate())) date = date.plusYears(1);
+        }
+        java.time.ZonedDateTime at = date.atTime(hour, minute).atZone(zone);
+        if (m.group(1) == null && m.group(3) == null && at.isBefore(now)) at = at.plusDays(1);
+        return at.toInstant().toEpochMilli();
+    }
 
     public AdminHub(CosmicAbilitiesPlugin plugin) {
         this.plugin = plugin;
@@ -97,7 +130,7 @@ public class AdminHub implements Listener {
         for (int r = 1; r <= 4; r++) for (int c = 1; c <= 8; c++) inv.setItem(r * 9 + c, row);
         inv.setItem(4, Icons.gui(plugin, "logo", "<gradient:#9b5de5:#00bbf9><bold>Cosmic Abilities " + plugin.getPluginMeta().getVersion(),
                 "<gray>Online: <white>" + Bukkit.getOnlinePlayers().size() + "  <gray>Bosses alive: <white>" + plugin.bosses().aliveCount(),
-                "<gray>Season <white>" + plugin.teams().season() + " <gray>ends in <white>" + plugin.teams().timeLeft(),
+                "<gray>Season <white>" + plugin.teams().season() + " <gray>" + plugin.teams().statusText(),
                 "<gray>Events on: <white>" + plugin.events().activeEvents().size()));
         inv.setItem(9, Icons.gui(plugin, "sec_game", "<#c77dff><bold>GAME", "<gray>Abilities, bosses, events, seasons"));
         inv.setItem(18, Icons.gui(plugin, "sec_players", "<#48cae4><bold>PLAYERS", "<gray>Players, stats, ranks, items"));
@@ -990,7 +1023,25 @@ public class AdminHub implements Listener {
         }
         int days = plugin.getConfig().getInt("season.days", 14);
         inv.setItem(46, Icons.button(plugin, Material.CLOCK, "<aqua>Season length: <white>" + days + " days",
-                "<yellow>Left <gray>+1 day  <yellow>Right <gray>-1 day", "<gray>Ends in <white>" + plugin.teams().timeLeft()));
+                "<yellow>Left <gray>+1 day  <yellow>Right <gray>-1 day", "<gray>Season " + plugin.teams().statusText()));
+        var teams = plugin.teams();
+        java.time.ZoneId zone = seasonZone();
+        java.time.format.DateTimeFormatter fmt = java.time.format.DateTimeFormatter.ofPattern("EEE MMM d, h:mm a z").withZone(zone);
+        if (teams.started()) {
+            inv.setItem(48, Icons.gui(plugin, "on", "<green><bold>Season " + teams.season() + " is running",
+                    "<gray>" + teams.statusText(), "", "<yellow>Shift-click <gray>restart the countdown from now"));
+        } else {
+            inv.setItem(48, Icons.gui(plugin, "events", "<green><bold>Start Season " + teams.season() + " now",
+                    "<gray>Starts the season and its " + days + "-day countdown.", "<gray>Everyone gets a title + announcement.", "",
+                    "<red>Shift-click to start"));
+        }
+        long sched = teams.scheduledStart();
+        inv.setItem(50, Icons.gui(plugin, "cooldowns", "<aqua><bold>Scheduled start: <white>" + (sched > 0 ? fmt.format(java.time.Instant.ofEpochMilli(sched)) : "none"),
+                sched > 0 ? "<gray>" + teams.statusText() : "<gray>Pick a time and it starts by itself.",
+                "", "<yellow>Left <gray>+1 hour  <yellow>Right <gray>-1 hour", "<yellow>Shift-left <gray>+1 day  <yellow>Shift-right <gray>-1 day",
+                "<yellow>Middle / Q <gray>type a date and time", "<yellow>Double-click <gray>clear", "<dark_gray>Times are in " + zone.getId()));
+        inv.setItem(52, Icons.gui(plugin, "reset", "<red><bold>Reset to Season 1",
+                "<gray>Back to season 1, not started.", "<gray>Every team bank and kill count goes to 0.", "<gray>Teams themselves stay.", "", "<red>Shift-click to confirm"));
         boolean auto = plugin.getConfig().getBoolean("season.auto-end", true);
         inv.setItem(47, Icons.gui(plugin, auto ? "on" : "off", "<aqua>Auto-end season: " + (auto ? "<green>ON" : "<red>OFF"),
                 "<gray>When on, the season ends by itself", "<gray>and the richest team gets rewarded."));
@@ -1019,6 +1070,34 @@ public class AdminHub implements Listener {
                 admin.closeInventory();
                 plugin.teams().endSeason(admin);
             }
+            case 48 -> {
+                if (!click.isShiftClick()) { admin.sendMessage(plugin.mm(plugin.prefix() + "<red>Shift-click to start the season.")); return; }
+                plugin.teams().startSeason();
+                openTeams(admin);
+            }
+            case 50 -> {
+                var teams = plugin.teams();
+                if (click == ClickType.DOUBLE_CLICK) { teams.scheduleStart(0); openTeams(admin); return; }
+                if (click == ClickType.MIDDLE || click == ClickType.DROP || click == ClickType.CONTROL_DROP) {
+                    admin.closeInventory();
+                    scheduling.add(admin.getUniqueId());
+                    admin.sendMessage(plugin.mm(plugin.prefix() + "<gray>Type when the season starts, e.g. <white>2026-11-14 18:00 <gray>or <white>11/14 6pm"
+                            + " <gray>(" + seasonZone().getId() + "), or <white>cancel<gray>."));
+                    return;
+                }
+                long base = teams.scheduledStart() > 0 ? teams.scheduledStart()
+                        : (System.currentTimeMillis() / 3_600_000L + 1) * 3_600_000L;   // next full hour
+                long step = (click.isShiftClick() ? 24 : 1) * 3_600_000L;
+                long next = teams.scheduledStart() > 0 ? base + (click.isRightClick() ? -step : step) : base + (click.isShiftClick() ? step - 3_600_000L : 0);
+                if (next <= System.currentTimeMillis()) next = (System.currentTimeMillis() / 3_600_000L + 1) * 3_600_000L;
+                teams.scheduleStart(next);
+                openTeams(admin);
+            }
+            case 52 -> {
+                if (!click.isShiftClick()) { admin.sendMessage(plugin.mm(plugin.prefix() + "<red>Shift-click to reset to season 1.")); return; }
+                plugin.teams().resetToSeasonOne();
+                openTeams(admin);
+            }
             case 49 -> open(admin);
             default -> { }
         }
@@ -1029,6 +1108,27 @@ public class AdminHub implements Listener {
     @EventHandler(priority = EventPriority.LOWEST)
     public void onChat(AsyncChatEvent event) {
         UUID id = event.getPlayer().getUniqueId();
+        if (scheduling.remove(id)) {
+            event.setCancelled(true);
+            String text = PlainTextComponentSerializer.plainText().serialize(event.message()).trim();
+            Player p = event.getPlayer();
+            plugin.getServer().getScheduler().runTask(plugin, () -> {
+                if (!text.equalsIgnoreCase("cancel")) {
+                    Long at;
+                    try { at = parseStart(text); } catch (RuntimeException e) { at = null; }
+                    if (at == null) {
+                        p.sendMessage(plugin.mm(plugin.prefix() + "<red>Couldn't read that. Try <white>11/14 6pm <red>or <white>2026-11-14 18:00"));
+                    } else if (at <= System.currentTimeMillis()) {
+                        p.sendMessage(plugin.mm(plugin.prefix() + "<red>That time has already passed."));
+                    } else {
+                        plugin.teams().scheduleStart(at);
+                        p.sendMessage(plugin.mm(plugin.prefix() + "<green>Season " + plugin.teams().season() + " " + plugin.teams().statusText() + "."));
+                    }
+                }
+                openTeams(p);
+            });
+            return;
+        }
         if (!announcing.remove(id)) return;
         event.setCancelled(true);
         String text = PlainTextComponentSerializer.plainText().serialize(event.message()).trim();
