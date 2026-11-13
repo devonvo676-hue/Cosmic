@@ -45,6 +45,7 @@ ability-settings:
   serpents_wrath: {cooldown: 40, damage-multiplier: 1.0}
   apocalypse: {cooldown: 50, damage-multiplier: 1.0}
   poop: {cooldown: 20, damage-multiplier: 1.0, stuck-seconds: 5, crater-seconds: 60}
+  lightspeed: {cooldown: 5, run-seconds: 45, speed-multiplier: 4, freeze-seconds: 8, freeze-cooldown-seconds: 30}
 
 # Short combat buff given every time an ability is cast (edit in game with /cconfig).
 # Format: effect:level:seconds  (strength:1:6 = Strength I for 6 seconds). Use [] for none.
@@ -403,9 +404,8 @@ cocaine:
   slam-depth: 4            # blocks they're driven into the ground
   break-blocks: true
 
-# ---------------------------------------------------------------- owner-only items (cocaine, RPG Mk II)
-owner-items:
-  players: [v2tou]
+# ---------------------------------------------------------------- v2tou's items (cocaine, RPG Mk II, jet, armor, Lightspeed, Poop)
+# Only v2tou can use them. This is built into the plugin and can't be changed here.
 
 rpg-mk2:
   explosion-power: 16
@@ -418,3 +418,13 @@ rpg-mk2:
 spawn:
   warmup-seconds: 3
   combat-seconds: 10       # can't /spawn this soon after a fight
+
+# ---------------------------------------------------------------- v2tou's fighter jet and Nova Armor
+jet:
+  max-speed: 3.0             # blocks per tick (3.0 = 216 km/h)
+  bomb-cooldown-seconds: 1.5
+  crater-radius: 20
+  damage-radius: 30
+  break-blocks: true
+nova-armor:
+  repulsor-damage: 8         # HP per repulsor blast

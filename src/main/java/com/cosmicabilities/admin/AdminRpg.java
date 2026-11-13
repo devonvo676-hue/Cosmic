@@ -100,7 +100,7 @@ public class AdminRpg implements Listener {
             return;
         }
         long now = System.currentTimeMillis();
-        long cd = (long) (plugin.getConfig().getDouble("rpg.cooldown-seconds", 1.5) * 1000);
+        long cd = mk2 ? 0 : (long) (plugin.getConfig().getDouble("rpg.cooldown-seconds", 1.5) * 1000);   // the Mk II has no cooldown
         if (now - lastShot.getOrDefault(p.getUniqueId(), 0L) < cd) return;
         lastShot.put(p.getUniqueId(), now);
         fire(p, mk2);

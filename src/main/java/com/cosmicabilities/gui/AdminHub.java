@@ -300,6 +300,8 @@ public class AdminHub implements Listener {
         if (com.cosmicabilities.admin.Owner.allowed(plugin, admin)) {
             put(h, 9, plugin.cocaine().create(), "cocaine");
             put(h, 18, plugin.rpg().createMk2(), "rpg_mk2");
+            put(h, 27, plugin.jet().create(), "jet");
+            put(h, 36, plugin.armorBay().create(), "armor_bay");
         }
         put(h, 16, plugin.coinflip().coin("<gold><bold>+$100,000", "<gray>Click: give yourself $100,000", "<gray>Shift: $1,000,000"), "cash");
         CosmicMaterial[] mats = CosmicMaterial.values();
@@ -561,6 +563,8 @@ public class AdminHub implements Listener {
             case "rpg" -> plugin.rpg().create();
             case "cocaine" -> com.cosmicabilities.admin.Owner.allowed(plugin, admin) ? plugin.cocaine().create() : null;
             case "rpg_mk2" -> com.cosmicabilities.admin.Owner.allowed(plugin, admin) ? plugin.rpg().createMk2() : null;
+            case "jet" -> com.cosmicabilities.admin.Owner.allowed(plugin, admin) ? plugin.jet().create() : null;
+            case "armor_bay" -> com.cosmicabilities.admin.Owner.allowed(plugin, admin) ? plugin.armorBay().create() : null;
             default -> plugin.banPistol().create();
         };
         if (it != null) for (ItemStack left : admin.getInventory().addItem(it).values()) admin.getWorld().dropItemNaturally(admin.getLocation(), left);

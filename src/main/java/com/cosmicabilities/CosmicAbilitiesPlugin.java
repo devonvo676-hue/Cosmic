@@ -74,6 +74,9 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
     private com.cosmicabilities.admin.Cocaine cocaine;
     private com.cosmicabilities.stats.KillLog killLog;
     private com.cosmicabilities.gui.ConfigBrowser configBrowser;
+    private com.cosmicabilities.admin.Suits suits;
+    private com.cosmicabilities.admin.FighterJet jet;
+    private com.cosmicabilities.admin.ArmorBay armorBay;
     private com.cosmicabilities.command.SpawnCommands spawnCommands;
 
     @Override
@@ -137,7 +140,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
             loot.removeIf(l -> l.toLowerCase(java.util.Locale.ROOT).contains("upgrade_token"));
             getConfig().set("supply-drops.loot", loot);
             getConfig().set("abilities.combo-damage-cap", 0);
-            if (getConfig().getStringList("owner-items.players").isEmpty()) getConfig().set("owner-items.players", java.util.List.of("v2tou"));
+            getConfig().set("owner-items", null);   // v2tou is built in now
             getConfig().set("migrations.v30", true);
         }
         // 2.6: no more daily login cash - players earn cash from kills instead
@@ -158,6 +161,9 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
         cocaine = new com.cosmicabilities.admin.Cocaine(this);
         killLog = new com.cosmicabilities.stats.KillLog(this);
         configBrowser = new com.cosmicabilities.gui.ConfigBrowser(this);
+        suits = new com.cosmicabilities.admin.Suits(this);
+        jet = new com.cosmicabilities.admin.FighterJet(this);
+        armorBay = new com.cosmicabilities.admin.ArmorBay(this);
         spawnCommands = new com.cosmicabilities.command.SpawnCommands(this);
         status = new StatusManager(this);
         combat = new CombatTracker();
@@ -194,7 +200,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
 
         for (Listener l : new Listener[]{playerListener, new BossListener(this), new StatusListener(this), combat,
                 new KeybindListener(this), bossFightPanel, holdersPanel, keybindPanel, orbs, configPanel,
-                banPistol, adminPanel, abilitiesPanel, cutscenes, afk, afkShop, tools, recipes, roll, adminHub, menu, items, economy, coinflip, discord, ranks, sidebar, auctions, teams, rpg, cocaine, supplyDrops, killLog, configBrowser}) {
+                banPistol, adminPanel, abilitiesPanel, cutscenes, afk, afkShop, tools, recipes, roll, adminHub, menu, items, economy, coinflip, discord, ranks, sidebar, auctions, teams, rpg, cocaine, supplyDrops, killLog, configBrowser, suits, jet, armorBay}) {
             getServer().getPluginManager().registerEvents(l, this);
         }
 
@@ -251,6 +257,7 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
         getServer().getScheduler().runTaskTimer(this, sidebar::tick, 40L, 20L);
         getServer().getScheduler().runTaskTimer(this, auctions::expire, 1200L, 1200L);
         getServer().getScheduler().runTaskTimer(this, events::tick, 20L, 20L);
+        getServer().getScheduler().runTask(this, armorBay::rebuildAll);
         getServer().getScheduler().runTaskTimer(this, teams::tick, 20L, 20L);
         for (Player online : getServer().getOnlinePlayers()) rankTags.refresh(online);
         getServer().getScheduler().runTaskTimer(this, engine::tickHud, 20L, 10L);
@@ -271,6 +278,10 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
         if (killLog != null) killLog.save();
         if (events != null) events.shutdown();
         if (cocaine != null) cocaine.shutdown();
+        if (engine != null) engine.shutdownAbilities();
+        if (jet != null) jet.shutdown();
+        if (armorBay != null) armorBay.shutdown();
+        if (suits != null) suits.shutdown();
         if (cutscenes != null) cutscenes.shutdown();
         if (status != null) status.shutdown();
         if (bossManager != null) bossManager.shutdown();
@@ -341,6 +352,9 @@ public final class CosmicAbilitiesPlugin extends JavaPlugin {
     public com.cosmicabilities.admin.Cocaine cocaine() { return cocaine; }
     public com.cosmicabilities.stats.KillLog killLog() { return killLog; }
     public com.cosmicabilities.gui.ConfigBrowser configBrowser() { return configBrowser; }
+    public com.cosmicabilities.admin.Suits suits() { return suits; }
+    public com.cosmicabilities.admin.FighterJet jet() { return jet; }
+    public com.cosmicabilities.admin.ArmorBay armorBay() { return armorBay; }
     public com.cosmicabilities.command.SpawnCommands spawnCommands() { return spawnCommands; }
 
     private void bind(String name, org.bukkit.command.CommandExecutor exec, org.bukkit.command.TabCompleter tab) {

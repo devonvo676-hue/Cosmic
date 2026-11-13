@@ -75,7 +75,10 @@ public enum AbilityType {
     // ---- owner only (owner-items.players) ----
     POOP("Poop", "Owner only", "#7a4a1e", CosmicMaterial.ASTRAL_FRAGMENT, 20,
             "A fat poop meteor crashes down on the closest player, blasts a crater of brown poo and explodes brown everywhere. They can't see through the brown and are stuck in the poop.",
-            "Extra Chunky", "Bigger splash and they're stuck for longer.");
+            "Extra Chunky", "Bigger splash and they're stuck for longer."),
+    LIGHTSPEED("Lightspeed", "Owner only", "#ffe14d", CosmicMaterial.SOLAR_CORE, 5,
+            "Lightning strikes and you suit up in a speedster suit: run at incredible speed with a crackling lightning trail. Cast again while suited to freeze time for everyone else.",
+            "Overcharge", "Even faster, and time stays frozen longer.");
 
     /** Total hearts the boss / dragon abilities do by default (0 = normal ability: damage varies per hit). */
     public double defaultHearts() {
@@ -98,7 +101,7 @@ public enum AbilityType {
         return switch (this) {
             case DRAGON_AWAKENING -> Source.DRAGON;
             case RIFTBREAKER, STARPIERCER, SHATTERFALL, SERPENTS_WRATH, APOCALYPSE -> Source.BOSS;
-            case POOP -> Source.OWNER;
+            case POOP, LIGHTSPEED -> Source.OWNER;
             default -> Source.NORMAL;
         };
     }

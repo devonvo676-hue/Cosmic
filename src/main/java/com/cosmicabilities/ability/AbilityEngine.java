@@ -62,6 +62,7 @@ public class AbilityEngine {
         abilities.put(AbilityType.SERPENTS_WRATH, new SerpentsWrathAbility(plugin));
         abilities.put(AbilityType.APOCALYPSE, new ApocalypseAbility(plugin));
         abilities.put(AbilityType.POOP, new PoopAbility(plugin));
+        abilities.put(AbilityType.LIGHTSPEED, new LightspeedAbility(plugin));
     }
 
     /** The single upgrade cuts the cooldown by upgrades.cooldown-reduction (default 30%). */
@@ -81,6 +82,11 @@ public class AbilityEngine {
         long[] e = cooldownEnd.get(uuid);
         if (e == null) return 0;
         return Math.max(0, (e[slot - 1] - System.currentTimeMillis()) / 1000.0);
+    }
+
+    /** Called when the plugin turns off: never leave the world frozen or a suit on. */
+    public void shutdownAbilities() {
+        for (CosmicAbility a : abilities.values()) if (a instanceof LightspeedAbility l) l.shutdown();
     }
 
     public void tryCast(Player player, int slot) {

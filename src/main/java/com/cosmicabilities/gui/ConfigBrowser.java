@@ -64,7 +64,7 @@ public class ConfigBrowser implements Listener {
         Holder h = new Holder();
         h.path = path;
         List<String> keys = new ArrayList<>(sec.getKeys(false));
-        keys.removeIf(k -> path.isEmpty() && k.equals("migrations"));
+        keys.removeIf(k -> path.isEmpty() && (k.equals("migrations") || k.equals("owner-items")));
         if (path.equals("economy")) keys.remove("death-values");
         // folders first
         keys.sort((a, b) -> {
